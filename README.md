@@ -43,7 +43,7 @@ It does not run the app to do this.
 |---|---|
 | Parts | Every `*.part.tsx` file. In a Git checkout, ignored files do not count. `node_modules` never counts. |
 | App entry | The first `<script type="module" src>` in `index.html`, then `package.json` `exports["."]`, then `main`. |
-| Global CSS | Each stylesheet imported for its side effect (`import "./app.css"`), reachable from the entry through static imports, in load order. |
+| Global CSS | Stylesheets imported directly by the app entry for their side effect (`import "./app.css"`), in source order. Component styles load through the selected part's imports. |
 | Wrapper | The `createRoot(...).render(<App />)` call reachable from the entry. Caliper reads the outermost DOM elements `App` returns, when their `className` is a literal. |
 
 The **Setup** panel at the bottom of the part list shows each value and the
@@ -78,16 +78,49 @@ to show that state alone.
 
 ## Options
 
-Set an option only when the Setup panel reports a failure.
+Set an option when discovery fails or the project's global styles do not follow
+the direct-entry convention.
 
 ```ts
 caliper({
   entry: "src/main.tsx",             // the module the app starts from
   wrap: ["app-theme", "app-screen"], // outer element class names, outermost first
+  css: ["src/tokens.css", "src/global.css"], // optional replacement global CSS list
 })
 ```
 
 `wrap: false` renders parts with no wrapper.
+
+`css` replaces the derived global stylesheet list, in the order given. Paths
+are relative to the Vite root. `css: []` injects no global styles, but components
+still load their own CSS. Setup shows whether CSS came from entry imports or
+this option. An invalid override appears in Setup and as a frame warning.
+
+### CSS ownership
+
+Caliper injects global styles before importing the selected part. Vite then
+loads the CSS imported by that part and its components. Shared stylesheet
+imports use the same module, so two buttons do not load shared motion twice.
+Caliper still reads the app's imports to find its wrapper, but that traversal
+no longer supplies CSS to every frame.
+
+If a project imports global CSS in a nested bootstrap module or its App
+component, move that import to the entry or name it in `css`. Caliper cannot
+infer whether a nested stylesheet is global from its selectors or filename.
+It does not restore the old behavior of injecting every reachable stylesheet.
+A global file that imports every component stylesheet still affects every
+preview; the project must move those imports to their components.
+
+A component that forgets its CSS import is no longer styled by an unrelated
+app import. Caliper cannot detect an absent import by appearance alone. A
+broken import, however, fails the part visibly. Wrapper classes also need
+styles in the global list, since Caliper recreates their DOM without rendering
+the app component.
+
+Import component CSS from JS or TS, including shared styles. A take rejects
+CSS `@import` chains in component styles rather than silently removing
+them. Existing plain global CSS import chains still use the take overlay's
+flattening step. Sass, Less and generated CSS pipelines remain unverified.
 
 ## Make takes with an agent
 
@@ -146,8 +179,9 @@ the device's physical width on the calibrated monitor. Media queries, `vw` and
 `window.innerWidth` inside the frame therefore see the device, not the monitor.
 
 Inside the frame, Caliper loads the global CSS, then the project's own React,
-then the part. It renders the part inside the wrapper elements. A save in the
-project reloads the frame. Caliper's own page loads no project code and no
+then the part and its stylesheet dependencies. It renders the part inside the
+wrapper elements. A CSS save updates the frames that import it. Component code
+changes reload the affected part frames. Caliper's own page loads no project code and no
 React.
 
 Every failure is visible. A part that fails to load, has no default export,
@@ -200,7 +234,14 @@ bun install
 bun test
 bun run typecheck
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
+CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 ```
+
+`scripts/verify-css-loading.mjs` creates a temporary React project and starts
+real Vite servers. It checks exact stylesheet sets, shared motion, CSS modules,
+missing imports, hot reload, take isolation, explicit globals and Setup
+provenance. The supplied `node_modules` must contain React and React DOM. The
+check neither changes the supplied project nor uses its Vite cache.
 
 `scripts/verify-takes.mjs` checks the Takes panel against a real model: it
 starts takes from the chrome, waits for the agents, checks every take frame,

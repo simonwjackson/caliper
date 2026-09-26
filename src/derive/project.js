@@ -1,7 +1,7 @@
 // @ts-check
-import { existsSync, readFileSync } from "node:fs"
-import { basename, join } from "node:path"
-import { readAppShell } from "./app-shell.js"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { basename, isAbsolute, join, relative, resolve as resolvePath } from "node:path"
+import { CSS_FILE, readAppShell } from "./app-shell.js"
 import { deriveEntry } from "./entry.js"
 import { discoverParts } from "./parts.js"
 
@@ -40,10 +40,41 @@ export async function deriveProject({ root, options, resolve }) {
     files.push(...shell.files)
   }
 
+  css = cssOverride(root, options.css) ?? css
+  if (css._tag !== "Failed") files.push(...css.value.stylesheets.map(sheet => resolvePath(root, sheet.file)))
+
   return {
     project: { name: projectName(root), parts, entry, css, wrapper: wrapOverride(options.wrap) ?? wrapper },
     files,
   }
+}
+
+/**
+ * Explicit globals replace discovery; they never pull in a component subtree.
+ * @param {string} root
+ * @param {CaliperOptions["css"]} css
+ * @returns {CssDerivation | null}
+ */
+function cssOverride(root, css) {
+  if (css === undefined) return null
+  /** @type {import("../types").GlobalStylesheet[]} */
+  const stylesheets = []
+  const seen = new Set()
+  for (const file of css) {
+    const absolute = resolvePath(root, file)
+    const inside = relative(root, absolute).replaceAll("\\", "/")
+    if (isAbsolute(file) || inside.startsWith("../") || !CSS_FILE.test(file)
+      || !existsSync(absolute) || !statSync(absolute).isFile()) {
+      return {
+        _tag: "Failed",
+        reason: `caliper({ css }) names an invalid stylesheet: "${file}".`,
+        hint: 'Set caliper({ css: ["src/global.css"] }) to existing stylesheet paths relative to the Vite root, without query strings.',
+      }
+    }
+    if (!seen.has(inside)) stylesheets.push({ file: inside })
+    seen.add(inside)
+  }
+  return { _tag: "Overridden", value: { stylesheets, unresolved: [] }, option: "css" }
 }
 
 /**

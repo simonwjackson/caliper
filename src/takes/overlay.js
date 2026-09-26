@@ -1,6 +1,7 @@
 // @ts-check
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join, relative, resolve as resolvePath } from "node:path"
+import { parse as parseCss } from "postcss"
 import { isTakeId, TAKES_DIR } from "./store.js"
 
 /**
@@ -138,7 +139,29 @@ export function flattenStylesheets(root, take, stylesheets) {
  * @param {() => string} getRoot
  */
 export function takeOverlay(getRoot) {
+  // Only imports scheduled by a frame can be removed from its CSS. Component
+  // CSS now loads through the part, so it is no longer flattened by default.
+  /** @type {Map<string, Set<string>>} */
+  const flattened = new Map()
   return {
+    /**
+     * @param {string} take
+     * @param {readonly string[]} sheets
+     * @param {(file: string) => void} invalidate
+     */
+    prepareStylesheets(take, sheets, invalidate) {
+      const flat = flattenStylesheets(getRoot(), take, sheets)
+      const before = flattened.get(take) ?? new Set()
+      const after = new Set(flat.order)
+      flattened.set(take, after)
+      // Membership changes how load() treats @imports. A previously flattened
+      // module must not survive in Vite's cache after it becomes component CSS.
+      for (const file of new Set([...before, ...after])) {
+        if (before.has(file) !== after.has(file)) invalidate(file)
+      }
+      return flat
+    },
+
     /**
      * Must run before `vite:resolve`, which would drop the tag.
      *
@@ -171,8 +194,16 @@ export function takeOverlay(getRoot) {
       const copy = copyFor(root, take, file)
       if (copy) this.addWatchFile(copy)
       if (!file.endsWith(".css")) return copy ? readFileSync(copy, "utf8") : null
-      // The frame loads each local @import as its own tagged module; drop them here.
       const code = readFileSync(copy ?? file, "utf8")
+      if (!flattened.get(take)?.has(file)) {
+        // Use CSS syntax, not a URL regex: comments, bare paths and quoted
+        // strings must not hide an actual import or invent one in a comment.
+        parseCss(code, { from: file }).walkAtRules(/^import$/i, () => {
+          throw new Error(`${relative(root, file)}: Caliper cannot overlay this component's CSS @import chain. Import these stylesheets from JS or TS instead.`)
+        })
+        return code
+      }
+      // Global imports are loaded as separate tagged modules by the frame.
       let out = code
       for (const entry of localImports(root, file, code).found) {
         out = out.replace(entry.statement, `/* take ${take}: loaded on its own: ${entry.statement.trim()} */`)

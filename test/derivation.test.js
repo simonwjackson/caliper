@@ -168,16 +168,36 @@ describe("entry", () => {
 })
 
 describe("global CSS", () => {
-  test("collects stylesheets imported for their side effect, in load order, with the import site", async () => {
+  test("injects only direct entry styles, preserving their order and source sites", async () => {
     await withProject({ files: picoShape }, async ({ project }) => {
       const { css } = await project()
       expect(css._tag).toBe("Derived")
       if (css._tag !== "Derived") return
       expect(css.value.stylesheets).toEqual([
-        { file: "src/surface.css", importedAt: { file: "src/Surface.tsx", line: 1 } },
-        { file: "src/home.css", importedAt: { file: "src/Home.tsx", line: 1 } },
         { file: "src/app.css", importedAt: { file: "src/index.ts", line: 5 } },
       ])
+    })
+  })
+
+  test("does not hoist nested bootstrap CSS and keeps direct import order through cycles", async () => {
+    const files = {
+      ...picoShape,
+      "src/index.ts": 'import "./bootstrap"\nimport "./tokens.css"\nimport "./app.css"\nexport { surface } from "./mount"',
+      "src/bootstrap.ts": 'import "./app.css"\nimport "./index"\nimport "./surface.css"',
+    }
+    await withProject({ files }, async ({ project }) => {
+      const { css, wrapper } = await project()
+      expect(css._tag !== "Failed" && css.value.stylesheets.map(sheet => sheet.file)).toEqual(["src/tokens.css", "src/app.css"])
+      expect(wrapper._tag).toBe("Derived")
+    })
+  })
+
+  test("a project with only component styles injects no globals", async () => {
+    const files = { ...picoShape, "src/index.ts": 'export { surface } from "./mount"' }
+    await withProject({ files }, async ({ project }) => {
+      const { css } = await project()
+      expect(css._tag !== "Failed" && css.value.stylesheets).toEqual([])
+      expect(css._tag === "Derived" && css.via).toContain("caliper({ css:")
     })
   })
 
@@ -200,7 +220,54 @@ describe("global CSS", () => {
     }
     await withProject({ files }, async ({ project }) => {
       const { css } = await project()
-      expect(css._tag === "Derived" && css.value.stylesheets.map(sheet => sheet.file)).toEqual(["src/surface.css", "src/app.css"])
+      expect(css._tag === "Derived" && css.value.stylesheets.map(sheet => sheet.file)).toEqual(["src/app.css"])
+    })
+  })
+})
+
+describe("explicit global CSS", () => {
+  test("replaces the derived list, preserving order and removing duplicates", async () => {
+    await withProject({ files: picoShape, options: { css: ["src/home.css", "src/app.css", "src/home.css"] } }, async ({ project }) => {
+      expect((await project()).css).toEqual({
+        _tag: "Overridden", option: "css",
+        value: { stylesheets: [{ file: "src/home.css" }, { file: "src/app.css" }], unresolved: [] },
+      })
+    })
+  })
+
+  test("an override recovers when its missing file is created", async () => {
+    await withProject({ files: picoShape, options: { css: ["src/late.css"] } }, async ({ project, write }) => {
+      expect((await project()).css._tag).toBe("Failed")
+      write("src/late.css", "body { color: blue }")
+      await waitFor(async () => (await project()).css._tag === "Overridden")
+    })
+  })
+
+  test("an empty override injects no globals", async () => {
+    await withProject({ files: picoShape, options: { css: [] } }, async ({ project }) => {
+      const { css } = await project()
+      expect(css._tag).toBe("Overridden")
+      expect(css._tag !== "Failed" && css.value.stylesheets).toEqual([])
+    })
+  })
+
+  test("can supply globals when no app entry exists", async () => {
+    const files = { ...picoShape, "package.json": JSON.stringify({ name: "parts-only" }) }
+    await withProject({ files, options: { css: ["src/app.css"], wrap: false } }, async ({ project }) => {
+      const { entry, css } = await project()
+      expect(entry._tag).toBe("Failed")
+      expect(css).toMatchObject({ _tag: "Overridden", option: "css", value: { stylesheets: [{ file: "src/app.css" }] } })
+    })
+  })
+
+  test.each(["src/missing.css", "src/Home.tsx", "src/app.css?inline", "../outside.css", "/absolute.css"])("rejects invalid stylesheet %s visibly", async file => {
+    await withProject({ files: picoShape, options: { css: [file] } }, async ({ project, get }) => {
+      const { css } = await project()
+      expect(css._tag).toBe("Failed")
+      expect(css._tag === "Failed" && css.reason).toContain(file)
+      expect(css._tag === "Failed" && css.hint).toContain("caliper({ css:")
+      const frame = await (await get("/__caliper/frame?part=src/Button.atom.part.tsx")).text()
+      expect(frame).toContain(file)
     })
   })
 })

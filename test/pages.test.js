@@ -113,11 +113,21 @@ describe("the event stream", () => {
       const response = await get("/__caliper/events")
       expect(response.headers.get("content-type")).toContain("text/event-stream")
       const reader = /** @type {ReadableStream<Uint8Array>} */ (response.body).getReader()
-      const { value } = await reader.read()
-      const text = new TextDecoder().decode(value)
-      expect(text).toStartWith("event: project\ndata: ")
-      expect(JSON.parse(text.split("data: ")[1] ?? "").parts[0].file).toBe("src/Chip.part.tsx")
-      await reader.cancel()
+      const decoder = new TextDecoder()
+      let text = ""
+      try {
+        // HTTP chunks can split an event or contain both initial events.
+        while (!text.includes("\n\n")) {
+          const { value, done } = await reader.read()
+          if (done) throw new Error("The project event did not finish")
+          text += decoder.decode(value, { stream: true })
+        }
+        const event = text.split("\n\n")[0] ?? ""
+        expect(event).toStartWith("event: project\ndata: ")
+        expect(JSON.parse(event.slice("event: project\ndata: ".length)).parts[0].file).toBe("src/Chip.part.tsx")
+      } finally {
+        await reader.cancel()
+      }
     })
   })
 })

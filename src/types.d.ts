@@ -31,7 +31,7 @@ export type Derivation<A> =
   | {
       readonly _tag: "Overridden"
       readonly value: A
-      readonly option: "entry" | "wrap"
+      readonly option: "entry" | "wrap" | "css"
     }
   | {
       readonly _tag: "Failed"
@@ -44,10 +44,11 @@ export type Entry = {
   readonly file: string
 }
 
-/** One stylesheet the app loads as a side effect of importing it. */
+/** One global stylesheet Caliper injects before the selected part loads. */
 export type GlobalStylesheet = {
   readonly file: string
-  readonly importedAt: SourceSite
+  /** Absent for an explicit css option, whose source is the Vite config. */
+  readonly importedAt?: SourceSite
 }
 
 /** An import Caliper could not resolve while it walked the entry's imports. */
@@ -57,7 +58,7 @@ export type UnresolvedImport = {
 }
 
 export type GlobalCss = {
-  /** In the order the app loads them. */
+  /** Direct entry imports in source order, or the explicit css option's order. */
   readonly stylesheets: readonly GlobalStylesheet[]
   readonly unresolved: readonly UnresolvedImport[]
 }
@@ -233,6 +234,12 @@ export type CaliperOptions = {
   readonly agent?: AgentOptions
   /** The module the app starts from, relative to the Vite root. Overrides the derived entry. */
   readonly entry?: string
+  /**
+   * Global stylesheet paths relative to the Vite root, in injection order.
+   * Replaces direct-entry CSS discovery. [] injects no globals. Components
+   * still load their own styles through the selected part's imports.
+   */
+  readonly css?: readonly string[]
   /**
    * The class names of the app's outer shell, outermost first. Each string
    * becomes one `div`. `false` renders parts with no wrapper. Overrides the

@@ -20,6 +20,6 @@ export declare const CALIPER_PATH: "/__caliper"
  *
  * Add it to the project's vite.config and open `/__caliper/` on the dev
  * server. It runs only under `vite dev`, never in a build. Set options only
- * when Caliper reports that it could not find something.
+ * when discovery fails or global styles are not imported directly by the entry.
  */
 export declare function caliper(options?: CaliperOptions): CaliperPlugin

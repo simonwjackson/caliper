@@ -681,9 +681,9 @@ function renderSetup() {
     setupRow("Entry", project.entry, entry => [h("code", {}, entry.file)]),
     setupRow("Global CSS", project.css, css => [
       css.stylesheets.length === 0
-        ? h("span", {}, "No stylesheet is imported for its side effect.")
+        ? h("span", {}, "No global stylesheets injected. Components load their own CSS.")
         : h("ol", {}, ...css.stylesheets.map(sheet =>
-          h("li", {}, h("code", {}, sheet.file), h("span", { class: "cal-site" }, ` from ${site(sheet.importedAt)}`)))),
+          h("li", {}, h("code", {}, sheet.file), h("span", { class: "cal-site" }, sheet.importedAt ? ` from ${site(sheet.importedAt)}` : " from caliper({ css })")))),
       css.unresolved.length === 0
         ? null
         : h("details", { class: "cal-unresolved" },

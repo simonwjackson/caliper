@@ -11,7 +11,7 @@ import { createTakesApi } from "./agent/api.js"
 import { listeningOrigin } from "./server-origin.js"
 import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
-import { flattenStylesheets, takeOverlay, withTake } from "./takes/overlay.js"
+import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
 
 /**
@@ -118,7 +118,7 @@ export function caliper(options = {}) {
     },
 
     configureServer(server) {
-      const session = createSession(server, root, options, env)
+      const session = createSession(server, root, options, env, overlay)
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? "/", "http://caliper.local")
         if (url.pathname !== CALIPER_PATH && !url.pathname.startsWith(`${CALIPER_PATH}/`)) return next()
@@ -144,8 +144,9 @@ export function caliper(options = {}) {
  * @param {string} root
  * @param {CaliperOptions} options
  * @param {Record<string, string | undefined>} env the shell's environment and the project's .env files
+ * @param {ReturnType<typeof takeOverlay>} overlay
  */
-function createSession(server, root, options, env) {
+function createSession(server, root, options, env, overlay) {
   /** @type {Promise<{ project: Project, json: string, files: Set<string> }> | null} */
   let current = null
   /** @type {Set<ServerResponse>} */
@@ -265,7 +266,12 @@ function createSession(server, root, options, env) {
           : null
     const wrapper = project.wrapper._tag === "Failed" ? [] : project.wrapper.value.elements
     const sheets = project.css._tag === "Failed" ? [] : project.css.value.stylesheets.map(sheet => resolvePath(root, sheet.file))
-    const flat = take === null || problem !== null ? null : flattenStylesheets(root, take, sheets)
+    const flat = take === null || problem !== null ? null : overlay.prepareStylesheets(take, sheets, file => {
+      const graph = server.environments.client?.moduleGraph
+      for (const mod of graph?.getModulesByFile(file) ?? []) {
+        if (mod.id && takeOf(mod.id) === take) graph?.invalidateModule(mod)
+      }
+    })
     const css = flat === null
       ? sheets.map(file => fileUrl(relative(root, file)))
       : flat.order.map(file => withTake(fileUrl(relative(root, file)), /** @type {string} */ (take)))
@@ -277,7 +283,10 @@ function createSession(server, root, options, env) {
       state: stateName,
       ...(flat === null ? {} : { take: /** @type {string} */ (take) }),
       css,
-      warnings: flat?.problems ?? [],
+      warnings: [
+        ...(project.css._tag === "Failed" ? [`${project.css.reason} ${project.css.hint}`] : []),
+        ...(flat?.problems ?? []),
+      ],
       wrapper,
       react: `${base}/@id/__x00__${RESOLVED_REACT_MODULE.slice(1)}`,
     }

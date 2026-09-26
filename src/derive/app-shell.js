@@ -19,7 +19,7 @@ import ts from "typescript"
  * @typedef {{ ok: true, value: WrapperElement[], at: SourceSite } | { ok: false, reason: string }} ShellRead
  */
 
-const CSS_FILE = /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)$/
+export const CSS_FILE = /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)$/
 const SCRIPT_FILE = /\.(m|c)?(t|j)sx?$/
 const WRAP_HINT = 'Set caliper({ wrap: "class-a class-b" }) in vite.config to name the class names of the app\'s outer element, or caliper({ wrap: false }) for none.'
 
@@ -28,8 +28,8 @@ const WRAP_HINT = 'Set caliper({ wrap: "class-a class-b" }) in vite.config to na
  * JavaScript.
  *
  * Caliper follows the entry's static imports, the way the browser would load
- * them. It collects each stylesheet imported for its side effect, in load
- * order. It also finds the `createRoot(...).render(<App />)` call and reads the
+ * them, but injects only stylesheets imported directly by the entry for their
+ * side effect. Component styles load through the selected part. It also finds the `createRoot(...).render(<App />)` call and reads the
  * DOM elements `App` returns outermost, when their `className` is a literal.
  *
  * @param {{ root: string, entry: string, resolve: Resolve }} input
@@ -44,7 +44,7 @@ export async function readAppShell({ root, entry, resolve }) {
       _tag: "Derived",
       value: { stylesheets: walk.stylesheets, unresolved: walk.unresolved },
       source: { file: entry, line: 1 },
-      via: "stylesheets imported for their side effect, reachable from the entry",
+      via: 'Only direct entry stylesheet imports are injected, in source order. Other styles load through the selected part. For globals imported elsewhere, set caliper({ css: ["src/global.css"] }).',
     },
     wrapper: await readWrapper(root, walk.modules, resolve),
     files: walk.modules.map(module => module.file),
@@ -83,7 +83,7 @@ async function walkImports(root, entry, resolve) {
         continue
       }
       if (CSS_FILE.test(resolved)) {
-        if (found.sideEffectOnly && !found.specifier.includes("?") && !seenCss.has(resolved)) {
+        if (file === entry && found.sideEffectOnly && !found.specifier.includes("?") && !seenCss.has(resolved)) {
           seenCss.add(resolved)
           stylesheets.push({ file: siteFile(root, resolved), importedAt: at })
         }

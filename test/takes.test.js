@@ -139,6 +139,7 @@ describe("a take frame", () => {
 
   test("serves the take's copy of each project module the part imports", async () => {
     await withProject({ files: project }, async ({ get }) => {
+      await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")
       const part = await (await get("/src/Chip.part.tsx?take=1")).text()
       expect(part).toMatch(/\/src\/Chip\.tsx\?take=1/)
       const chip = await (await get("/src/Chip.tsx?take=1")).text()
@@ -149,6 +150,55 @@ describe("a take frame", () => {
       expect(css).toContain("red")
       const app = await (await get("/src/app.css?take=1")).text()
       expect(app).not.toContain(".chip { color: blue }")
+    })
+  })
+
+  test("component CSS comes through the tagged component, not frame injection", async () => {
+    const files = {
+      ...project,
+      "src/app.css": ".shell { width: 100% }",
+      "src/Chip.tsx": 'import "./chip.css"\nexport const Chip = () => <span className="chip">real</span>',
+      ".caliper/takes/1/src/Chip.tsx": 'import "./chip.css"\nexport const Chip = () => <span className="chip">take</span>',
+    }
+    await withProject({ files }, async ({ get }) => {
+      const frame = frameConfig(await (await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")).text())
+      expect(frame.css).toEqual(["/src/app.css?take=1"])
+      const chip = await (await get("/src/Chip.tsx?take=1")).text()
+      expect(chip).toContain("/src/chip.css?take=1")
+      expect(await (await get("/src/chip.css?take=1")).text()).toContain("red")
+    })
+  })
+
+  test.each([
+    '@import "./nested.css";',
+    '@import "nested.css";',
+    '/* before */ @import "./nested.css";',
+    '@import url("./nested.css") screen;',
+  ])("component CSS rejects an unflattened import: %s", async statement => {
+    const files = {
+      ...project,
+      "src/app.css": ".shell { width: 100% }",
+      ".caliper/takes/1/src/chip.css": `${statement}\n.chip { color: red }`,
+      "src/nested.css": ".chip { border: 1px solid }",
+    }
+    await withProject({ files }, async ({ get }) => {
+      await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")
+      const response = await get("/src/chip.css?take=1")
+      expect(response.status).toBe(500)
+      expect(await response.text()).toContain("Import these stylesheets from JS or TS")
+    })
+  })
+
+  test("CSS import examples in comments and strings are not import rules", async () => {
+    const files = {
+      ...project,
+      "src/app.css": ".shell { width: 100% }",
+      ".caliper/takes/1/src/chip.css": '/* @import "./missing.css"; */\n.chip::before { content: \'@import "./missing.css";\'; }',
+    }
+    await withProject({ files }, async ({ get }) => {
+      await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")
+      const response = await get("/src/chip.css?take=1")
+      expect(response.status).toBe(200)
     })
   })
 
