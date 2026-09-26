@@ -198,6 +198,8 @@ try {
       'export function Broken(): never { throw new Error("broken state exploded") }',
       "export const Nothing = () => null",
       "export const Wide = () => <div style={{ width: 2000, height: 10 }} />",
+      // An entry animation that starts above the screen and lands inside it.
+      "export const Landing = () => <><style>{'@keyframes cal-probe-drop { from { translate: 0 -200px } }'}</style><p style={{ animation: 'cal-probe-drop 10s steps(4, end)' }}>probe landed</p></>",
       "",
     ].join("\n"))
     await page.locator('.cal-state[data-state="Wide"]').waitFor({ timeout: 5000 })
@@ -213,14 +215,16 @@ try {
       ["Broken", "Failed"],
       ["Nothing", "Empty"],
       ["Wide", "Rendered"],
+      ["Landing", "Rendered"],
     ])
-    const [fine, broken, , wide] = rendered.results
+    const [fine, broken, , wide, landing] = rendered.results
     assert.equal(fine?.viewport.width, 640, "the default device is the RG353M")
     assert.equal(fine?.spill, null)
     assert.deepEqual(fine?.console, [], "a clean frame has no browser errors")
     assert.match(broken?.problems[0]?.detail ?? "", /broken state exploded/)
     assert.equal(wide?.spill?.right, 2000, "the wide state reaches 2000 px")
     assert.match(wide?.spill?.elements[0]?.element ?? "", /^div/, "the spill names the wide element")
+    assert.equal(landing?.spill, null, "an entry animation is measured where it ends, not at its first frame")
     for (const result of rendered.results) {
       const size = pngSize(result.png)
       assert.deepEqual(size, { width: 640, height: 480 }, `${result.state} PNG is the device's CSS viewport`)

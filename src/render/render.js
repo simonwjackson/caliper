@@ -106,6 +106,14 @@ async function renderOne(browser, url, job, out) {
     }, undefined, { timeout: FRAME_WATCHDOG_MS + 5_000 })
     // Web fonts change layout; wait for them before measuring and capturing.
     await page.evaluate(() => document.fonts.ready.then(() => undefined))
+    // An entry animation, such as a card that drops into place, starts away from
+    // where the part rests. Jump each animation that ends to its end, so the
+    // spill and the PNG show the resting layout. A looping animation keeps running.
+    await page.evaluate(() => {
+      for (const animation of document.getAnimations()) {
+        if (animation.effect?.getComputedTiming().endTime !== Infinity) animation.finish()
+      }
+    })
 
     const report = await page.evaluate(({ tolerance, limit }) => {
       const root = document.documentElement

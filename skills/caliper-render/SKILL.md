@@ -35,4 +35,6 @@ the PNGs show what the task asked for.
 - Make a new state to show a case, for example `export const NoResults = () => <List items={[]} />` in the
   part file. A part supplies its own data. Caliper never intercepts requests.
 - Exit status 2 means the request or the setup is wrong. Its `error` field names the fix.
+- The spill and the PNG show the part at rest. An animation that ends is jumped to its end first, so an
+  entry animation that starts off the screen is not a spill. A looping animation keeps running.
 - The PNG shows size and layout truthfully. Font smoothing and colour can differ a little from the device.

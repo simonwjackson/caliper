@@ -34,6 +34,9 @@ Output: one JSON object on stdout.
             in CSS px, and up to 5 elements that reach past the edge. The device
             clips or scrolls that content: it is not visible at first.
 
+An animation that ends, such as an entry animation, is jumped to its end before
+the spill is measured and the PNG is taken. A looping animation keeps running.
+
 Exit status: 0 when every frame is Rendered, 1 when a frame is Empty or Failed,
 2 when the request is invalid or the dev server or browser is not reachable.`
 
