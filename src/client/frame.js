@@ -36,9 +36,10 @@ function setState(next) {
   state = next
   document.documentElement.dataset.caliperState = next
   // For a frame opened on its own, for example by caliper-render.
-  Object.assign(window, { caliperReport: { part: config.partFile, partState: config.state, state: next, problems } })
+  const report = { part: config.partFile, partState: config.state, take: config.take ?? null, state: next, problems }
+  Object.assign(window, { caliperReport: report })
   if (window.parent !== window) {
-    window.parent.postMessage({ source: "caliper-frame", part: config.partFile, partState: config.state, state: next, problems }, location.origin)
+    window.parent.postMessage({ source: "caliper-frame", ...report }, location.origin)
   }
 }
 
@@ -130,6 +131,7 @@ window.addEventListener("unhandledrejection", event => {
 
 async function run() {
   if (config.problem) return fail(config.problem)
+  for (const warning of config.warnings ?? []) warn(warning)
 
   for (const url of config.css) {
     try {

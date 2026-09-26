@@ -52,6 +52,12 @@ describe("planRenders", () => {
     })
   })
 
+  test("carries the take into every job", () => {
+    const plan = planRenders(project, { part: "src/Button.atom.part.tsx", state: "*", take: "3" })
+    expect(plan._tag === "Planned" && plan.jobs.map(job => job.take)).toEqual(["3", "3"])
+    expect(planRenders(project, { part: "src/Button.atom.part.tsx", take: "x" })._tag).toBe("Invalid")
+  })
+
   test("names the devices when a device is unknown", () => {
     expect(planRenders(project, { part: "src/Button.atom.part.tsx", devices: ["iphone"] })).toEqual({
       _tag: "Invalid",

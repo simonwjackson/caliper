@@ -115,8 +115,12 @@ export type FrameConfig = {
   readonly partFile: string
   /** The export to render, for example "default" or "CatalogError". */
   readonly state: string
+  /** The take the frame overlays on the real files. Absent for the real part. */
+  readonly take?: string
   /** URLs of the global stylesheets. */
   readonly css: readonly string[]
+  /** Problems the server found while it prepared the frame. The frame shows them as warnings. */
+  readonly warnings: readonly string[]
   readonly wrapper: readonly WrapperElement[]
   /** URL of the module that re-exports the project's own React. */
   readonly react: string

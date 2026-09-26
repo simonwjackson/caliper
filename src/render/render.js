@@ -97,7 +97,8 @@ async function renderOne(browser, url, job, out) {
     })
     page.on("requestfailed", request => consoleErrors.push(`Request failed (${request.failure()?.errorText ?? "unknown"}) for ${request.url()}`))
 
-    const frameUrl = new URL(`/__caliper/frame?part=${encodeURIComponent(job.part)}&state=${encodeURIComponent(job.state)}`, url)
+    const takeQuery = job.take === undefined ? "" : `&take=${encodeURIComponent(job.take)}`
+    const frameUrl = new URL(`/__caliper/frame?part=${encodeURIComponent(job.part)}&state=${encodeURIComponent(job.state)}${takeQuery}`, url)
     await page.goto(frameUrl.href)
     // The frame's watchdog fails the frame after FRAME_WATCHDOG_MS, so this always ends.
     await page.waitForFunction(() => {
@@ -157,7 +158,7 @@ async function renderOne(browser, url, job, out) {
         spill,
       }
     }, { tolerance: SPILL_TOLERANCE, limit: SPILL_ELEMENTS })
-    const png = join(out, `${slug(job.part)}.${job.state}.${job.device}.png`)
+    const png = join(out, `${slug(job.part)}${job.take === undefined ? "" : `.take-${job.take}`}.${job.state}.${job.device}.png`)
     await page.screenshot({ path: png })
 
     return {

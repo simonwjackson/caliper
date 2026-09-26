@@ -3,10 +3,10 @@ import { DEVICES } from "../client/device-frame.js"
 
 /**
  * @typedef {import("../types").Project} Project
- * @typedef {{ part: string, state?: string, devices?: readonly string[] }} RenderRequest
+ * @typedef {{ part: string, state?: string, devices?: readonly string[], take?: string }} RenderRequest
  *   `state` is an export name or "*" for every state. `devices` holds device
- *   ids, or "*" for every device.
- * @typedef {{ part: string, state: string, device: string }} RenderJob
+ *   ids, or "*" for every device. `take` renders the part as that take changes it.
+ * @typedef {{ part: string, state: string, device: string, take?: string }} RenderJob
  * @typedef {{ _tag: "Planned", jobs: RenderJob[] } | { _tag: "Invalid", reason: string }} RenderPlan
  */
 
@@ -44,8 +44,12 @@ export function planRenders(project, request) {
     return { _tag: "Invalid", reason: `Caliper has no device "${unknown}". Its devices are: ${names}.` }
   }
 
+  if (request.take !== undefined && !/^[1-9]\d*$/.test(request.take)) {
+    return { _tag: "Invalid", reason: `"${request.take}" is not a take number.` }
+  }
+  const take = request.take === undefined ? {} : { take: request.take }
   return {
     _tag: "Planned",
-    jobs: states.flatMap(state => devices.map(device => ({ part: part.file, state, device }))),
+    jobs: states.flatMap(state => devices.map(device => ({ part: part.file, state, device, ...take }))),
   }
 }

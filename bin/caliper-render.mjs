@@ -8,7 +8,7 @@ import { renderJobs } from "../src/render/render.js"
 const HELP = `caliper-render: render a part of a running project and report what it shows.
 
 Usage:
-  caliper-render --url <dev server> --part <file> [--state <export>] [--device <id>] [--out <dir>]
+  caliper-render --url <dev server> --part <file> [--state <export>] [--device <id>] [--take <n>] [--out <dir>]
   caliper-render --url <dev server> --list
 
 The project's Vite dev server must run with the caliper() plugin. The command
@@ -20,12 +20,14 @@ Options:
   --state    An exported state of the part. Default: "default". "*": every state
   --device   A device id. Repeat it, or pass "*" for every device. Default: ${DEVICES[0]?.id}
              Devices: ${DEVICES.map(device => `${device.id} (${device.name}, ${device.cssWidth}x${device.cssHeight} CSS px)`).join(", ")}
+  --take     Render the part as take <n> changes it: the files in .caliper/takes/<n>/
+             replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
   --chromium Chromium executable. Default: the CHROMIUM environment variable
   --list     Print every part with its states, and the devices, as JSON
 
 Output: one JSON object on stdout.
-  { "results": [ { part, state, device, viewport, frame, png, problems, console, spill } ] }
+  { "results": [ { part, state, device, take?, viewport, frame, png, problems, console, spill } ] }
   frame     "Rendered", "Empty" (the component rendered nothing) or "Failed"
   png       Screenshot of the device's CSS viewport, 1 image px per CSS px
   problems  What the frame shows: load errors, render errors with stacks, warnings
@@ -62,6 +64,7 @@ const { values: args } = (() => {
         part: { type: "string" },
         state: { type: "string" },
         device: { type: "string", multiple: true },
+        take: { type: "string" },
         out: { type: "string", default: "/tmp/caliper-render" },
         chromium: { type: "string" },
         list: { type: "boolean", default: false },
@@ -102,6 +105,7 @@ const plan = planRenders(project, {
   part: /** @type {string} */ (args.part),
   state: args.state,
   devices: args.device?.flatMap(value => value.split(",")),
+  ...(args.take === undefined ? {} : { take: args.take }),
 })
 if (plan._tag === "Invalid") stop(plan.reason)
 

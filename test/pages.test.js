@@ -65,6 +65,7 @@ describe("the frame page", () => {
         partFile: "src/Chip.part.tsx",
         state: "default",
         css: ["/src/app.css"],
+        warnings: [],
         wrapper: [{ tag: "div", className: "shell" }],
         react: "/@id/__x00__caliper:react",
         problem: null,

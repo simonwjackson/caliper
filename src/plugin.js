@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { chromePage, framePage } from "./pages.js"
+import { flattenStylesheets, takeOverlay, withTake } from "./takes/overlay.js"
+import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
 
 /**
  * @typedef {import("./types").CaliperOptions} CaliperOptions
@@ -45,6 +47,7 @@ const REFRESH_DELAY_MS = 80
 export function caliper(options = {}) {
   /** @type {string} */
   let root = process.cwd()
+  const overlay = takeOverlay(() => root)
 
   return {
     name: "caliper",
@@ -67,17 +70,36 @@ export function caliper(options = {}) {
       root = config.root
     },
 
-    resolveId(id) {
-      if (id === REACT_MODULE) return RESOLVED_REACT_MODULE
-      // Vite pre-transforms the frame page's script. Point it at the real file,
-      // although Caliper's middleware serves the request itself.
-      const client = clientFile(id)
-      return client === null ? null : join(CLIENT_DIR, client)
+    resolveId: {
+      // Before vite:resolve, which would drop a take's tag from the import.
+      order: "pre",
+      async handler(id, importer, resolveOptions) {
+        if (id === REACT_MODULE) return RESOLVED_REACT_MODULE
+        const tagged = await overlay.resolveId.call(this, id, importer, resolveOptions)
+        if (tagged) return tagged
+        // Vite pre-transforms the frame page's script. Point it at the real file,
+        // although Caliper's middleware serves the request itself.
+        const client = clientFile(id)
+        return client === null ? null : join(CLIENT_DIR, client)
+      },
+    },
+
+    hotUpdate(update) {
+      return overlay.hotUpdate.call(this, update)
+    },
+
+    // Each part module is an HMR boundary that reloads its own frame, so a save
+    // reloads only the frames whose part imports the saved module.
+    transform(code, id) {
+      if (!(id.split("?")[0] ?? "").endsWith(PART_SUFFIX)) return null
+      return `${code}\nif (import.meta.hot) import.meta.hot.accept(() => location.reload())\n`
     },
 
     load(id) {
       // Caliper's own folder is outside the project's fs.allow, so read it here.
       if (id.startsWith(CLIENT_DIR)) return readFileSync(id, "utf8")
+      const taken = overlay.load.call(this, id)
+      if (taken !== null) return taken
       if (id !== RESOLVED_REACT_MODULE) return null
       return [
         'export { createElement } from "react"',
@@ -155,12 +177,16 @@ function createSession(server, root, options) {
     if (file.endsWith(PART_SUFFIX)) return true
     return current !== null && (await current).files.has(file)
   }
-  server.watcher.on("change", file => { void affects(file).then(yes => yes && refresh()) })
+  const takesDir = join(root, TAKES_DIR)
+  /** @param {string} file */
+  const isProjectFile = file => !file.includes("/node_modules/") && !file.startsWith(takesDir)
+  server.watcher.on("change", file => { if (isProjectFile(file)) void affects(file).then(yes => yes && refresh()) })
   // A new or removed file can be a part, or can satisfy an import that did not resolve before.
-  server.watcher.on("add", file => { if (!file.includes("/node_modules/")) refresh() })
-  server.watcher.on("unlink", file => { if (!file.includes("/node_modules/")) refresh() })
+  server.watcher.on("add", file => { if (isProjectFile(file)) refresh() })
+  server.watcher.on("unlink", file => { if (isProjectFile(file)) refresh() })
 
   const base = server.config.base.replace(/\/$/, "")
+  const store = createTakeStore(root)
 
   /** @param {string} file root-relative */
   const fileUrl = file => {
@@ -179,7 +205,10 @@ function createSession(server, root, options) {
     if (path === "/") return send(response, 200, "text/html", chromePage({ clientUrl: `${base}${CALIPER_PATH}/client` }))
     if (path === "/project.json") return send(response, 200, "application/json", (await load()).json)
     if (path === "/events") return openStream(response, (await load()).json)
-    if (path === "/frame") return sendFrame(url.searchParams.get("part") ?? "", url.searchParams.get("state") ?? "default", response)
+    if (path === "/frame") {
+      const params = url.searchParams
+      return sendFrame(params.get("part") ?? "", params.get("state") ?? "default", params.get("take"), response)
+    }
     if (path.startsWith("/client/")) return sendClientFile(path.slice("/client/".length), response)
     return send(response, 404, "text/plain", `Caliper has no page at ${url.pathname}.`)
   }
@@ -187,28 +216,39 @@ function createSession(server, root, options) {
   /**
    * @param {string} partFile
    * @param {string} stateName the export to render
+   * @param {string | null} take the take to overlay, or null for the real files
    * @param {ServerResponse} response
    */
-  const sendFrame = async (partFile, stateName, response) => {
+  const sendFrame = async (partFile, stateName, take, response) => {
     const { project } = await load()
     const part = project.parts.find(candidate => candidate.file === partFile)
     const problem = part === undefined
       ? `"${partFile}" is not a part of ${project.name}. Pick a part from the list.`
-      : part.states.some(state => state.export === stateName)
-        ? null
-        : `${partFile} has no state "${stateName}". Its states are: ${part.states.map(state => state.export).join(", ")}.`
+      : !part.states.some(state => state.export === stateName)
+        ? `${partFile} has no state "${stateName}". Its states are: ${part.states.map(state => state.export).join(", ")}.`
+        : take !== null && (!isTakeId(take) || store.record(take) === null)
+          ? `Take ${take} does not exist. It may have been accepted or discarded.`
+          : null
     const wrapper = project.wrapper._tag === "Failed" ? [] : project.wrapper.value.elements
-    const css = project.css._tag === "Failed" ? [] : project.css.value.stylesheets.map(sheet => fileUrl(sheet.file))
+    const sheets = project.css._tag === "Failed" ? [] : project.css.value.stylesheets.map(sheet => resolvePath(root, sheet.file))
+    const flat = take === null || problem !== null ? null : flattenStylesheets(root, take, sheets)
+    const css = flat === null
+      ? sheets.map(file => fileUrl(relative(root, file)))
+      : flat.order.map(file => withTake(fileUrl(relative(root, file)), /** @type {string} */ (take)))
+    const tag = (/** @type {string} */ url) => (flat === null ? url : withTake(url, /** @type {string} */ (take)))
     /** @type {FrameConfig} */
     const config = {
-      part: fileUrl(partFile),
+      part: tag(fileUrl(partFile)),
       partFile,
       state: stateName,
+      ...(flat === null ? {} : { take: /** @type {string} */ (take) }),
       css,
+      warnings: flat?.problems ?? [],
       wrapper,
       react: `${base}/@id/__x00__${RESOLVED_REACT_MODULE.slice(1)}`,
     }
-    const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}&state=${encodeURIComponent(stateName)}`
+    const takeQuery = flat === null ? "" : `&take=${take}`
+    const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}&state=${encodeURIComponent(stateName)}${takeQuery}`
     const html = framePage({ clientUrl: `${base}${CALIPER_PATH}/client`, config, problem })
     send(response, problem === null ? 200 : 404, "text/html", await server.transformIndexHtml(frameUrl, html))
   }
