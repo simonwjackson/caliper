@@ -52,6 +52,8 @@ try {
     localStorage.clear()
     localStorage.setItem("caliper:px-per-mm", String(pxPerMm))
     localStorage.setItem("caliper:device", "rg353m")
+    // This check measures the stage; the Takes panel has its own check.
+    localStorage.setItem("caliper:takes-open", "false")
   }, PX_PER_MM)
   await page.goto(base)
   await page.locator(".cal-part").first().waitFor()
@@ -158,7 +160,7 @@ try {
     const cells = await page.locator(".cal-cell").evaluateAll(nodes => nodes.map(node => {
       const element = /** @type {HTMLElement} */ (node)
       const box = element.querySelector(".cal-screen")?.getBoundingClientRect()
-      return { state: element.dataset.state, frame: element.dataset.frameState, label: element.querySelector(".cal-cell-label")?.textContent, width: box?.width, top: box?.top }
+      return { state: element.dataset.key, frame: element.dataset.frameState, label: element.querySelector(".cal-cell-label")?.textContent, width: box?.width, top: box?.top }
     }))
     assert.deepEqual(cells.map(cell => [cell.state, cell.frame, cell.label]), [
       ["default", "Rendered", "Default"],
@@ -183,7 +185,7 @@ try {
     await page.setViewportSize({ width: 1600, height: 1000 })
 
     // A cell's label opens that state alone.
-    await page.locator('.cal-cell[data-state="NoResults"] .cal-cell-label').click()
+    await page.locator('.cal-cell[data-key="NoResults"] .cal-cell-label').click()
     await page.waitForFunction(() => {
       const doc = /** @type {HTMLIFrameElement} */ (document.querySelector(".cal-device .cal-frame")).contentDocument
       return doc?.body?.innerText.includes("probe empty state")

@@ -89,6 +89,48 @@ caliper({
 
 `wrap: false` renders parts with no wrapper.
 
+## Make takes with an agent
+
+A **take** is one version of a part that an AI agent proposes. The agent
+writes edited copies of project files into `.caliper/takes/<n>/`, at the same
+relative paths. The real files do not change until you accept the take.
+Caliper shows the original next to each take, in one Vite server.
+
+Turn the agent on in `vite.config`:
+
+```ts
+caliper({
+  agent: {
+    model: "claude-opus-5-5",
+    baseUrl: "https://my-proxy.example/v1", // any endpoint that speaks the OpenAI API
+    reasoning: "medium",                    // off, minimal, low, medium, high, xhigh, max
+    api: "chat-completions",                // or "responses"
+  },
+})
+```
+
+The API key never goes in `vite.config`. Set `CALIPER_AGENT_API_KEY` in the
+shell that starts Vite, or in the project's `.env.local`. `apiKeyEnv` names a
+different variable. Without a `baseUrl`, Caliper uses the base URL and key in
+`~/.pi/agent/cliproxyapi.json`, if that file exists; it sends that key to no
+other endpoint. Caliper needs no `pi` binary.
+
+The agent needs `CHROMIUM` to see its work. The Takes panel shows the model,
+the reasoning level and where the base URL and key came from, or what is
+missing.
+
+In the Takes panel, describe a change and start one or more takes. Each take
+has its own agent, and they run at the same time. An agent can read project
+files, edit and write files in its own take, and render its take. It cannot
+run commands or write anywhere else. The stage shows the original and every
+take of the part, and each frame reloads when its take changes. Send a take
+another prompt, stop it, accept it (its files are copied over the real files)
+or discard it.
+
+`.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
+conversation lives only in the dev server: after a restart, the take's files
+remain, and its next prompt starts a new conversation.
+
 ## How a part renders
 
 Each part renders in an `iframe` for one device. The `iframe` has the device's
@@ -119,8 +161,9 @@ CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
 Each result gives the frame's verdict (`Rendered`, `Empty` or `Failed`), the
 problems the frame shows, browser errors it did not catch, the elements that
 reach past the device's screen, and the path of a PNG at one image pixel per
-CSS pixel. `--list` prints every part and its states. `--help` explains every
-field. The exit status is 0 when every frame rendered.
+CSS pixel. `--take <n>` renders the part as take `n` changes it. `--list`
+prints every part and its states. `--help` explains every field. The exit
+status is 0 when every frame rendered.
 
 `skills/caliper-render/SKILL.md` teaches an agent the loop: render, read the
 verdict, look at the PNGs, change the code, render again. Copy or link it into
@@ -137,6 +180,11 @@ the agent's skills folder.
   are inferred from each panel's resolution and Sway's default scale of 1. They
   are not yet measured on the devices.
 - Only Vite projects can use Caliper.
+- A take cannot show a change that goes through a conditional CSS `@import`
+  (`layer`, `media`, `supports`), Sass, Less or Tailwind's source scan. Not
+  yet tested.
+- The agent works in the dev server process. Its render browser starts for
+  each render, which costs about a second.
 
 ## Develop
 
@@ -146,6 +194,10 @@ bun test
 bun run typecheck
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 ```
+
+`scripts/verify-takes.mjs` checks the Takes panel against a real model: it
+starts takes from the chrome, waits for the agents, checks every take frame,
+takes screenshots at three window sizes and discards the takes.
 
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
 every part of a running project and checks true size, scaling, calibration, a

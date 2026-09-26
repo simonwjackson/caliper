@@ -15,13 +15,19 @@ import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from ".
  * @typedef {import("./device-frame.js").Device} Device
  * @typedef {{ kind: "error" | "warning", title: string, detail: string }} Problem
  * @typedef {{ _tag: "Connecting" } | { _tag: "Ready", project: Project } | { _tag: "Unreachable", project: Project | null }} Connection
- * @typedef {{ part: string, partState: string, state: "Loading" | "Rendered" | "Empty" | "Failed", problems: Problem[] }} FrameReport
- * @typedef {{ _tag: "One", export: string } | { _tag: "All" }} Shown
+ * @typedef {{ part: string, partState: string, take: string | null, state: "Loading" | "Rendered" | "Empty" | "Failed", problems: Problem[] }} FrameReport
+ * @typedef {{ _tag: "One", export: string } | { _tag: "All" } | { _tag: "Takes", export: string }} Shown
  *   `One` shows one state of the part. `All` shows every state side by side.
+ *   `Takes` shows one state of the original next to each take of the part.
+ * @typedef {import("../types").TakesSnapshot} TakesSnapshot
+ * @typedef {import("../types").TakeView} TakeView
+ * @typedef {{ key: string, label: string, title: string, src: string, select: () => void, status?: string }} Cell
+ *   One labelled frame in the grid.
  */
 
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
 const STORAGE_DEVICE = "caliper:device"
+const STORAGE_TAKES_OPEN = "caliper:takes-open"
 /** Room the caption under the frame needs, in CSS px. */
 const CAPTION_RESERVE = 44
 /** Matches `.cal-stage` padding in chrome.css. */
@@ -36,6 +42,10 @@ const ALL_STATES = "*"
 const GRID_GAP = 20
 /** Room above each frame in the grid for its label. */
 const GRID_LABEL = 36
+/** The `state` prefix in the URL that compares takes, for example `takes:default`. */
+const TAKES_PREFIX = "takes:"
+/** The most takes one prompt starts at once. */
+const MAX_PARALLEL = 4
 
 const saved = new URLSearchParams(location.hash.slice(1))
 const storedPxPerMm = Number(localStorage.getItem(STORAGE_PX_PER_MM))
@@ -52,8 +62,28 @@ const state = {
   calibrated: storedPxPerMm > 0,
   calibrating: false,
   filter: "",
-  /** What each frame last reported, by state. @type {Map<string, FrameReport>} */
+  /** What each frame last reported, by `reportKey`. @type {Map<string, FrameReport>} */
   reports: new Map(),
+  /** @type {TakesSnapshot | null} */
+  takes: null,
+  /** The take whose conversation the panel shows. @type {string | null} */
+  take: saved.get("take"),
+  /** How many takes the next prompt starts. */
+  parallel: 1,
+  /** A request to the takes API is on its way. */
+  sending: false,
+  /** The last takes API error, shown in the panel. @type {string | null} */
+  takeError: null,
+  /** Whether the Takes panel is open. null: not chosen yet, so it follows the agent. @type {boolean | null} */
+  takesOpen: localStorage.getItem(STORAGE_TAKES_OPEN) === null ? null : localStorage.getItem(STORAGE_TAKES_OPEN) === "true",
+}
+
+/**
+ * @param {string | null} take
+ * @param {string} partState
+ */
+function reportKey(take, partState) {
+  return `${take ?? ""}|${partState}`
 }
 
 // ---------------------------------------------------------------- DOM helpers
@@ -112,7 +142,8 @@ app.append(
           h("strong", { class: "cal-part-name" }),
           h("span", { class: "cal-part-file" })),
         h("div", { class: "cal-devices", role: "radiogroup", "aria-label": "Device" }),
-        h("button", { class: "cal-calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate")),
+        h("button", { class: "cal-calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate"),
+        h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => setTakesOpen(!takesOpen()) }, "Takes")),
       h("div", { class: "cal-stage" },
         h("figure", { class: "cal-device" },
           h("div", { class: "cal-screen" },
@@ -140,7 +171,47 @@ app.append(
             h("div", { class: "cal-calibration-actions" },
               h("button", { type: "button", onClick: () => resetCalibration() }, "Reset"),
               h("button", { type: "button", class: "cal-primary", onClick: () => setCalibrating(false) }, "Done"))))),
-      h("section", { class: "cal-problems", "aria-live": "polite" }))))
+      h("section", { class: "cal-problems", "aria-live": "polite" })),
+    h("aside", { class: "cal-takes", id: "cal-takes", "aria-label": "Takes" },
+      h("header", { class: "cal-takes-head" },
+        h("h2", {}, "Takes"),
+        h("p", { class: "cal-agent" })),
+      h("div", { class: "cal-take-list", role: "list" }),
+      h("div", { class: "cal-log", "aria-live": "polite" }),
+      h("form", {
+        class: "cal-composer",
+        onSubmit: event => {
+          event.preventDefault()
+          void startTakes()
+        },
+      },
+        h("textarea", {
+          class: "cal-prompt",
+          rows: "3",
+          placeholder: "Describe a change to this part",
+          "aria-label": "Prompt",
+          onKeydown: event => {
+            const key = /** @type {KeyboardEvent} */ (event)
+            if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) {
+              key.preventDefault()
+              void (key.shiftKey ? followTake() : startTakes())
+            }
+          },
+          onInput: () => renderComposer(),
+        }),
+        h("p", { class: "cal-composer-note" }),
+        h("div", { class: "cal-composer-actions" },
+          h("label", { class: "cal-parallel" },
+            h("span", {}, "Takes"),
+            h("select", {
+              "aria-label": "How many takes to start",
+              onChange: event => {
+                state.parallel = Number(/** @type {HTMLSelectElement} */ (event.target).value)
+                renderComposer()
+              },
+            }, ...Array.from({ length: MAX_PARALLEL }, (_, index) => h("option", { value: String(index + 1) }, String(index + 1))))),
+          h("button", { type: "button", class: "cal-follow", onClick: () => void followTake() }),
+          h("button", { type: "submit", class: "cal-primary cal-start" }, "New take"))))))
 
 const frame = /** @type {HTMLIFrameElement} */ ($(".cal-frame"))
 const stage = $(".cal-stage")
@@ -158,7 +229,18 @@ function deviceById(id) {
  */
 function shownFrom(value) {
   if (value === ALL_STATES) return { _tag: "All" }
+  if (value?.startsWith(TAKES_PREFIX)) return { _tag: "Takes", export: value.slice(TAKES_PREFIX.length) || DEFAULT_STATE }
   return { _tag: "One", export: value ?? DEFAULT_STATE }
+}
+
+/** The takes of the selected part, oldest first. @returns {TakeView[]} */
+function partTakes() {
+  return state.takes?.takes.filter(take => take.part === state.part) ?? []
+}
+
+/** The take whose conversation the panel shows, when it belongs to the selected part. */
+function currentTake() {
+  return partTakes().find(take => take.take === state.take) ?? null
 }
 
 /**
@@ -170,6 +252,7 @@ function shownFrom(value) {
 function effectiveShown() {
   const part = currentPart()
   if (state.shown._tag === "All" && part && part.states.length === 1) return { _tag: "One", export: DEFAULT_STATE }
+  if (state.shown._tag === "Takes" && partTakes().length === 0) return { _tag: "One", export: state.shown.export }
   return state.shown
 }
 
@@ -177,8 +260,10 @@ function saveLocation() {
   const params = new URLSearchParams()
   if (state.part) params.set("part", state.part)
   if (state.shown._tag === "All") params.set("state", ALL_STATES)
+  else if (state.shown._tag === "Takes") params.set("state", `${TAKES_PREFIX}${state.shown.export}`)
   else if (state.shown.export !== DEFAULT_STATE) params.set("state", state.shown.export)
   params.set("device", state.device.id)
+  if (state.take) params.set("take", state.take)
   history.replaceState(null, "", `#${params}`)
 }
 
@@ -186,8 +271,9 @@ function saveLocation() {
 function selectPart(file) {
   if (state.part === file) return
   state.part = file
-  // Keep comparing states when you move to another part.
-  if (state.shown._tag === "One") state.shown = { _tag: "One", export: DEFAULT_STATE }
+  state.take = null
+  // Keep comparing states, or takes, when you move to another part.
+  if (state.shown._tag !== "All") state.shown = { _tag: state.shown._tag, export: DEFAULT_STATE }
   showChanged()
 }
 
@@ -206,6 +292,7 @@ function showChanged() {
   renderFrame()
   renderStage()
   renderProblems()
+  renderTakes()
 }
 
 /** @param {Device} device */
@@ -292,7 +379,8 @@ function renderParts() {
         title: part.file,
         onClick: () => selectPart(part.file),
       }, h("span", { class: "cal-part-label" }, part.name)))
-      if (part.file === state.part && part.states.length > 1) list.append(stateList(part))
+      const takes = part.file === state.part ? partTakes().length : 0
+      if (part.file === state.part && (part.states.length > 1 || takes > 0)) list.append(stateList(part))
     }
   }
 }
@@ -304,22 +392,37 @@ function renderParts() {
  */
 function stateList(part) {
   const shown = effectiveShown()
+  const takes = partTakes().length
+  const current = shown._tag === "All" ? null : shown.export
   return h("div", { class: "cal-states", role: "group", "aria-label": `${part.name} states` },
-    h("button", {
-      type: "button",
-      class: "cal-state cal-state-all",
-      "aria-current": shown._tag === "All" ? "true" : false,
-      title: "Every state side by side",
-      "data-state": ALL_STATES,
-      onClick: () => selectShown({ _tag: "All" }),
-    }, `All ${part.states.length} states`),
-    ...part.states.map(partState => h("button", {
+    takes > 0
+      ? h("button", {
+        type: "button",
+        class: "cal-state cal-state-all",
+        "aria-current": shown._tag === "Takes" ? "true" : false,
+        title: "The original next to each take",
+        "data-state": TAKES_PREFIX,
+        onClick: () => selectShown({ _tag: "Takes", export: current ?? DEFAULT_STATE }),
+      }, `Compare ${takes} ${takes === 1 ? "take" : "takes"}`)
+      : null,
+    part.states.length > 1
+      ? h("button", {
+        type: "button",
+        class: "cal-state cal-state-all",
+        "aria-current": shown._tag === "All" ? "true" : false,
+        title: "Every state side by side",
+        "data-state": ALL_STATES,
+        onClick: () => selectShown({ _tag: "All" }),
+      }, `All ${part.states.length} states`)
+      : null,
+    ...(part.states.length > 1 ? part.states : []).map(partState => h("button", {
       type: "button",
       class: "cal-state",
-      "aria-current": shown._tag === "One" && partState.export === shown.export ? "true" : false,
+      "aria-current": shown._tag !== "All" && partState.export === shown.export ? "true" : false,
       title: stateSite(part, partState),
       "data-state": partState.export,
-      onClick: () => selectShown({ _tag: "One", export: partState.export }),
+      // In the takes view, a state picks what every frame shows.
+      onClick: () => selectShown({ _tag: shown._tag === "Takes" ? "Takes" : "One", export: partState.export }),
     }, partState.label)))
 }
 
@@ -339,8 +442,11 @@ function stateLabel(exportName) {
 function renderBar() {
   const part = currentPart()
   const shown = effectiveShown()
-  const shownState = !part || part.states.length === 1 ? ""
+  const takes = partTakes().length
+  const shownState = !part ? ""
     : shown._tag === "All" ? ` · All ${part.states.length} states`
+    : shown._tag === "Takes" ? `${part.states.length > 1 ? ` · ${stateLabel(shown.export)}` : ""} · original and ${takes} ${takes === 1 ? "take" : "takes"}`
+    : part.states.length === 1 ? ""
     : ` · ${stateLabel(shown.export)}`
   $(".cal-part-name").textContent = part ? `${part.name}${shownState}` : "No part selected"
   $(".cal-part-file").textContent = part ? (part.note ?? part.file) : ""
@@ -359,9 +465,10 @@ function renderBar() {
 /**
  * @param {Part} part
  * @param {string} exportName
+ * @param {string | null} [take]
  */
-function frameSrc(part, exportName) {
-  return `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(exportName)}`
+function frameSrc(part, exportName, take = null) {
+  return `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(exportName)}${take ? `&take=${take}` : ""}`
 }
 
 function renderFrame() {
@@ -370,7 +477,7 @@ function renderFrame() {
   const figure = $(".cal-device")
   const grid = $(".cal-grid")
   const empty = $(".cal-empty")
-  figure.hidden = part === null || shown._tag === "All"
+  figure.hidden = part === null || shown._tag !== "One"
   grid.hidden = part === null || shown._tag === "One"
   empty.hidden = part !== null
   if (part === null) {
@@ -381,7 +488,33 @@ function renderFrame() {
   }
   if (shown._tag === "All") {
     frame.removeAttribute("src")
-    return renderGridCells(part)
+    return renderGridCells(part.states.map(partState => ({
+      key: partState.export,
+      label: partState.label,
+      title: `Show ${partState.label} alone · ${stateSite(part, partState)}`,
+      src: frameSrc(part, partState.export),
+      select: () => selectShown({ _tag: "One", export: partState.export }),
+    })), `${part.states.length} states side by side, each`)
+  }
+  if (shown._tag === "Takes") {
+    frame.removeAttribute("src")
+    return renderGridCells([
+      {
+        key: "original",
+        label: "Original",
+        title: "The real files · show alone",
+        src: frameSrc(part, shown.export),
+        select: () => selectShown({ _tag: "One", export: shown.export }),
+      },
+      ...partTakes().map(take => ({
+        key: `take-${take.take}`,
+        label: `Take ${take.take}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
+        title: take.files.length ? `Changes ${take.files.join(", ")}` : "No changes yet",
+        src: frameSrc(part, shown.export, take.take),
+        status: take.run._tag,
+        select: () => selectTake(take.take),
+      })),
+    ], `The original and ${partTakes().length} ${partTakes().length === 1 ? "take" : "takes"}, each`)
   }
   $(".cal-grid-cells").replaceChildren()
   const src = frameSrc(part, shown.export)
@@ -391,36 +524,39 @@ function renderFrame() {
 }
 
 /**
- * One labelled frame for each state of the part. Frames that already show the
- * right state stay, so a new state does not reload the others.
+ * One labelled frame for each cell. Frames that already show the right page
+ * stay, so a new cell does not reload the others.
  *
- * @param {Part} part
+ * @param {Cell[]} wanted
+ * @param {string} lead the caption's first words
  */
-function renderGridCells(part) {
+function renderGridCells(wanted, lead) {
   const cells = $(".cal-grid-cells")
+  cells.dataset.lead = lead
   /** @type {Map<string, HTMLElement>} */
   const existing = new Map()
   for (const cell of cells.querySelectorAll("figure")) {
     const src = cell.querySelector("iframe")?.getAttribute("src")
     if (src) existing.set(src, /** @type {HTMLElement} */ (cell))
   }
-  cells.replaceChildren(...part.states.map(partState => {
-    const src = frameSrc(part, partState.export)
-    const kept = existing.get(src)
+  cells.replaceChildren(...wanted.map(want => {
+    const kept = existing.get(want.src)
     const label = h("button", {
       type: "button",
       class: "cal-cell-label",
-      title: `Show ${partState.label} alone · ${stateSite(part, partState)}`,
-      onClick: () => selectShown({ _tag: "One", export: partState.export }),
-    }, partState.label)
-    if (kept) {
-      kept.querySelector(".cal-cell-label")?.replaceWith(label)
-      return kept
-    }
-    return h("figure", { class: "cal-cell", "data-state": partState.export, "data-frame-state": "Loading" },
+      title: want.title,
+      "aria-current": want.key === `take-${state.take}` ? "true" : false,
+      onClick: () => want.select(),
+    }, want.label)
+    const cell = kept ?? h("figure", { class: "cal-cell", "data-frame-state": "Loading" },
       h("figcaption", {}, label),
       h("div", { class: "cal-screen" },
-        h("iframe", { class: "cal-frame", title: `${part.name}: ${partState.label}`, src })))
+        h("iframe", { class: "cal-frame", title: want.label, src: want.src })))
+    if (kept) kept.querySelector(".cal-cell-label")?.replaceWith(label)
+    cell.dataset.key = want.key
+    if (want.status) cell.dataset.run = want.status
+    else delete cell.dataset.run
+    return cell
   }))
   sizeGrid()
 }
@@ -445,7 +581,7 @@ function sizeGrid() {
     iframe.style.height = `${device.cssHeight}px`
     iframe.style.transform = `scale(${geometry.scale})`
   }
-  $(".cal-grid-caption").replaceChildren(...captionFor(device, geometry.fit, `${cells.length} states side by side, each`))
+  $(".cal-grid-caption").replaceChildren(...captionFor(device, geometry.fit, $(".cal-grid-cells").dataset.lead))
 }
 
 /**
@@ -465,7 +601,7 @@ function captionFor(device, fit, lead) {
 }
 
 function renderStage() {
-  if (effectiveShown()._tag === "All") return sizeGrid()
+  if (effectiveShown()._tag !== "One") return sizeGrid()
   const device = state.device
   const room = {
     width: stage.clientWidth - (STAGE_PADDING + RING) * 2,
@@ -498,12 +634,16 @@ function renderProblems() {
   section.replaceChildren()
   const shown = effectiveShown()
   const part = currentPart()
-  const exports = shown._tag === "One" ? [shown.export] : part?.states.map(partState => partState.export) ?? []
-  for (const exportName of exports) {
-    const report = state.reports.get(exportName)
+  /** @type {Array<{ key: string, prefix: string }>} */
+  const sources = shown._tag === "One"
+    ? [{ key: reportKey(null, shown.export), prefix: "" }]
+    : shown._tag === "Takes"
+      ? [{ key: reportKey(null, shown.export), prefix: "Original: " }, ...partTakes().map(take => ({ key: reportKey(take.take, shown.export), prefix: `Take ${take.take}: ` }))]
+      // In the grid, say which state each problem belongs to.
+      : part?.states.map(partState => ({ key: reportKey(null, partState.export), prefix: `${partState.label}: ` })) ?? []
+  for (const { key, prefix } of sources) {
+    const report = state.reports.get(key)
     if (!report || report.part !== state.part) continue
-    // In the grid, say which state each problem belongs to.
-    const prefix = shown._tag === "All" ? `${stateLabel(exportName)}: ` : ""
     for (const problem of report.problems) {
       section.append(h("div", { class: `cal-problem cal-problem-${problem.kind}`, role: problem.kind === "error" ? "alert" : "status" },
         h("strong", {}, `${prefix}${problem.title}`),
@@ -577,6 +717,244 @@ function site(source) {
   return `${source.file}:${source.line}`
 }
 
+// ------------------------------------------------------------------- takes
+
+/** What each take looked like last time, to know when its frames must reload. @type {Map<string, string>} */
+const takeSignatures = new Map()
+
+/** @param {TakesSnapshot} snapshot */
+function takesArrived(snapshot) {
+  const before = state.takes
+  state.takes = snapshot
+  // A take frame keeps the files it loaded. Reload it when the take's files
+  // change, and when its agent finishes, so it shows the take as it ends.
+  for (const take of snapshot.takes) {
+    const signature = `${take.files.join(",")}|${take.run._tag}`
+    const previous = takeSignatures.get(take.take)
+    takeSignatures.set(take.take, signature)
+    if (previous === undefined) continue
+    const [files, run] = previous.split("|")
+    if (files !== take.files.join(",") || (run === "Running" && take.run._tag !== "Running")) reloadTakeFrames(take.take)
+  }
+  const countBefore = before?.takes.filter(take => take.part === state.part).length ?? 0
+  const shapeChanged = countBefore !== partTakes().length
+    || JSON.stringify(before?.takes.map(take => [take.take, take.run._tag])) !== JSON.stringify(snapshot.takes.map(take => [take.take, take.run._tag]))
+  if (state.take !== null && !snapshot.takes.some(take => take.take === state.take)) {
+    state.take = null
+    saveLocation()
+  }
+  if (shapeChanged) {
+    renderParts()
+    renderBar()
+    renderFrame()
+    renderStage()
+  }
+  renderTakes()
+}
+
+/** @param {string} take */
+function reloadTakeFrames(take) {
+  for (const iframe of stage.querySelectorAll("iframe[src]")) {
+    const src = iframe.getAttribute("src") ?? ""
+    if (new URLSearchParams(src.slice(src.indexOf("?"))).get("take") === take) {
+      /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
+    }
+  }
+}
+
+/** @param {string} take */
+function selectTake(take) {
+  state.take = take
+  const shown = effectiveShown()
+  if (shown._tag !== "Takes") state.shown = { _tag: "Takes", export: shown._tag === "One" ? shown.export : DEFAULT_STATE }
+  showChanged()
+}
+
+/**
+ * @param {string} path below /__caliper
+ * @param {object} body
+ * @returns {Promise<any>}
+ */
+async function postTakes(path, body = {}) {
+  state.sending = true
+  state.takeError = null
+  renderComposer()
+  try {
+    const response = await fetch(path.replace(/^\//, ""), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }))
+    if (!response.ok) throw new Error(result.error ?? `HTTP ${response.status}`)
+    return result
+  } catch (error) {
+    state.takeError = error instanceof Error ? error.message : String(error)
+    return null
+  } finally {
+    state.sending = false
+    renderTakes()
+  }
+}
+
+function promptBox() {
+  return /** @type {HTMLTextAreaElement} */ ($(".cal-prompt"))
+}
+
+/** Start as many takes as the composer asks for, all with the same prompt. */
+async function startTakes() {
+  const part = currentPart()
+  const prompt = promptBox().value.trim()
+  if (!part || !prompt || state.sending) return
+  const shown = effectiveShown()
+  const ask = { part: part.file, state: shown._tag === "All" ? DEFAULT_STATE : shown.export, device: state.device.id, prompt }
+  const results = await Promise.all(Array.from({ length: state.parallel }, () => postTakes("/takes", ask)))
+  const started = results.filter(Boolean).map(result => /** @type {string} */ (result.take))
+  if (started.length === 0) return
+  promptBox().value = ""
+  state.take = started[0] ?? null
+  state.shown = { _tag: "Takes", export: ask.state }
+  showChanged()
+}
+
+/** Send the prompt to the selected take's agent. */
+async function followTake() {
+  const take = currentTake()
+  const prompt = promptBox().value.trim()
+  if (!take || !prompt || state.sending) return
+  if (await postTakes(`/takes/${take.take}/prompt`, { prompt })) {
+    promptBox().value = ""
+    renderComposer()
+  }
+}
+
+/** @param {TakeView} take */
+async function acceptTake(take) {
+  const files = take.files.join("\n")
+  if (!confirm(`Copy take ${take.take} over the real files?\n\n${files}`)) return
+  await postTakes(`/takes/${take.take}/accept`)
+}
+
+/** @param {TakeView} take */
+async function discardTake(take) {
+  if (take.files.length > 0 && !confirm(`Throw away take ${take.take} and its changes to ${take.files.length} ${take.files.length === 1 ? "file" : "files"}?`)) return
+  await postTakes(`/takes/${take.take}/discard`)
+}
+
+/**
+ * The panel is open when you opened it. Until you choose, it is open when an
+ * agent is set up or a take exists, so a viewer-only project keeps the room.
+ */
+function takesOpen() {
+  return state.takesOpen ?? (state.takes?.agent._tag !== "Off" || (state.takes?.takes.length ?? 0) > 0)
+}
+
+/** @param {boolean} open */
+function setTakesOpen(open) {
+  state.takesOpen = open
+  localStorage.setItem(STORAGE_TAKES_OPEN, String(open))
+  renderTakes()
+  renderStage()
+}
+
+function renderTakes() {
+  const open = takesOpen()
+  $(".cal").classList.toggle("cal-takes-closed", !open)
+  $(".cal-takes").hidden = !open
+  const toggle = $(".cal-takes-toggle")
+  toggle.setAttribute("aria-expanded", String(open))
+  const running = state.takes?.takes.filter(take => take.run._tag === "Running").length ?? 0
+  toggle.textContent = running > 0 ? `Takes · ${running} working` : "Takes"
+  renderAgent()
+  renderTakeList()
+  renderLog()
+  renderComposer()
+}
+
+function renderAgent() {
+  const line = $(".cal-agent")
+  const agent = state.takes?.agent
+  line.className = "cal-agent"
+  if (!agent) {
+    line.textContent = "Connecting…"
+    return
+  }
+  if (agent._tag === "Ready") {
+    line.textContent = `${agent.model} · reasoning ${agent.reasoning}`
+    line.title = `${agent.baseUrl} (${agent.api}) from ${agent.baseUrlFrom}. Key from ${agent.keyFrom}.`
+    return
+  }
+  line.classList.add(agent._tag === "Failed" ? "cal-agent-failed" : "cal-agent-off")
+  line.textContent = agent._tag === "Failed" ? `${agent.reason} ${agent.hint}` : agent.hint
+  line.title = ""
+}
+
+function renderTakeList() {
+  const list = $(".cal-take-list")
+  const takes = partTakes()
+  if (takes.length === 0) {
+    list.replaceChildren(h("p", { class: "cal-note" }, currentPart() ? `No takes of ${currentPart()?.name} yet.` : ""))
+    return
+  }
+  list.replaceChildren(...takes.map(take => {
+    const running = take.run._tag === "Running"
+    const status = running ? "Working" : take.run._tag === "Failed" ? "Failed" : take.files.length ? `${take.files.length} ${take.files.length === 1 ? "file" : "files"}` : "No changes"
+    return h("div", { class: "cal-take", role: "listitem", "data-run": take.run._tag, "aria-current": take.take === state.take ? "true" : false },
+      h("button", { type: "button", class: "cal-take-name", title: take.files.join("\n") || "No changes yet", onClick: () => selectTake(take.take) },
+        h("strong", {}, `Take ${take.take}`), " ", h("span", { class: "cal-take-status" }, status)),
+      h("div", { class: "cal-take-actions" },
+        running
+          ? h("button", { type: "button", onClick: () => void postTakes(`/takes/${take.take}/stop`) }, "Stop")
+          : h("button", { type: "button", class: "cal-accept", disabled: take.files.length === 0, onClick: () => void acceptTake(take) }, "Accept"),
+        h("button", { type: "button", onClick: () => void discardTake(take) }, "Discard")))
+  }))
+}
+
+function renderLog() {
+  const log = $(".cal-log")
+  const take = currentTake()
+  const pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 24
+  if (!take) {
+    log.replaceChildren()
+    return
+  }
+  // A streaming reply starts empty; it shows once it has words.
+  const entries = take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "")
+  log.replaceChildren(
+    h("p", { class: "cal-log-title" }, `Take ${take.take} · asked on ${take.device}, state ${take.state}`),
+    ...entries.map(entry => {
+      if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)
+      if (entry._tag === "Assistant") return h("div", { class: "cal-log-assistant" }, entry.text)
+      return h("div", { class: "cal-log-tool", "data-outcome": entry.outcome, title: entry.detail },
+        h("span", { class: "cal-log-tool-name" }, entry.name), " ", h("code", {}, entry.subject),
+        entry.detail && entry.outcome !== "Running" ? h("span", { class: "cal-log-tool-detail" }, entry.detail) : null)
+    }),
+    ...(take.run._tag === "Failed" ? [h("div", { class: "cal-problem cal-problem-error", role: "alert" }, take.run.reason)] : []),
+    ...(take.log.length === 0 ? [h("p", { class: "cal-note" }, "This take has no conversation since Vite started. Send a prompt to go on.")] : []),
+  )
+  if (pinned) log.scrollTop = log.scrollHeight
+}
+
+function renderComposer() {
+  const agent = state.takes?.agent
+  const ready = agent?._tag === "Ready"
+  const part = currentPart()
+  const take = currentTake()
+  const text = promptBox().value.trim()
+  const start = /** @type {HTMLButtonElement} */ ($(".cal-start"))
+  const follow = /** @type {HTMLButtonElement} */ ($(".cal-follow"))
+  promptBox().disabled = !ready
+  start.disabled = !ready || !part || !text || state.sending
+  start.textContent = state.parallel === 1 ? "New take" : `${state.parallel} new takes`
+  follow.hidden = take === null
+  follow.disabled = !ready || !text || state.sending || take?.run._tag === "Running"
+  follow.textContent = take ? `Send to take ${take.take}` : ""
+  const note = $(".cal-composer-note")
+  note.className = state.takeError ? "cal-composer-note cal-agent-failed" : "cal-composer-note"
+  note.textContent = state.takeError
+    ?? (ready && part ? `${part.name} on ${state.device.name}. Ctrl+Enter starts a take${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.` : "")
+}
+
 // --------------------------------------------------------------------- inputs
 
 /** @param {Project} project */
@@ -613,6 +991,11 @@ function connect() {
       for (const iframe of stage.querySelectorAll("iframe[src]")) /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
     }
   })
+  events.addEventListener("takes", message => {
+    /** @type {TakesSnapshot} */
+    const snapshot = JSON.parse(/** @type {MessageEvent<string>} */ (message).data)
+    takesArrived(snapshot)
+  })
   events.addEventListener("error", () => {
     state.connection = { _tag: "Unreachable", project: currentProject() }
     renderParts()
@@ -624,7 +1007,8 @@ window.addEventListener("message", event => {
   const sender = [...stage.querySelectorAll("iframe")].find(iframe => iframe.contentWindow === event.source)
   const figure = sender?.closest("figure")
   if (figure instanceof HTMLElement) figure.dataset.frameState = event.data.state
-  state.reports.set(event.data.partState, { part: event.data.part, partState: event.data.partState, state: event.data.state, problems: event.data.problems })
+  const take = event.data.take ?? null
+  state.reports.set(reportKey(take, event.data.partState), { part: event.data.part, partState: event.data.partState, take, state: event.data.state, problems: event.data.problems })
   renderProblems()
 })
 
@@ -633,4 +1017,5 @@ renderParts()
 renderBar()
 renderCalibration()
 renderStage()
+renderTakes()
 connect()

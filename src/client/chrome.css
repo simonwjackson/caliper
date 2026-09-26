@@ -26,6 +26,7 @@
   --cal-stage: #0e0f11;
   --cal-side-min: 15rem;
   --cal-side-max: 20rem;
+  --cal-takes-width: 24rem;
 }
 
 * {
@@ -73,21 +74,105 @@ pre {
   container-type: size;
 }
 
+/*
+ * Wide: parts | stage | takes, three columns.
+ * Medium: the takes panel moves under the stage, where width is plentiful.
+ * Narrow: list, stage and takes stack, and the page scrolls between them.
+ * The widths are guesses, not measured on a real desk.
+ */
 .cal {
   display: grid;
-  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
+  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr) var(--cal-takes-width);
+  grid-template-areas: "side main takes";
   height: 100%;
 }
 
-/* A narrow window stacks the list above the stage. Everything stays reachable. */
-@container (width < 44rem) {
+.cal-side {
+  grid-area: side;
+}
+
+.cal-main {
+  grid-area: main;
+}
+
+.cal-takes {
+  grid-area: takes;
+}
+
+/* A closed Takes panel gives its room back to the stage. The bar's Takes button reopens it. */
+.cal.cal-takes-closed {
+  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
+  grid-template-areas: "side main";
+}
+
+.cal-takes[hidden] {
+  display: none;
+}
+
+.cal-takes-toggle[aria-expanded="true"] {
+  background: var(--cal-accent);
+  color: var(--cal-stage);
+}
+
+@container (width < 72rem) {
+  .cal.cal-takes-closed {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "side main";
+  }
   .cal {
+    grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(12rem, 40%);
+    grid-template-areas: "side main" "side takes";
+  }
+  .cal-takes {
+    border-left: 0;
+    border-top: 1px solid var(--cal-line);
+    display: grid;
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "head log" "list log" "list composer";
+  }
+  .cal-takes-head {
+    grid-area: head;
+  }
+  .cal-take-list {
+    grid-area: list;
+    border-right: 1px solid var(--cal-line);
+  }
+  .cal-log {
+    grid-area: log;
+  }
+  .cal-composer {
+    grid-area: composer;
+  }
+}
+
+/* A narrow window stacks everything. The root scrolls, so nothing is cut off. */
+@container (width < 44rem) {
+  .cal-root {
+    overflow: auto;
+  }
+  .cal,
+  .cal.cal-takes-closed {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(8rem, 35%) minmax(0, 1fr);
+    grid-template-rows: minmax(8rem, 35cqh) minmax(24rem, 1fr) auto;
+    grid-template-areas: "side" "main" "takes";
+    height: auto;
+    min-height: 100%;
   }
   .cal-side {
     border-right: 0;
     border-bottom: 1px solid var(--cal-line);
+  }
+  .cal-takes {
+    display: flex;
+    max-height: none;
+  }
+  .cal-take-list {
+    border-right: 0;
+  }
+  .cal-log {
+    max-height: 50cqh;
   }
 }
 
@@ -552,4 +637,246 @@ pre {
   margin: var(--cal-space-1) 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* ----------------------------------------------------------------- takes */
+
+.cal-takes {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--cal-panel);
+  border-left: 1px solid var(--cal-line);
+}
+
+.cal-takes-head {
+  padding: var(--cal-space-3) var(--cal-space-3) var(--cal-space-2);
+}
+
+.cal-takes-head h2 {
+  margin: 0;
+  font-size: var(--cal-text-md);
+}
+
+.cal-agent {
+  margin: var(--cal-space-1) 0 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-agent-off {
+  color: var(--cal-muted);
+}
+
+.cal-agent-failed {
+  color: var(--cal-bad);
+}
+
+.cal-take-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--cal-space-2) var(--cal-space-2);
+  max-height: 30%;
+  overflow: auto;
+  flex-shrink: 0;
+}
+
+.cal-take {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-1);
+  border-radius: var(--cal-radius);
+  padding: var(--cal-space-1);
+}
+
+.cal-take[aria-current="true"] {
+  background: var(--cal-raised);
+  box-shadow: inset 2px 0 0 var(--cal-accent);
+}
+
+.cal-take-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  min-height: 2rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 0 var(--cal-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-take-status {
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-take[data-run="Running"] .cal-take-status {
+  color: var(--cal-accent);
+}
+
+.cal-take[data-run="Failed"] .cal-take-status {
+  color: var(--cal-bad);
+}
+
+.cal-take-actions {
+  display: flex;
+  gap: var(--cal-space-1);
+}
+
+.cal-take-actions button {
+  min-height: 2rem;
+  font-size: var(--cal-text-sm);
+}
+
+.cal-accept:not(:disabled) {
+  border-color: var(--cal-good);
+  color: var(--cal-good);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.cal-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border-top: 1px solid var(--cal-line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cal-space-2);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-log:empty {
+  border-top: 0;
+}
+
+.cal-log-title {
+  margin: 0;
+  color: var(--cal-muted);
+}
+
+.cal-log-user {
+  align-self: end;
+  max-width: 90%;
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border-radius: var(--cal-radius);
+  background: var(--cal-raised);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cal-log-assistant {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cal-log-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--cal-space-2);
+  color: var(--cal-muted);
+  padding-left: var(--cal-space-2);
+  border-left: 2px solid var(--cal-line);
+}
+
+.cal-log-tool code {
+  overflow-wrap: anywhere;
+}
+
+.cal-log-tool-name {
+  font-weight: 600;
+}
+
+.cal-log-tool[data-outcome="Running"] {
+  border-left-color: var(--cal-accent);
+}
+
+.cal-log-tool[data-outcome="Failed"] {
+  border-left-color: var(--cal-bad);
+  color: var(--cal-bad);
+}
+
+.cal-log-tool-detail {
+  flex-basis: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-composer {
+  display: grid;
+  gap: var(--cal-space-2);
+  padding: var(--cal-space-2) var(--cal-space-3) var(--cal-space-3);
+  border-top: 1px solid var(--cal-line);
+}
+
+.cal-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  padding: var(--cal-space-2);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.cal-composer-note {
+  margin: 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-composer-note:empty {
+  display: none;
+}
+
+.cal-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cal-space-2);
+}
+
+.cal-parallel {
+  display: flex;
+  align-items: center;
+  gap: var(--cal-space-1);
+  margin-right: auto;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-parallel select {
+  font: inherit;
+  color: inherit;
+  background: var(--cal-raised);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  min-height: 2rem;
+}
+
+.cal-follow[hidden] {
+  display: none;
+}
+
+.cal-cell[data-run="Running"] .cal-screen {
+  box-shadow: 0 0 0 6px #1e2a4a, 0 0 0 7px var(--cal-accent);
+}
+
+.cal-cell-label[aria-current="true"] {
+  color: var(--cal-accent);
 }
