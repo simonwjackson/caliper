@@ -60,6 +60,16 @@ export default function Part() {
 }
 ```
 
+A part file can also show other states of the same component. Each exported
+component whose name starts with an upper-case letter is a state. The part list
+shows the states under the selected part, and makes each label from the export
+name:
+
+```tsx
+export const Busy = () => <Button label="Go" busy />       // "Busy"
+export function NoResults() { return <Button label="Retry" /> } // "No results"
+```
+
 ## Options
 
 Set an option only when the Setup panel reports a failure.
