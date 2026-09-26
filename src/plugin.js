@@ -179,35 +179,38 @@ function createSession(server, root, options) {
     if (path === "/") return send(response, 200, "text/html", chromePage({ clientUrl: `${base}${CALIPER_PATH}/client` }))
     if (path === "/project.json") return send(response, 200, "application/json", (await load()).json)
     if (path === "/events") return openStream(response, (await load()).json)
-    if (path === "/frame") return sendFrame(url.searchParams.get("part") ?? "", response)
+    if (path === "/frame") return sendFrame(url.searchParams.get("part") ?? "", url.searchParams.get("state") ?? "default", response)
     if (path.startsWith("/client/")) return sendClientFile(path.slice("/client/".length), response)
     return send(response, 404, "text/plain", `Caliper has no page at ${url.pathname}.`)
   }
 
   /**
    * @param {string} partFile
+   * @param {string} stateName the export to render
    * @param {ServerResponse} response
    */
-  const sendFrame = async (partFile, response) => {
+  const sendFrame = async (partFile, stateName, response) => {
     const { project } = await load()
-    const known = project.parts.some(part => part.file === partFile)
+    const part = project.parts.find(candidate => candidate.file === partFile)
+    const problem = part === undefined
+      ? `"${partFile}" is not a part of ${project.name}. Pick a part from the list.`
+      : part.states.some(state => state.export === stateName)
+        ? null
+        : `${partFile} has no state "${stateName}". Its states are: ${part.states.map(state => state.export).join(", ")}.`
     const wrapper = project.wrapper._tag === "Failed" ? [] : project.wrapper.value.elements
     const css = project.css._tag === "Failed" ? [] : project.css.value.stylesheets.map(sheet => fileUrl(sheet.file))
     /** @type {FrameConfig} */
     const config = {
       part: fileUrl(partFile),
       partFile,
+      state: stateName,
       css,
       wrapper,
       react: `${base}/@id/__x00__${RESOLVED_REACT_MODULE.slice(1)}`,
     }
-    const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}`
-    const html = framePage({
-      clientUrl: `${base}${CALIPER_PATH}/client`,
-      config,
-      problem: known ? null : `"${partFile}" is not a part of ${project.name}. Pick a part from the list.`,
-    })
-    send(response, known ? 200 : 404, "text/html", await server.transformIndexHtml(frameUrl, html))
+    const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}&state=${encodeURIComponent(stateName)}`
+    const html = framePage({ clientUrl: `${base}${CALIPER_PATH}/client`, config, problem })
+    send(response, problem === null ? 200 : 404, "text/html", await server.transformIndexHtml(frameUrl, html))
   }
 
   /**

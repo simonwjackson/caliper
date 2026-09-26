@@ -2,10 +2,17 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { basename, join, relative } from "node:path"
+import ts from "typescript"
 
-/** @typedef {import("../types").Part} Part */
+/**
+ * @typedef {import("../types").Part} Part
+ * @typedef {import("../types").PartState} PartState
+ */
 
 export const PART_SUFFIX = ".part.tsx"
+
+/** The state every part has: its default export. */
+export const DEFAULT_STATE = /** @type {const} */ ({ export: "default", label: "Default" })
 
 /**
  * Find every `*.part.tsx` file under `root`.
@@ -73,7 +80,56 @@ function readPart(root, file) {
   const source = readFileSync(join(root, file), "utf8")
   const name = stringExport(source, "name") ?? nameFromFile(file)
   const note = stringExport(source, "note")
-  return note === undefined ? { file, name } : { file, name, note }
+  const states = [DEFAULT_STATE, ...namedStates(file, source)]
+  return note === undefined ? { file, name, states } : { file, name, note, states }
+}
+
+/**
+ * The part's named states, in source order, without running the file.
+ *
+ * A named state is an exported component: an exported function, or an
+ * exported `const` set to an arrow or function expression, whose name starts
+ * with an upper-case letter. Lower-case exports such as `name`, `note` and
+ * helpers are not states. The default export is always the first state, so
+ * it is not listed here; the frame reports it when it is missing.
+ *
+ * @param {string} file
+ * @param {string} source
+ * @returns {PartState[]}
+ */
+function namedStates(file, source) {
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  /** @type {PartState[]} */
+  const states = []
+  /** @param {ts.Node} node @param {string} exportName */
+  const add = (node, exportName) => {
+    if (!/^[A-Z]/.test(exportName)) return
+    const line = tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1
+    states.push({ export: exportName, label: labelFor(exportName), line })
+  }
+  for (const statement of tree.statements) {
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : []
+    if (!modifiers.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue
+    if (modifiers.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue
+    if (ts.isFunctionDeclaration(statement) && statement.name) add(statement, statement.name.text)
+    if (!ts.isVariableStatement(statement)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      const value = declaration.initializer
+      if (!ts.isIdentifier(declaration.name) || !value) continue
+      if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) add(statement, declaration.name.text)
+    }
+  }
+  return states
+}
+
+/**
+ * "CatalogError" becomes "Catalog error".
+ *
+ * @param {string} exportName
+ */
+function labelFor(exportName) {
+  const words = exportName.replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(" ")
+  return words.map((word, index) => (index === 0 || /^[A-Z0-9]+$/.test(word) ? word : word.toLowerCase())).join(" ")
 }
 
 /**

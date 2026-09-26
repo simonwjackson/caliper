@@ -81,6 +81,22 @@ export type Part = {
   readonly name: string
   /** The part's `export const note`, when it has one. */
   readonly note?: string
+  /** The part's states. The default export is always first. */
+  readonly states: readonly PartState[]
+}
+
+/**
+ * One state of a part: one exported component that renders with no props.
+ * The default export is the state `default`. Each exported component whose
+ * name starts with an upper-case letter is another state.
+ */
+export type PartState = {
+  /** The export's name, for example "default" or "CatalogError". */
+  readonly export: string
+  /** The name the chrome shows, for example "Catalog error". */
+  readonly label: string
+  /** Where a named state is exported. The default state has no line. */
+  readonly line?: number
 }
 
 export type Project = {
@@ -97,6 +113,8 @@ export type FrameConfig = {
   /** URL of the part module. */
   readonly part: string
   readonly partFile: string
+  /** The export to render, for example "default" or "CatalogError". */
+  readonly state: string
   /** URLs of the global stylesheets. */
   readonly css: readonly string[]
   readonly wrapper: readonly WrapperElement[]

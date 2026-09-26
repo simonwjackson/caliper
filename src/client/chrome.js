@@ -15,7 +15,7 @@ import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry } from "./device-frame.
  * @typedef {import("./device-frame.js").Device} Device
  * @typedef {{ kind: "error" | "warning", title: string, detail: string }} Problem
  * @typedef {{ _tag: "Connecting" } | { _tag: "Ready", project: Project } | { _tag: "Unreachable", project: Project | null }} Connection
- * @typedef {{ part: string, state: "Loading" | "Rendered" | "Empty" | "Failed", problems: Problem[] }} FrameReport
+ * @typedef {{ part: string, partState: string, state: "Loading" | "Rendered" | "Empty" | "Failed", problems: Problem[] }} FrameReport
  */
 
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
@@ -27,6 +27,7 @@ const STAGE_PADDING = 24
 /** Matches the outer ring of `.cal-screen` in chrome.css. */
 const RING = 7
 const DEFAULT_DEVICE = /** @type {Device} */ (DEVICES[0])
+const DEFAULT_STATE = "default"
 
 const saved = new URLSearchParams(location.hash.slice(1))
 const storedPxPerMm = Number(localStorage.getItem(STORAGE_PX_PER_MM))
@@ -36,6 +37,8 @@ const state = {
   connection: { _tag: "Connecting" },
   /** @type {string | null} */
   part: saved.get("part"),
+  /** The export of the part to render. */
+  partState: saved.get("state") ?? DEFAULT_STATE,
   device: deviceById(saved.get("device") ?? localStorage.getItem(STORAGE_DEVICE)),
   pxPerMm: storedPxPerMm > 0 ? storedPxPerMm : DEFAULT_PX_PER_MM,
   calibrated: storedPxPerMm > 0,
@@ -141,6 +144,7 @@ function deviceById(id) {
 function saveLocation() {
   const params = new URLSearchParams()
   if (state.part) params.set("part", state.part)
+  if (state.partState !== DEFAULT_STATE) params.set("state", state.partState)
   params.set("device", state.device.id)
   history.replaceState(null, "", `#${params}`)
 }
@@ -149,6 +153,19 @@ function saveLocation() {
 function selectPart(file) {
   if (state.part === file) return
   state.part = file
+  state.partState = DEFAULT_STATE
+  state.frame = null
+  saveLocation()
+  renderParts()
+  renderBar()
+  renderFrame()
+  renderProblems()
+}
+
+/** @param {string} exportName */
+function selectState(exportName) {
+  if (state.partState === exportName) return
+  state.partState = exportName
   state.frame = null
   saveLocation()
   renderParts()
@@ -241,13 +258,37 @@ function renderParts() {
         title: part.file,
         onClick: () => selectPart(part.file),
       }, h("span", { class: "cal-part-label" }, part.name)))
+      if (part.file === state.part && part.states.length > 1) list.append(stateList(part))
     }
   }
 }
 
+/**
+ * The selected part's states, under its row in the list.
+ *
+ * @param {Part} part
+ */
+function stateList(part) {
+  return h("div", { class: "cal-states", role: "group", "aria-label": `${part.name} states` },
+    ...part.states.map(partState => h("button", {
+      type: "button",
+      class: "cal-state",
+      "aria-current": partState.export === state.partState ? "true" : false,
+      title: partState.line ? `${part.file}:${partState.line}` : `${part.file}: default export`,
+      "data-state": partState.export,
+      onClick: () => selectState(partState.export),
+    }, partState.label)))
+}
+
+function currentStateLabel() {
+  const part = currentPart()
+  return part?.states.find(partState => partState.export === state.partState)?.label ?? state.partState
+}
+
 function renderBar() {
   const part = currentPart()
-  $(".cal-part-name").textContent = part?.name ?? "No part selected"
+  const shownState = part && part.states.length > 1 ? ` · ${currentStateLabel()}` : ""
+  $(".cal-part-name").textContent = part ? `${part.name}${shownState}` : "No part selected"
   $(".cal-part-file").textContent = part ? (part.note ?? part.file) : ""
   const devices = $(".cal-devices")
   devices.replaceChildren(...DEVICES.map(device =>
@@ -272,7 +313,7 @@ function renderFrame() {
     frame.removeAttribute("src")
     return
   }
-  const src = `frame?part=${encodeURIComponent(part.file)}`
+  const src = `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(state.partState)}`
   if (frame.getAttribute("src") === src) return
   figure.dataset.frameState = "Loading"
   frame.setAttribute("src", src)
@@ -316,7 +357,7 @@ function renderProblems() {
   const section = $(".cal-problems")
   section.replaceChildren()
   const report = state.frame
-  if (!report || report.part !== state.part) return
+  if (!report || report.part !== state.part || report.partState !== state.partState) return
   for (const problem of report.problems) {
     section.append(h("div", { class: `cal-problem cal-problem-${problem.kind}`, role: problem.kind === "error" ? "alert" : "status" },
       h("strong", {}, problem.title),
@@ -405,6 +446,12 @@ function connect() {
     state.connection = { _tag: "Ready", project }
     if (state.part === null || !project.parts.some(part => part.file === state.part)) {
       state.part = project.parts[0]?.file ?? null
+      state.partState = DEFAULT_STATE
+      saveLocation()
+    }
+    // A save can remove the shown state. Fall back to the default export.
+    if (!currentPart()?.states.some(partState => partState.export === state.partState)) {
+      state.partState = DEFAULT_STATE
       saveLocation()
     }
     renderParts()
@@ -423,7 +470,7 @@ function connect() {
 
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.data?.source !== "caliper-frame") return
-  state.frame = { part: event.data.part, state: event.data.state, problems: event.data.problems }
+  state.frame = { part: event.data.part, partState: event.data.partState, state: event.data.state, problems: event.data.problems }
   $(".cal-device").dataset.frameState = event.data.state
   renderProblems()
 })

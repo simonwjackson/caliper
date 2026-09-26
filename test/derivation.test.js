@@ -54,12 +54,41 @@ const picoShape = {
   "src/pages/Home.page.part.tsx": "export default function Part() { return <main /> }\n",
 }
 
+const DEFAULT_STATE = { export: "default", label: "Default" }
+
 describe("parts", () => {
   test("lists every *.part.tsx file with its name and note, sorted by path", async () => {
     await withProject({ files: picoShape }, async ({ project }) => {
       expect((await project()).parts).toEqual([
-        { file: "src/Button.atom.part.tsx", name: "Primary button", note: "The main call to action" },
-        { file: "src/pages/Home.page.part.tsx", name: "Home" },
+        { file: "src/Button.atom.part.tsx", name: "Primary button", note: "The main call to action", states: [DEFAULT_STATE] },
+        { file: "src/pages/Home.page.part.tsx", name: "Home", states: [DEFAULT_STATE] },
+      ])
+    })
+  })
+
+  test("lists each exported component as a state, after the default export, in source order", async () => {
+    const files = {
+      ...picoShape,
+      "src/pages/Home.page.part.tsx": [
+        'import { fixture } from "./fixture"',
+        'export const name = "Home"',
+        "export function LoadingSlow() { return <main aria-busy /> }",
+        "export default function Part() { return <main /> }",
+        "export const Empty = () => <main />",
+        "export const CatalogError = function () { return <main /> }",
+        "export function helper() { return 1 }",
+        "export const LIMIT = 3",
+        "export type Props = { a: number }",
+        "",
+      ].join("\n"),
+    }
+    await withProject({ files }, async ({ project }) => {
+      const home = (await project()).parts.find(part => part.file === "src/pages/Home.page.part.tsx")
+      expect(home?.states).toEqual([
+        DEFAULT_STATE,
+        { export: "LoadingSlow", label: "Loading slow", line: 3 },
+        { export: "Empty", label: "Empty", line: 5 },
+        { export: "CatalogError", label: "Catalog error", line: 6 },
       ])
     })
   })

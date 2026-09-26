@@ -115,6 +115,26 @@ try {
     }, undefined, { timeout: 10_000 })
     assert.equal(await page.locator(".cal-problem-error").count(), 0, "the error clears after the fix")
     console.log("a save reloaded the frame")
+
+    // A save that adds a named state shows it under the part, and picking it renders it.
+    writeFileSync(probePath, [
+      'export const name = "Caliper probe"',
+      "export default function Probe() { return <p>probe fixed</p> }",
+      "export const NoResults = () => <p>probe empty state</p>",
+      "",
+    ].join("\n"))
+    const stateButton = page.locator('.cal-state[data-state="NoResults"]')
+    await stateButton.waitFor({ timeout: 5000 })
+    assert.equal(await stateButton.innerText(), "No results", "the state label comes from the export name")
+    await stateButton.click()
+    await page.waitForFunction(() => {
+      const doc = /** @type {HTMLIFrameElement} */ (document.querySelector(".cal-frame")).contentDocument
+      return doc?.documentElement?.dataset.caliperState === "Rendered" && doc.body?.innerText.includes("probe empty state")
+    }, undefined, { timeout: 10_000 })
+    assert.match(await page.locator(".cal-part-name").innerText(), /Caliper probe · No results/)
+    assert.match(page.url(), /state=NoResults/, "the URL keeps the state")
+    await page.screenshot({ path: join(out, "state.png") })
+    console.log("a named state rendered")
   } finally {
     rmSync(probePath, { force: true })
   }

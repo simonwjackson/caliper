@@ -8,7 +8,7 @@ const files = {
   "src/index.ts": 'import "./app.css"\nexport { mount } from "./mount"\n',
   "src/mount.tsx": 'import { createRoot } from "react-dom/client"\nexport const mount = (el: HTMLElement) => createRoot(el).render(<div className="shell" />)\n',
   "src/app.css": ".shell { width: 100% }\n",
-  "src/Chip.part.tsx": "export default function Part() { return <span>chip</span> }\n",
+  "src/Chip.part.tsx": "export default function Part() { return <span>chip</span> }\nexport const Empty = () => <span />\n",
 }
 
 /** @param {string} html */
@@ -63,11 +63,30 @@ describe("the frame page", () => {
       expect(frameConfig(html)).toEqual({
         part: "/src/Chip.part.tsx",
         partFile: "src/Chip.part.tsx",
+        state: "default",
         css: ["/src/app.css"],
         wrapper: [{ tag: "div", className: "shell" }],
         react: "/@id/__x00__caliper:react",
         problem: null,
       })
+    })
+  })
+
+  test("renders the state the URL names", async () => {
+    await withProject({ files }, async ({ get }) => {
+      const response = await get("/__caliper/frame?part=src/Chip.part.tsx&state=Empty")
+      expect(response.status).toBe(200)
+      expect(frameConfig(await response.text())).toMatchObject({ state: "Empty", problem: null })
+    })
+  })
+
+  test("names the problem when the state is unknown", async () => {
+    await withProject({ files }, async ({ get }) => {
+      const response = await get("/__caliper/frame?part=src/Chip.part.tsx&state=Busy")
+      expect(response.status).toBe(404)
+      expect(frameConfig(await response.text()).problem).toBe(
+        'src/Chip.part.tsx has no state "Busy". Its states are: default, Empty.',
+      )
     })
   })
 

@@ -36,7 +36,7 @@ function setState(next) {
   state = next
   document.documentElement.dataset.caliperState = next
   if (window.parent !== window) {
-    window.parent.postMessage({ source: "caliper-frame", part: config.partFile, state: next, problems }, location.origin)
+    window.parent.postMessage({ source: "caliper-frame", part: config.partFile, partState: config.state, state: next, problems }, location.origin)
   }
 }
 
@@ -145,15 +145,18 @@ async function run() {
     return fail("Caliper could not load the project's React (react and react-dom/client)", error)
   }
 
-  /** @type {{ default?: unknown }} */
+  /** @type {Record<string, unknown>} */
   let part
   try {
     part = await load(config.part)
   } catch (error) {
     return fail(`${config.partFile} did not load`, error)
   }
-  if (typeof part.default !== "function") {
-    return fail(`${config.partFile} has no default export function`, undefined, "A part file must `export default function` a component that renders with no props.")
+  const component = part[config.state]
+  if (typeof component !== "function") {
+    return config.state === "default"
+      ? fail(`${config.partFile} has no default export function`, undefined, "A part file must `export default function` a component that renders with no props.")
+      : fail(`${config.partFile} has no exported component ${config.state}`, undefined, "A named state must be an exported component that renders with no props.")
   }
 
   let container = host
@@ -170,7 +173,7 @@ async function run() {
       fail(`${config.partFile} threw while rendering`, error, info?.componentStack?.trim())
     },
   })
-  root.render(react.createElement(part.default))
+  root.render(react.createElement(component))
 
   await afterPaint()
   if (state !== "Loading") return
