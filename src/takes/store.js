@@ -1,4 +1,5 @@
 // @ts-check
+import { execFileSync } from "node:child_process"
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path"
 
@@ -215,7 +216,63 @@ export function createTakeStore(root) {
     rmSync(recordFile(take), { force: true })
   }
 
-  return { root, list, create, record, read, write, files, accept, discard }
+  /**
+   * The project files a take can read under `under`, with the files the take
+   * adds. Git decides what counts in a checkout; otherwise Caliper walks the
+   * folder and skips dot-folders.
+   *
+   * @param {string} take
+   * @param {string} under a root-relative folder, or "" for the whole project
+   * @returns {string[]} sorted
+   */
+  const listFiles = (take, under) => {
+    const prefix = under === "" || under === "." ? "" : `${fence(under)}/`
+    const all = new Set([...(gitFiles(root) ?? walkFiles(root)), ...files(take)])
+    return [...all]
+      .filter(file => file.startsWith(prefix) && fenceProjectPath(root, file)._tag === "Inside")
+      .sort()
+  }
+
+  return { root, list, create, record, read, write, files, listFiles, accept, discard }
 }
 
 /** @typedef {ReturnType<typeof createTakeStore>} TakeStore */
+
+/**
+ * @param {string} root
+ * @returns {string[] | null} null outside a Git checkout
+ */
+function gitFiles(root) {
+  try {
+    const output = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    return output.split("\0").filter(file => file !== "" && existsSync(join(root, file)))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every file under `root`, skipping dot-folders and node_modules without
+ * entering them.
+ *
+ * @param {string} root
+ */
+function walkFiles(root) {
+  /** @type {string[]} */
+  const found = []
+  /** @param {string} folder root-relative, "" for the root */
+  const walk = folder => {
+    for (const entry of readdirSync(join(root, folder), { withFileTypes: true })) {
+      const file = folder === "" ? entry.name : `${folder}/${entry.name}`
+      if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") walk(file)
+      else if (entry.isFile()) found.push(file)
+    }
+  }
+  walk("")
+  return found
+}

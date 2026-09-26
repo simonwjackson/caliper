@@ -1,10 +1,14 @@
 // @ts-check
 import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
+import { homedir } from "node:os"
 import { isAbsolute, join, relative, resolve as resolvePath } from "node:path"
 import { fileURLToPath } from "node:url"
+import { loadEnv } from "vite"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
+import { createTakesApi } from "./agent/api.js"
+import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
 import { flattenStylesheets, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
@@ -34,6 +38,7 @@ const RESOLVED_REACT_MODULE = "\0caliper:react"
 /** The project's React packages the frame loads, pre-bundled so the first load does not reload. */
 const REACT_PACKAGES = ["react", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"]
 const REFRESH_DELAY_MS = 80
+const TAKES_DELAY_MS = 100
 
 /**
  * Caliper: see the project's own UI parts at true physical device size.
@@ -48,6 +53,8 @@ export function caliper(options = {}) {
   /** @type {string} */
   let root = process.cwd()
   const overlay = takeOverlay(() => root)
+  /** @type {Record<string, string | undefined>} */
+  let env = { ...process.env }
 
   return {
     name: "caliper",
@@ -68,6 +75,8 @@ export function caliper(options = {}) {
 
     configResolved(config) {
       root = config.root
+      // The shell's environment wins over .env files, as in Vite itself.
+      env = { ...loadEnv(config.mode, typeof config.envDir === "string" ? config.envDir : root, ""), ...process.env }
     },
 
     resolveId: {
@@ -108,11 +117,11 @@ export function caliper(options = {}) {
     },
 
     configureServer(server) {
-      const session = createSession(server, root, options)
+      const session = createSession(server, root, options, env)
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? "/", "http://caliper.local")
         if (url.pathname !== CALIPER_PATH && !url.pathname.startsWith(`${CALIPER_PATH}/`)) return next()
-        session.handle(url, response).catch(next)
+        session.handle(url, request, response).catch(next)
       })
 
       const printUrls = server.printUrls.bind(server)
@@ -133,8 +142,9 @@ export function caliper(options = {}) {
  * @param {ViteDevServer} server
  * @param {string} root
  * @param {CaliperOptions} options
+ * @param {Record<string, string | undefined>} env the shell's environment and the project's .env files
  */
-function createSession(server, root, options) {
+function createSession(server, root, options, env) {
   /** @type {Promise<{ project: Project, json: string, files: Set<string> }> | null} */
   let current = null
   /** @type {Set<ServerResponse>} */
@@ -188,6 +198,27 @@ function createSession(server, root, options) {
   const base = server.config.base.replace(/\/$/, "")
   const store = createTakeStore(root)
 
+  const agent = resolveAgent({ option: options.agent, env, home: homedir() })
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let takesTimer
+  /** Tell every open chrome about the takes, at most once per TAKES_DELAY_MS while an agent streams. */
+  const takesChanged = () => {
+    takesTimer ??= setTimeout(() => {
+      takesTimer = undefined
+      const data = JSON.stringify(takes.snapshot())
+      for (const stream of streams) stream.write(`event: takes\ndata: ${data}\n\n`)
+    }, TAKES_DELAY_MS)
+  }
+  const takes = createTakesApi({
+    store,
+    status: agent.status,
+    connection: agent.connection,
+    project: async () => (await load()).project,
+    serverUrl: () => server.resolvedUrls?.local[0] ?? null,
+    chromium: env.CHROMIUM,
+    onChange: takesChanged,
+  })
+
   /** @param {string} file root-relative */
   const fileUrl = file => {
     const absolute = resolvePath(root, file)
@@ -197,10 +228,12 @@ function createSession(server, root, options) {
 
   /**
    * @param {URL} url
+   * @param {import("node:http").IncomingMessage} request
    * @param {ServerResponse} response
    */
-  const handle = async (url, response) => {
+  const handle = async (url, request, response) => {
     const path = url.pathname.slice(CALIPER_PATH.length)
+    if (await takes.handle(path, request, response)) return undefined
     if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
     if (path === "/") return send(response, 200, "text/html", chromePage({ clientUrl: `${base}${CALIPER_PATH}/client` }))
     if (path === "/project.json") return send(response, 200, "application/json", (await load()).json)
@@ -264,6 +297,7 @@ function createSession(server, root, options) {
       connection: "keep-alive",
     })
     response.write(`event: project\ndata: ${json}\n\n`)
+    response.write(`event: takes\ndata: ${JSON.stringify(takes.snapshot())}\n\n`)
     streams.add(response)
     response.on("close", () => streams.delete(response))
   }

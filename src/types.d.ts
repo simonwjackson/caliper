@@ -129,7 +129,91 @@ export type FrameConfig = {
 /** Resolves an import the way the project's Vite does. Returns an absolute file path, or null. */
 export type Resolve = (specifier: string, importer: string) => Promise<string | null>
 
+/** How hard the model thinks before it answers. `xhigh` and `max` work only on some models. */
+export type ReasoningLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+
+/**
+ * The agent that makes takes. It runs inside the Vite dev server and talks to
+ * an endpoint that speaks the OpenAI API. The API key never goes in
+ * vite.config: Caliper reads it from the environment variable `apiKeyEnv`,
+ * which may also be set in the project's `.env.local`.
+ */
+export type AgentOptions = {
+  /** The model id the endpoint knows, for example "claude-opus-5-5". */
+  readonly model: string
+  /**
+   * The endpoint's OpenAI base URL, with its `/v1`, for example
+   * "https://proxy.example/v1". When it is not set, Caliper uses the base URL
+   * in `~/.pi/agent/cliproxyapi.json`, if that file exists.
+   */
+  readonly baseUrl?: string
+  /** Default: "medium". Caliper passes it to the model on every request. */
+  readonly reasoning?: ReasoningLevel
+  /** Which OpenAI API to call: `/chat/completions` or `/responses`. Default: "chat-completions". */
+  readonly api?: "chat-completions" | "responses"
+  /** The environment variable that holds the API key. Default: "CALIPER_AGENT_API_KEY". */
+  readonly apiKeyEnv?: string
+}
+
+/** What the chrome knows about the agent. It never holds the key. */
+export type AgentStatus =
+  | { readonly _tag: "Off"; readonly hint: string }
+  | {
+      readonly _tag: "Ready"
+      readonly model: string
+      readonly baseUrl: string
+      readonly reasoning: ReasoningLevel
+      readonly api: "chat-completions" | "responses"
+      /** Where the base URL came from, for example "vite.config". */
+      readonly baseUrlFrom: string
+      /** Where the key came from, for example "CALIPER_AGENT_API_KEY". */
+      readonly keyFrom: string
+    }
+  | { readonly _tag: "Failed"; readonly reason: string; readonly hint: string }
+
+/** Whether a take's agent is working. */
+export type TakeRun =
+  | { readonly _tag: "Idle" }
+  | { readonly _tag: "Running" }
+  | { readonly _tag: "Failed"; readonly reason: string }
+
+/** One line of a take's conversation, as the chrome shows it. */
+export type TakeLogEntry =
+  | { readonly _tag: "User"; readonly text: string }
+  | { readonly _tag: "Assistant"; readonly text: string }
+  | {
+      readonly _tag: "Tool"
+      readonly id: string
+      readonly name: string
+      /** What the tool works on, for example a file path or "default@rg353m". */
+      readonly subject: string
+      readonly outcome: "Running" | "Done" | "Failed"
+      /** The result in a few words, or the error. */
+      readonly detail: string
+    }
+
+/** One take, as the chrome shows it. */
+export type TakeView = {
+  readonly take: string
+  readonly part: string
+  readonly state: string
+  readonly device: string
+  readonly created: number
+  readonly run: TakeRun
+  /** The files the take changes, root-relative. */
+  readonly files: readonly string[]
+  readonly log: readonly TakeLogEntry[]
+}
+
+/** What the event stream sends as `takes`. */
+export type TakesSnapshot = {
+  readonly agent: AgentStatus
+  readonly takes: readonly TakeView[]
+}
+
 export type CaliperOptions = {
+  /** The agent that makes takes. Leave it out to use Caliper as a viewer only. */
+  readonly agent?: AgentOptions
   /** The module the app starts from, relative to the Vite root. Overrides the derived entry. */
   readonly entry?: string
   /**
