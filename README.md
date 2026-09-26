@@ -106,6 +106,26 @@ throws while rendering or renders nothing shows the reason in the frame and,
 at a readable size, under the stage. When the window is too small for true
 size, the frame is drawn smaller and the caption says by how much.
 
+## Let an agent see a part
+
+`caliper-render` renders a part of the running project in a headless Chromium,
+at a device's CSS viewport, and prints what it found as JSON:
+
+```sh
+CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
+  --part src/ui/atoms/Button.atom.part.tsx --state '*' --device '*'
+```
+
+Each result gives the frame's verdict (`Rendered`, `Empty` or `Failed`), the
+problems the frame shows, browser errors it did not catch, the elements that
+reach past the device's screen, and the path of a PNG at one image pixel per
+CSS pixel. `--list` prints every part and its states. `--help` explains every
+field. The exit status is 0 when every frame rendered.
+
+`skills/caliper-render/SKILL.md` teaches an agent the loop: render, read the
+verdict, look at the PNGs, change the code, render again. Copy or link it into
+the agent's skills folder.
+
 ## Limits
 
 - Caliper shows size and viewport truthfully. It cannot show pixel density,

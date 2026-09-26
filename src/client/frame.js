@@ -35,6 +35,8 @@ const problems = []
 function setState(next) {
   state = next
   document.documentElement.dataset.caliperState = next
+  // For a frame opened on its own, for example by caliper-render.
+  Object.assign(window, { caliperReport: { part: config.partFile, partState: config.state, state: next, problems } })
   if (window.parent !== window) {
     window.parent.postMessage({ source: "caliper-frame", part: config.partFile, partState: config.state, state: next, problems }, location.origin)
   }

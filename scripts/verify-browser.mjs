@@ -13,7 +13,9 @@
  * into the project's first part folder and removes it again.
  */
 import assert from "node:assert/strict"
-import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { chromium } from "playwright-core"
@@ -188,6 +190,42 @@ try {
     }, undefined, { timeout: 10_000 })
     assert.equal(await page.locator(".cal-cell").count(), 0, "the grid frames are gone in the single view")
     console.log("all states rendered side by side")
+
+    // caliper-render reports each state's verdict, problems and spill, and writes a PNG.
+    writeFileSync(probePath, [
+      'export const name = "Caliper probe"',
+      "export default function Probe() { return <p>probe fixed</p> }",
+      'export function Broken(): never { throw new Error("broken state exploded") }',
+      "export const Nothing = () => null",
+      "export const Wide = () => <div style={{ width: 2000, height: 10 }} />",
+      "",
+    ].join("\n"))
+    await page.locator('.cal-state[data-state="Wide"]').waitFor({ timeout: 5000 })
+    const cli = spawnSync(process.execPath, [
+      join(dirname(fileURLToPath(import.meta.url)), "../bin/caliper-render.mjs"),
+      "--url", args.url, "--part", probe, "--state", "*", "--out", join(out, "render"),
+    ], { encoding: "utf8", env: process.env })
+    assert.equal(cli.status, 1, `caliper-render exits 1 when a frame fails: ${cli.stderr}`)
+    /** @type {{ results: Array<{ state: string, frame: string, png: string, problems: Array<{ title: string, detail: string }>, console: string[], spill: { right: number, elements: Array<{ element: string }> } | null, viewport: { width: number } }> }} */
+    const rendered = JSON.parse(cli.stdout)
+    assert.deepEqual(rendered.results.map(result => [result.state, result.frame]), [
+      ["default", "Rendered"],
+      ["Broken", "Failed"],
+      ["Nothing", "Empty"],
+      ["Wide", "Rendered"],
+    ])
+    const [fine, broken, , wide] = rendered.results
+    assert.equal(fine?.viewport.width, 640, "the default device is the RG353M")
+    assert.equal(fine?.spill, null)
+    assert.deepEqual(fine?.console, [], "a clean frame has no browser errors")
+    assert.match(broken?.problems[0]?.detail ?? "", /broken state exploded/)
+    assert.equal(wide?.spill?.right, 2000, "the wide state reaches 2000 px")
+    assert.match(wide?.spill?.elements[0]?.element ?? "", /^div/, "the spill names the wide element")
+    for (const result of rendered.results) {
+      const size = pngSize(result.png)
+      assert.deepEqual(size, { width: 640, height: 480 }, `${result.state} PNG is the device's CSS viewport`)
+    }
+    console.log("caliper-render reported every state")
   } finally {
     rmSync(probePath, { force: true })
   }
@@ -254,4 +292,14 @@ async function readFrame(page, partFile) {
       innerWidth: window.innerWidth,
     }
   }, { stylesheets, wrapper })
+}
+
+/**
+ * Width and height from a PNG file's IHDR chunk.
+ *
+ * @param {string} file
+ */
+function pngSize(file) {
+  const bytes = readFileSync(file)
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
 }

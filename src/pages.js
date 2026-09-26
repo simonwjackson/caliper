@@ -48,6 +48,7 @@ export function framePage({ clientUrl, config, problem }) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(config.partFile)}</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="${clientUrl}/frame.css" />
     <script type="application/json" id="caliper-frame-config">${json}</script>
     <script>
