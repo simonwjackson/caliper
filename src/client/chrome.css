@@ -69,15 +69,17 @@ pre {
   font-size: var(--cal-text-sm);
 }
 
+/* The app never scrolls as a whole. Each region scrolls inside its own box. */
 .cal-root {
   height: 100%;
   container-type: size;
+  overflow: hidden;
 }
 
 /*
  * Wide: parts | stage | takes, three columns.
  * Medium: the takes panel moves under the stage, where width is plentiful.
- * Narrow: list, stage and takes stack, and the page scrolls between them.
+ * Narrow: list, stage and takes stack, each with a share of the height.
  * The widths are guesses, not measured on a real desk.
  */
 .cal {
@@ -124,7 +126,9 @@ pre {
     grid-template-rows: minmax(0, 1fr) minmax(12rem, 40%);
     grid-template-areas: "side main" "side takes";
   }
-  .cal-takes {
+  /* Two columns under the stage: the takes on the left, the conversation and
+   * the prompt on the right. `.cal >` outranks the panel's own rules below. */
+  .cal > .cal-takes {
     border-left: 0;
     border-top: 1px solid var(--cal-line);
     display: grid;
@@ -132,47 +136,46 @@ pre {
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas: "head log" "list log" "list composer";
   }
-  .cal-takes-head {
+  .cal > .cal-takes > .cal-takes-head {
     grid-area: head;
   }
-  .cal-take-list {
+  .cal > .cal-takes > .cal-take-list {
     grid-area: list;
+    max-height: none;
+    min-height: 0;
     border-right: 1px solid var(--cal-line);
   }
-  .cal-log {
+  .cal > .cal-takes > .cal-log {
     grid-area: log;
+    border-top: 0;
   }
-  .cal-composer {
+  .cal > .cal-takes > .cal-composer {
     grid-area: composer;
   }
 }
 
-/* A narrow window stacks everything. The root scrolls, so nothing is cut off. */
+/* A narrow window stacks list, stage and takes. Each keeps a share of the
+ * height and scrolls inside itself. */
 @container (width < 44rem) {
-  .cal-root {
-    overflow: auto;
+  .cal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(5rem, 22%) minmax(0, 1fr) minmax(0, 42%);
+    grid-template-areas: "side" "main" "takes";
   }
-  .cal,
   .cal.cal-takes-closed {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(8rem, 35cqh) minmax(24rem, 1fr) auto;
-    grid-template-areas: "side" "main" "takes";
-    height: auto;
-    min-height: 100%;
+    grid-template-rows: minmax(5rem, 28%) minmax(0, 1fr);
+    grid-template-areas: "side" "main";
   }
   .cal-side {
     border-right: 0;
     border-bottom: 1px solid var(--cal-line);
   }
-  .cal-takes {
+  .cal > .cal-takes {
     display: flex;
-    max-height: none;
   }
-  .cal-take-list {
+  .cal > .cal-takes > .cal-take-list {
     border-right: 0;
-  }
-  .cal-log {
-    max-height: 50cqh;
   }
 }
 
@@ -641,17 +644,22 @@ pre {
 
 /* ----------------------------------------------------------------- takes */
 
+/* The conversation takes the spare height and scrolls. When the panel is too
+ * short even for its header and prompt, the panel itself scrolls, so the
+ * prompt and its buttons stay reachable. */
 .cal-takes {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: auto;
   background: var(--cal-panel);
   border-left: 1px solid var(--cal-line);
 }
 
 .cal-takes-head {
   padding: var(--cal-space-3) var(--cal-space-3) var(--cal-space-2);
+  flex-shrink: 0;
 }
 
 .cal-takes-head h2 {
@@ -745,8 +753,8 @@ button:disabled {
 }
 
 .cal-log {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: 3rem;
   overflow: auto;
   padding: var(--cal-space-2) var(--cal-space-3);
   border-top: 1px solid var(--cal-line);
@@ -816,6 +824,7 @@ button:disabled {
 
 .cal-composer {
   display: grid;
+  flex-shrink: 0;
   gap: var(--cal-space-2);
   padding: var(--cal-space-2) var(--cal-space-3) var(--cal-space-3);
   border-top: 1px solid var(--cal-line);
@@ -825,6 +834,8 @@ button:disabled {
   width: 100%;
   resize: vertical;
   min-height: 4.5rem;
+  /* A dragged-up prompt must not push the buttons out of the panel. */
+  max-height: 40cqh;
   padding: var(--cal-space-2);
   border: 1px solid var(--cal-line);
   border-radius: var(--cal-radius);

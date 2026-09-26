@@ -86,11 +86,20 @@ try {
   for (const [name, width, height] of [["wide", 1800, 1000], ["medium", 1200, 900], ["narrow", 600, 900]]) {
     await page.setViewportSize({ width: /** @type {number} */ (width), height: /** @type {number} */ (height) })
     await page.waitForTimeout(400)
-    await page.screenshot({ path: join(out, `${name}.png`), fullPage: name === "narrow" })
-    // Every control stays reachable at every size.
+    await page.screenshot({ path: join(out, `${name}.png`) })
+    // The app never scrolls as a whole; each region scrolls inside itself.
+    const overflow = await page.evaluate(() => {
+      const doc = /** @type {Element} */ (document.scrollingElement)
+      const root = /** @type {Element} */ (document.querySelector(".cal-root"))
+      return Math.max(doc.scrollHeight - doc.clientHeight, doc.scrollWidth - doc.clientWidth, root.scrollHeight - root.clientHeight, root.scrollWidth - root.clientWidth)
+    })
+    assert.equal(overflow, 0, `the page does not scroll at ${name}`)
+    // Every control stays reachable at every size, inside its own scrolling region.
     for (const selector of [".cal-prompt", ".cal-start", ".cal-take-actions button"]) {
-      const box = await page.locator(selector).first().boundingBox()
-      assert(box !== null && box.width > 0 && box.height > 0, `${selector} is visible at ${name}`)
+      const control = page.locator(selector).first()
+      await control.scrollIntoViewIfNeeded()
+      const box = await control.boundingBox()
+      assert(box !== null && box.height > 0 && box.y >= 0 && box.y + box.height <= /** @type {number} */ (height), `${selector} is reachable at ${name}`)
     }
   }
 
