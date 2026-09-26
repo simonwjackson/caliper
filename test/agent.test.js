@@ -167,6 +167,25 @@ describe("a take's agent", () => {
     })
   })
 
+  test("a take started from a plan follows its direction and knows what its siblings try", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      /** @type {any} */
+      let seen = null
+      faux.setResponses([context => {
+        seen = context
+        return fauxAssistantMessage([fauxText("ok")])
+      }])
+      const direction = { title: "Shared fixtures", brief: "Use the project's fixture catalog." }
+      const take = agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases", "New layout"] })
+      const view = await settled(take)
+      const text = seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text
+      expect(text).toContain("This take's direction: Shared fixtures. Use the project's fixture catalog.")
+      expect(text).toContain('Other takes of this prompt try: "Hard cases", "New layout"')
+      expect(view.direction).toEqual(direction)
+    })
+  })
+
   test("cannot write outside the project; the tool fails and the agent goes on", async () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)

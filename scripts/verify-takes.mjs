@@ -46,6 +46,8 @@ try {
   await page.goto(base)
   await page.evaluate(() => localStorage.setItem("caliper:takes-open", "true"))
   await page.goto(`${base}#part=${encodeURIComponent(args.part)}&device=rg353m`)
+  // A hash-only change does not reload the page, and the chrome reads the hash when it loads.
+  await page.reload()
   await page.locator(".cal-agent").filter({ hasNotText: "Connecting" }).waitFor()
   assert.equal(await page.locator('.cal-part[aria-current="true"]').getAttribute("title"), args.part, `${args.part} is a part of the project`)
   const agent = await page.locator(".cal-agent").textContent()
@@ -57,8 +59,25 @@ try {
   await page.locator(".cal-prompt").fill(/** @type {string} */ (args.prompt))
   const started = Date.now()
   await page.locator(".cal-start").click()
-  await page.waitForFunction(n => document.querySelectorAll(".cal-take").length >= n, before.size + count)
-  console.log(`${count} takes started; the stage shows ${await page.locator(".cal-cell").count()} frames`)
+  let startedTakes = count
+  if (count > 1) {
+    // Several takes: the planner proposes one direction per take, and you review them.
+    await page.locator(".cal-direction").first().waitFor({ timeout: 120_000 })
+    const planned = await page.evaluate(() => ({
+      note: document.querySelector(".cal-plan-note")?.textContent ?? null,
+      directions: [...document.querySelectorAll(".cal-direction")].map(row => ({
+        title: /** @type {HTMLInputElement} */ (row.querySelector(".cal-direction-title")).value,
+        brief: /** @type {HTMLTextAreaElement} */ (row.querySelector(".cal-direction-brief")).value,
+      })),
+    }))
+    console.log(`planned in ${Math.round((Date.now() - started) / 1000)} s: ${JSON.stringify(planned, null, 1)}`)
+    await page.screenshot({ path: join(out, "plan.png") })
+    startedTakes = planned.directions.length
+    assert(startedTakes >= 1 && startedTakes <= count, "the planner proposes 1 to count directions")
+    await page.locator(".cal-start").click()
+  }
+  await page.waitForFunction(n => document.querySelectorAll(".cal-take").length >= n, before.size + startedTakes)
+  console.log(`${startedTakes} takes started; the stage shows ${await page.locator(".cal-cell").count()} frames`)
   await page.screenshot({ path: join(out, "working.png") })
 
   await page.waitForFunction(() => document.querySelectorAll('.cal-take[data-run="Running"]').length === 0, undefined, { timeout: 600_000 })

@@ -11,7 +11,9 @@ import { takeTools } from "./tools.js"
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").TakeRun} TakeRun
  * @typedef {import("../types").TakeLogEntry} TakeLogEntry
- * @typedef {{ part: string, state: string, device: string }} TakeAsk
+ * @typedef {{ part: string, state: string, device: string, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
+ *   `direction` is the planner's way for this take to answer the prompt;
+ *   `others` are the titles of the directions its sibling takes got.
  * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[] }} Live
  *   `agent` is null until the first prompt creates it, and stays null when that fails.
  */
@@ -94,6 +96,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
       state: record.state,
       device: record.device,
       created: record.created,
+      ...(record.direction === undefined ? {} : { direction: record.direction }),
       run: state?.run ?? { _tag: "Idle" },
       files: store.files(take),
       log: state?.log ?? [],
@@ -264,8 +267,22 @@ Do not ask the user questions. When a request is unclear, make a sensible choice
 }
 
 /**
- * The first message: the request, the part's source, and how the part
- * renders now.
+ * The part of the first message that gives the take its direction, so
+ * takes started from one prompt try different things.
+ *
+ * @param {TakeAsk} ask
+ */
+function directionText(ask) {
+  if (ask.direction === undefined) return ""
+  const others = ask.others?.length
+    ? `\nOther takes of this prompt try: ${ask.others.map(title => `"${title}"`).join(", ")}. Stay clearly apart from them; the user compares the takes side by side.`
+    : ""
+  return `\n\nThis take's direction: ${ask.direction.title}. ${ask.direction.brief}${others}\nFollow this direction, even where another answer would be more obvious. If it cannot work, say why in your summary.`
+}
+
+/**
+ * The first message: the request, the take's direction, the part's source,
+ * and how the part renders now.
  *
  * @param {TakeAsk} ask
  * @param {string} prompt
@@ -279,7 +296,7 @@ async function firstMessage(ask, prompt, render, store, take) {
   /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
   const content = [{
     type: "text",
-    text: `${prompt}\n\nThe part is ${ask.part}. The user is looking at its state "${ask.state}" on the device ${ask.device}.\n\n<file path="${ask.part}">\n${source}\n</file>`,
+    text: `${prompt}${directionText(ask)}\n\nThe part is ${ask.part}. The user is looking at its state "${ask.state}" on the device ${ask.device}.\n\n<file path="${ask.part}">\n${source}\n</file>`,
   }]
   try {
     const [result] = await render({ state: ask.state, devices: [ask.device] })

@@ -192,6 +192,21 @@ export type TakeLogEntry =
       readonly detail: string
     }
 
+/** One way to answer a prompt. The planner proposes them; each take follows one. */
+export type Direction = {
+  /** A few words, for example "Use the shared fixtures". */
+  readonly title: string
+  /** One to three sentences: what the take changes and how it differs from the others. */
+  readonly brief: string
+}
+
+/** What the planner proposes for one prompt. */
+export type TakePlan = {
+  readonly directions: readonly Direction[]
+  /** Why the plan has fewer directions than asked for, when it does. */
+  readonly note?: string
+}
+
 /** One take, as the chrome shows it. */
 export type TakeView = {
   readonly take: string
@@ -199,6 +214,8 @@ export type TakeView = {
   readonly state: string
   readonly device: string
   readonly created: number
+  /** The planner's direction for this take, when one prompt started several. */
+  readonly direction?: Direction
   readonly run: TakeRun
   /** The files the take changes, root-relative. */
   readonly files: readonly string[]

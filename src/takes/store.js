@@ -17,8 +17,11 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
  *
  * @typedef {{ _tag: "Inside", file: string } | { _tag: "Outside", reason: string }} Fenced
  *   `file` is root-relative, with forward slashes.
- * @typedef {{ part: string, state: string, device: string, created: number }} TakeRecord
- *   The part the take changes, the state and device it was asked about, and when.
+ * @typedef {{ title: string, brief: string }} Direction
+ *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
+ * @typedef {{ part: string, state: string, device: string, created: number, direction?: Direction, others?: string[] }} TakeRecord
+ *   The part the take changes, the state and device it was asked about, when, the direction it was
+ *   given, and the titles of the directions its sibling takes got from the same prompt.
  */
 
 export const CALIPER_DIR = ".caliper"

@@ -21,6 +21,13 @@ import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from ".
  *   `Takes` shows one state of the original next to each take of the part.
  * @typedef {import("../types").TakesSnapshot} TakesSnapshot
  * @typedef {import("../types").TakeView} TakeView
+ * @typedef {import("../types").Direction} Direction
+ * @typedef {{ part: string, state: string, device: string, prompt: string }} TakeAsk
+ * @typedef {{ _tag: "None" }
+ *   | { _tag: "Planning", ask: TakeAsk, count: number, id: number }
+ *   | { _tag: "Review", ask: TakeAsk, directions: Array<{ title: string, brief: string }>, note?: string }} Plan
+ *   The composer's plan. Several takes start from a plan: the planner proposes
+ *   one direction per take, and you edit them before the takes start.
  * @typedef {{ key: string, label: string, title: string, src: string, select: () => void, status?: string }} Cell
  *   One labelled frame in the grid.
  */
@@ -74,6 +81,8 @@ const state = {
   sending: false,
   /** The last takes API error, shown in the panel. @type {string | null} */
   takeError: null,
+  /** @type {Plan} */
+  plan: { _tag: "None" },
   /** Whether the Takes panel is open. null: not chosen yet, so it follows the agent. @type {boolean | null} */
   takesOpen: localStorage.getItem(STORAGE_TAKES_OPEN) === null ? null : localStorage.getItem(STORAGE_TAKES_OPEN) === "true",
 }
@@ -185,6 +194,7 @@ app.append(
           void startTakes()
         },
       },
+        h("div", { class: "cal-plan", "aria-live": "polite" }),
         h("textarea", {
           class: "cal-prompt",
           rows: "3",
@@ -211,6 +221,7 @@ app.append(
               },
             }, ...Array.from({ length: MAX_PARALLEL }, (_, index) => h("option", { value: String(index + 1) }, String(index + 1))))),
           h("button", { type: "button", class: "cal-follow", onClick: () => void followTake() }),
+          h("button", { type: "button", class: "cal-plan-back", onClick: () => closePlan() }, "Back"),
           h("button", { type: "submit", class: "cal-primary cal-start" }, "New take"))))))
 
 const frame = /** @type {HTMLIFrameElement} */ ($(".cal-frame"))
@@ -508,7 +519,7 @@ function renderFrame() {
       },
       ...partTakes().map(take => ({
         key: `take-${take.take}`,
-        label: `Take ${take.take}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
+        label: `Take ${take.take}${take.direction ? ` · ${take.direction.title}` : ""}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
         title: take.files.length ? `Changes ${take.files.join(", ")}` : "No changes yet",
         src: frameSrc(part, shown.export, take.take),
         status: take.run._tag,
@@ -803,18 +814,59 @@ function promptBox() {
 
 /** Start as many takes as the composer asks for, all with the same prompt. */
 async function startTakes() {
+  if (state.sending) return
+  if (state.plan._tag === "Review") return startPlan(state.plan)
+  if (state.plan._tag === "Planning") return
   const part = currentPart()
   const prompt = promptBox().value.trim()
-  if (!part || !prompt || state.sending) return
+  if (!part || !prompt) return
   const shown = effectiveShown()
   const ask = { part: part.file, state: shown._tag === "All" ? DEFAULT_STATE : shown.export, device: state.device.id, prompt }
-  const results = await Promise.all(Array.from({ length: state.parallel }, () => postTakes("/takes", ask)))
+  if (state.parallel === 1) return launch(ask, [undefined])
+  // Several takes: ask the planner for one different direction per take first.
+  const id = Date.now()
+  state.plan = { _tag: "Planning", ask, count: state.parallel, id }
+  renderComposer()
+  const plan = await postTakes("/takes/plan", { ...ask, count: state.parallel })
+  // Cancelled, or replaced by a newer plan, while the planner worked.
+  if (state.plan._tag !== "Planning" || state.plan.id !== id) return
+  state.plan = plan === null
+    ? { _tag: "None" }
+    : { _tag: "Review", ask, directions: plan.directions.map((/** @type {Direction} */ direction) => ({ ...direction })), ...(plan.note ? { note: plan.note } : {}) }
+  renderComposer()
+}
+
+/** @param {Extract<Plan, { _tag: "Review" }>} plan */
+async function startPlan(plan) {
+  const directions = plan.directions.filter(direction => direction.title.trim() !== "" && direction.brief.trim() !== "")
+  if (directions.length === 0) return
+  await launch(plan.ask, directions)
+}
+
+/**
+ * Start one take for each direction, or one take with none.
+ *
+ * @param {TakeAsk} ask
+ * @param {Array<Direction | undefined>} directions
+ */
+async function launch(ask, directions) {
+  const titles = directions.flatMap(direction => (direction ? [direction.title.trim()] : []))
+  const results = await Promise.all(directions.map(direction => postTakes("/takes", direction === undefined
+    ? ask
+    : { ...ask, direction, others: titles.filter(title => title !== direction.title.trim()) })))
   const started = results.filter(Boolean).map(result => /** @type {string} */ (result.take))
   if (started.length === 0) return
   promptBox().value = ""
+  state.plan = { _tag: "None" }
   state.take = started[0] ?? null
   state.shown = { _tag: "Takes", export: ask.state }
   showChanged()
+}
+
+/** Leave the plan. The prompt stays, so you can change it and plan again. */
+function closePlan() {
+  state.plan = { _tag: "None" }
+  renderComposer()
 }
 
 /** Send the prompt to the selected take's agent. */
@@ -900,8 +952,14 @@ function renderTakeList() {
     const running = take.run._tag === "Running"
     const status = running ? "Working" : take.run._tag === "Failed" ? "Failed" : take.files.length ? `${take.files.length} ${take.files.length === 1 ? "file" : "files"}` : "No changes"
     return h("div", { class: "cal-take", role: "listitem", "data-run": take.run._tag, "aria-current": take.take === state.take ? "true" : false },
-      h("button", { type: "button", class: "cal-take-name", title: take.files.join("\n") || "No changes yet", onClick: () => selectTake(take.take) },
-        h("strong", {}, `Take ${take.take}`), " ", h("span", { class: "cal-take-status" }, status)),
+      h("button", {
+        type: "button",
+        class: "cal-take-name",
+        title: [take.direction?.brief, take.files.join("\n") || "No changes yet"].filter(Boolean).join("\n\n"),
+        onClick: () => selectTake(take.take),
+      },
+        h("strong", {}, `Take ${take.take}`), " ", h("span", { class: "cal-take-status" }, status),
+        ...(take.direction ? [h("span", { class: "cal-take-direction" }, take.direction.title)] : [])),
       h("div", { class: "cal-take-actions" },
         running
           ? h("button", { type: "button", onClick: () => void postTakes(`/takes/${take.take}/stop`) }, "Stop")
@@ -922,6 +980,7 @@ function renderLog() {
   const entries = take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "")
   log.replaceChildren(
     h("p", { class: "cal-log-title" }, `Take ${take.take} · asked on ${take.device}, state ${take.state}`),
+    ...(take.direction ? [h("div", { class: "cal-log-direction" }, h("strong", {}, take.direction.title), " ", take.direction.brief)] : []),
     ...entries.map(entry => {
       if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)
       if (entry._tag === "Assistant") return h("div", { class: "cal-log-assistant" }, entry.text)
@@ -943,16 +1002,90 @@ function renderComposer() {
   const text = promptBox().value.trim()
   const start = /** @type {HTMLButtonElement} */ ($(".cal-start"))
   const follow = /** @type {HTMLButtonElement} */ ($(".cal-follow"))
-  promptBox().disabled = !ready
-  start.disabled = !ready || !part || !text || state.sending
-  start.textContent = state.parallel === 1 ? "New take" : `${state.parallel} new takes`
-  follow.hidden = take === null
+  const back = /** @type {HTMLButtonElement} */ ($(".cal-plan-back"))
+  const plan = state.plan
+  const planning = plan._tag !== "None"
+  const reviewed = plan._tag === "Review" ? plan.directions.filter(direction => direction.title.trim() && direction.brief.trim()).length : 0
+  promptBox().disabled = !ready || planning
+  $(".cal-parallel").hidden = planning
+  back.hidden = !planning
+  back.textContent = plan._tag === "Planning" ? "Cancel" : "Back"
+  start.disabled = plan._tag === "Planning" || state.sending || (plan._tag === "Review" ? reviewed === 0 : !ready || !part || !text)
+  start.textContent = plan._tag === "Planning" ? "Planning…"
+    : plan._tag === "Review" ? `Start ${reviewed} ${reviewed === 1 ? "take" : "takes"}`
+    : state.parallel === 1 ? "New take" : `Plan ${state.parallel} takes`
+  follow.hidden = take === null || planning
   follow.disabled = !ready || !text || state.sending || take?.run._tag === "Running"
   follow.textContent = take ? `Send to take ${take.take}` : ""
   const note = $(".cal-composer-note")
   note.className = state.takeError ? "cal-composer-note cal-agent-failed" : "cal-composer-note"
   note.textContent = state.takeError
-    ?? (ready && part ? `${part.name} on ${state.device.name}. Ctrl+Enter starts a take${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.` : "")
+    ?? (plan._tag === "Planning" ? `Asking ${state.takes?.agent._tag === "Ready" ? state.takes.agent.model : "the model"} for ${plan.count} different directions…`
+      : plan._tag === "Review" ? "Edit or remove directions. Each take follows one, and knows what the others try."
+      : ready && part ? `${part.name} on ${state.device.name}. ${state.parallel === 1 ? "Ctrl+Enter starts a take" : "Ctrl+Enter plans the takes"}${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.`
+      : "")
+  renderPlan()
+}
+
+/**
+ * The plan's directions, as editable rows. Rebuilt only when the plan
+ * changes shape, so typing in a row keeps its focus.
+ */
+function renderPlan() {
+  const box = $(".cal-plan")
+  const plan = state.plan
+  const shape = plan._tag === "Review" ? `Review:${plan.directions.length}:${plan.note ?? ""}` : plan._tag
+  if (box.dataset.shape === shape) return
+  box.dataset.shape = shape
+  if (plan._tag !== "Review") {
+    box.replaceChildren()
+    return
+  }
+  box.replaceChildren(
+    h("p", { class: "cal-plan-prompt" }, plan.ask.prompt),
+    ...(plan.note ? [h("p", { class: "cal-plan-note" }, plan.note)] : []),
+    ...plan.directions.map((direction, index) => h("div", { class: "cal-direction" },
+      h("input", {
+        class: "cal-direction-title",
+        value: direction.title,
+        "aria-label": `Direction ${index + 1} title`,
+        onInput: event => {
+          direction.title = /** @type {HTMLInputElement} */ (event.target).value
+          renderComposer()
+        },
+      }),
+      h("button", {
+        type: "button",
+        class: "cal-direction-remove",
+        title: "Remove this direction",
+        "aria-label": `Remove direction ${index + 1}`,
+        onClick: () => {
+          plan.directions.splice(index, 1)
+          if (plan.directions.length === 0) state.plan = { _tag: "None" }
+          renderComposer()
+        },
+      }, "×"),
+      textareaWith(direction.brief, `Direction ${index + 1} brief`, value => {
+        direction.brief = value
+        renderComposer()
+      }))),
+  )
+}
+
+/**
+ * @param {string} value
+ * @param {string} label
+ * @param {(value: string) => void} onChange
+ */
+function textareaWith(value, label, onChange) {
+  const area = h("textarea", {
+    class: "cal-direction-brief",
+    rows: "2",
+    "aria-label": label,
+    onInput: event => onChange(/** @type {HTMLTextAreaElement} */ (event.target).value),
+  })
+  area.value = value
+  return area
 }
 
 // --------------------------------------------------------------------- inputs

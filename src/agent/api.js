@@ -1,5 +1,5 @@
 // @ts-check
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DEVICES } from "../client/device-frame.js"
@@ -7,6 +7,7 @@ import { planRenders } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
 import { isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
+import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
 
 /**
@@ -21,6 +22,8 @@ import { createTakeAgents } from "./take-agents.js"
 
 const MAX_BODY = 64 * 1024
 const MAX_PROMPT = 8_000
+/** The most takes one prompt starts. The chrome offers the same. */
+const MAX_TAKES = 4
 
 /**
  * The takes API on the dev server, under `/__caliper/takes`. The chrome
@@ -39,22 +42,57 @@ const MAX_PROMPT = 8_000
  */
 export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange }) {
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
+  const engine = () => {
+    if (connection === null) throw new Error(status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.")
+    return connectEngine(connection)
+  }
+
+  /**
+   * Render a part, as a take changes it or as the real files are.
+   *
+   * @param {string} part
+   * @param {{ state: string, devices: string[], take?: string }} request
+   */
+  const renderPart = async (part, { state, devices, take }) => {
+    const plan = planRenders(await project(), { part, state, devices, ...(take === undefined ? {} : { take }) })
+    if (plan._tag === "Invalid") throw new Error(plan.reason)
+    if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+    const url = serverUrl()
+    if (url === null) throw new Error("The dev server is not listening yet.")
+    return renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium })
+  }
+
   const agents = createTakeAgents({
     store,
-    engine: () => {
-      if (connection === null) throw new Error(status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.")
-      return connectEngine(connection)
-    },
-    renderFor: (take, ask) => async ({ state, devices }) => {
-      const plan = planRenders(await project(), { part: ask.part, state, devices, take })
-      if (plan._tag === "Invalid") throw new Error(plan.reason)
-      if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
-      const url = serverUrl()
-      if (url === null) throw new Error("The dev server has no local URL yet.")
-      return renderJobs({ url, jobs: plan.jobs, out: join(renderDir, `take-${take}`), executablePath: chromium })
-    },
+    engine,
+    renderFor: (take, ask) => request => renderPart(ask.part, { ...request, take }),
     onChange,
   })
+
+  /**
+   * Ask the planner for different directions for one prompt. It sees the
+   * part's source and how the real part renders now.
+   *
+   * @param {unknown} body
+   * @returns {Promise<import("../types").TakePlan>}
+   */
+  const plan = async body => {
+    const ask = await validAsk(body)
+    const count = /** @type {Record<string, unknown>} */ (body ?? {}).count
+    if (typeof count !== "number" || !Number.isInteger(count) || count < 2 || count > MAX_TAKES) {
+      throw new Error(`Ask the planner for 2 to ${MAX_TAKES} directions.`)
+    }
+    const connected = engine()
+    /** @type {import("./planner.js").Content[]} */
+    const context = [{ type: "text", text: `<file path="${ask.part}">\n${readFileSync(join(store.root, ask.part), "utf8")}\n</file>` }]
+    try {
+      const [result] = await renderPart(ask.part, { state: ask.state, devices: [ask.device] })
+      if (result !== undefined) context.push({ type: "image", data: readFileSync(result.png).toString("base64"), mimeType: "image/png" })
+    } catch (error) {
+      context.push({ type: "text", text: `Caliper could not render the part: ${error instanceof Error ? error.message : String(error)}` })
+    }
+    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context })
+  }
 
   /** @returns {TakesSnapshot} */
   const snapshot = () => ({ agent: status, takes: agents.views() })
@@ -80,7 +118,11 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       const body = await readJson(request)
       if (path === "/takes") {
         const ask = await validAsk(body)
-        json(response, 201, { take: agents.start(ask) })
+        json(response, 201, { take: agents.start({ ...ask, ...validDirection(body) }) })
+        return true
+      }
+      if (path === "/takes/plan") {
+        json(response, 200, await plan(body))
         return true
       }
       const [, , take = "", action = ""] = path.split("/")
@@ -141,6 +183,24 @@ function refuse(request) {
     if (host === undefined || new URL(origin).host !== host) return "Only Caliper's own page can change takes."
   }
   return null
+}
+
+/**
+ * The direction a new take follows, and the titles its siblings follow, when
+ * the chrome started it from a plan.
+ *
+ * @param {unknown} body
+ * @returns {{ direction?: import("../types").Direction, others?: string[] }}
+ */
+function validDirection(body) {
+  const { direction, others } = /** @type {Record<string, any>} */ (body ?? {})
+  if (direction === undefined) return {}
+  const title = typeof direction?.title === "string" ? direction.title.trim() : ""
+  const brief = typeof direction?.brief === "string" ? direction.brief.trim() : ""
+  if (title === "" || brief === "") throw new Error("A direction needs a title and a brief.")
+  if (title.length > 80 || brief.length > MAX_PROMPT) throw new Error("The direction is too long.")
+  const siblings = Array.isArray(others) ? others.filter(other => typeof other === "string" && other.trim() !== "").map(other => other.trim().slice(0, 80)).slice(0, MAX_TAKES) : []
+  return { direction: { title, brief }, others: siblings }
 }
 
 /** @param {unknown} body */

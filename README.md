@@ -127,6 +127,13 @@ take of the part, and each frame reloads when its take changes. Send a take
 another prompt, stop it, accept it (its files are copied over the real files)
 or discard it.
 
+When you ask for two or more takes, a planner first turns the prompt into one
+different direction per take, for example "realistic data", "edge cases" and
+"change the cart component". You can edit or remove directions before the
+takes start. Each take's agent follows one direction and knows the titles of
+the others. The planner returns fewer directions when the prompt has only one
+sensible answer, and says why. It costs one model call of about 10 s.
+
 `.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
 conversation lives only in the dev server: after a restart, the take's files
 remain, and its next prompt starts a new conversation.

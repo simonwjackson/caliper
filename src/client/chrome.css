@@ -880,8 +880,92 @@ button:disabled {
   min-height: 2rem;
 }
 
-.cal-follow[hidden] {
+.cal-follow[hidden],
+.cal-plan-back[hidden],
+.cal-parallel[hidden] {
   display: none;
+}
+
+/* The plan: one editable row per direction, above the prompt. It scrolls with
+ * the composer's panel, never the page. */
+.cal-plan:empty {
+  display: none;
+}
+
+.cal-plan {
+  display: grid;
+  gap: var(--cal-space-2);
+}
+
+.cal-plan-prompt {
+  margin: 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cal-plan-note {
+  margin: 0;
+  padding: var(--cal-space-2);
+  border-radius: var(--cal-radius);
+  background: #3a2d10;
+  color: #ffe7b8;
+  font-size: var(--cal-text-sm);
+}
+
+.cal-direction {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--cal-space-1);
+  padding: var(--cal-space-2);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+}
+
+.cal-direction-title,
+.cal-direction-brief {
+  width: 100%;
+  min-width: 0;
+  padding: var(--cal-space-1) var(--cal-space-2);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.cal-direction-title {
+  font-weight: 600;
+}
+
+.cal-direction-brief {
+  grid-column: 1 / -1;
+  resize: vertical;
+  font-size: var(--cal-text-sm);
+}
+
+.cal-direction-remove {
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+.cal-take-direction {
+  display: block;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-log-direction {
+  padding: var(--cal-space-2);
+  border-left: 2px solid var(--cal-accent);
+  color: var(--cal-muted);
+}
+
+.cal-log-direction strong {
+  color: var(--cal-ink);
 }
 
 .cal-cell[data-run="Running"] .cal-screen {

@@ -104,3 +104,25 @@ describe("the takes API", () => {
     })
   })
 })
+
+describe("the plan endpoint", () => {
+  test("names the problem when the agent is off, or the count is wrong", async () => {
+    await withProject({ files }, async ({ url }) => {
+      const off = await post(url, "/__caliper/takes/plan", { part: "src/Chip.part.tsx", prompt: "Red", count: 3 })
+      expect(off.status).toBe(400)
+      expect((await off.json()).error).toContain("The agent is off")
+      const one = await post(url, "/__caliper/takes/plan", { part: "src/Chip.part.tsx", prompt: "Red", count: 1 })
+      expect((await one.json()).error).toBe("Ask the planner for 2 to 4 directions.")
+    })
+  })
+
+  test("a take started with a direction shows it", async () => {
+    await withProject({ files }, async ({ url, get }) => {
+      const direction = { title: "Warmer", brief: "Use the warm palette." }
+      const { take } = await (await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", direction, others: ["Cooler"] })).json()
+      expect((await settledTake(get, take)).direction).toEqual(direction)
+      const bad = await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", direction: { title: "No brief" } })
+      expect((await bad.json()).error).toBe("A direction needs a title and a brief.")
+    })
+  })
+})
