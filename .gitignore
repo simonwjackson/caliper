@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local state
+.direnv/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Legacy runtime scratch left in old checkouts
+.lab/
+
+# Worktrees (both spellings are in use)
+.worktree/
+.worktrees/
+
+# Coding-agent session state. Durable records belong in docs/.
+.pi-web/
+.forgerie/

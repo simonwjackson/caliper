@@ -1,0 +1,455 @@
+/*
+ * Caliper's chrome. Layout follows the chrome's own box: a container query on
+ * the root decides between side-by-side and stacked, never the device.
+ */
+:root {
+  color-scheme: dark;
+  --cal-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cal-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --cal-text-sm: 0.8125rem;
+  --cal-text-md: 0.9375rem;
+  --cal-space-1: 0.25rem;
+  --cal-space-2: 0.5rem;
+  --cal-space-3: 0.75rem;
+  --cal-space-4: 1rem;
+  --cal-radius: 0.375rem;
+  --cal-bg: #16171a;
+  --cal-panel: #1d1f23;
+  --cal-raised: #272a30;
+  --cal-line: #33363d;
+  --cal-ink: #e6e7ea;
+  --cal-muted: #9a9ea8;
+  --cal-accent: #7aa2ff;
+  --cal-good: #7fd18b;
+  --cal-warn: #f0b85a;
+  --cal-bad: #ff7a7a;
+  --cal-stage: #0e0f11;
+  --cal-side-min: 15rem;
+  --cal-side-max: 20rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--cal-bg);
+  color: var(--cal-ink);
+  font: var(--cal-text-md) / 1.4 var(--cal-font);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-raised);
+  padding: var(--cal-space-1) var(--cal-space-3);
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--cal-accent);
+  outline-offset: 1px;
+}
+
+code,
+pre {
+  font-family: var(--cal-mono);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-root {
+  height: 100%;
+  container-type: size;
+}
+
+.cal {
+  display: grid;
+  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
+  height: 100%;
+}
+
+/* A narrow window stacks the list above the stage. Everything stays reachable. */
+@container (width < 44rem) {
+  .cal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(8rem, 35%) minmax(0, 1fr);
+  }
+  .cal-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--cal-line);
+  }
+}
+
+/* ------------------------------------------------------------------ side */
+
+.cal-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--cal-panel);
+  border-right: 1px solid var(--cal-line);
+}
+
+.cal-side-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cal-space-2);
+  padding: var(--cal-space-3) var(--cal-space-3) var(--cal-space-2);
+}
+
+.cal-project {
+  margin: 0;
+  font-size: var(--cal-text-md);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-count {
+  margin-left: auto;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  white-space: nowrap;
+}
+
+.cal-filter {
+  margin: 0 var(--cal-space-3) var(--cal-space-2);
+  padding: var(--cal-space-1) var(--cal-space-2);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+}
+
+.cal-parts {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--cal-space-2) var(--cal-space-3);
+}
+
+.cal-group {
+  margin: var(--cal-space-3) var(--cal-space-1) var(--cal-space-1);
+  color: var(--cal-muted);
+  font: 500 var(--cal-text-sm) / 1.3 var(--cal-mono);
+  overflow-wrap: anywhere;
+}
+
+.cal-part {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: var(--cal-space-1) var(--cal-space-2);
+  min-height: 2rem;
+}
+
+.cal-part:hover {
+  background: var(--cal-raised);
+}
+
+.cal-part[aria-current="true"] {
+  background: var(--cal-accent);
+  color: var(--cal-stage);
+}
+
+.cal-note {
+  color: var(--cal-muted);
+  padding: 0 var(--cal-space-2);
+}
+
+.cal-setup {
+  border-top: 1px solid var(--cal-line);
+  max-height: 50%;
+  overflow: auto;
+  font-size: var(--cal-text-sm);
+}
+
+.cal-setup > summary {
+  padding: var(--cal-space-2) var(--cal-space-3);
+  cursor: pointer;
+  color: var(--cal-muted);
+}
+
+.cal-setup-failed > summary {
+  color: var(--cal-bad);
+}
+
+.cal-setup-body {
+  padding: 0 var(--cal-space-3) var(--cal-space-3);
+}
+
+.cal-derivation h3 {
+  margin: var(--cal-space-3) 0 var(--cal-space-1);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-derivation-derived h3::after {
+  content: " · found";
+  color: var(--cal-good);
+  font-weight: 400;
+}
+
+.cal-derivation-overridden h3::after {
+  content: " · set in vite.config";
+  color: var(--cal-accent);
+  font-weight: 400;
+}
+
+.cal-derivation-failed h3::after {
+  content: " · not found";
+  color: var(--cal-bad);
+  font-weight: 400;
+}
+
+.cal-derivation p {
+  margin: var(--cal-space-1) 0;
+}
+
+.cal-derivation ol,
+.cal-derivation ul {
+  margin: var(--cal-space-1) 0;
+  padding-left: 1.25rem;
+}
+
+.cal-derivation code {
+  overflow-wrap: anywhere;
+}
+
+.cal-site {
+  color: var(--cal-muted);
+}
+
+/* ------------------------------------------------------------------ main */
+
+.cal-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-2) var(--cal-space-3);
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border-bottom: 1px solid var(--cal-line);
+}
+
+/* The title is a readout: it yields width before the controls do. */
+.cal-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.cal-title > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-part-file {
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  border-radius: var(--cal-radius);
+  overflow: hidden;
+}
+
+.cal-devices button {
+  border-radius: 0;
+  border: 0;
+}
+
+.cal-devices button[aria-checked="true"] {
+  background: var(--cal-accent);
+  color: var(--cal-stage);
+}
+
+.cal-calibrate[aria-pressed="true"] {
+  background: var(--cal-accent);
+  color: var(--cal-stage);
+}
+
+.cal-attention {
+  border-color: var(--cal-warn);
+  color: var(--cal-warn);
+}
+
+.cal-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  background: var(--cal-stage);
+}
+
+.cal-device {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: var(--cal-space-2);
+}
+
+.cal-device[hidden],
+.cal-empty[hidden] {
+  display: none;
+}
+
+/* The screen box is exactly the device's drawn size; the ring sits outside it. */
+.cal-screen {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 0 6px #2a2c31, 0 0 0 7px #3a3d44;
+}
+
+.cal-frame {
+  display: block;
+  border: 0;
+  transform-origin: 0 0;
+  background: #fff;
+}
+
+.cal-device[data-frame-state="Failed"] .cal-screen {
+  box-shadow: 0 0 0 6px #5a1e22, 0 0 0 7px var(--cal-bad);
+}
+
+.cal-caption {
+  font-size: var(--cal-text-sm);
+  color: var(--cal-muted);
+  text-align: center;
+}
+
+.cal-fit-true {
+  color: var(--cal-good);
+}
+
+.cal-fit-warn {
+  color: var(--cal-warn);
+}
+
+.cal-empty {
+  color: var(--cal-muted);
+}
+
+/* ----------------------------------------------------------- calibration */
+
+.cal-calibration {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--cal-space-4);
+  padding: var(--cal-space-4);
+  background: rgb(14 15 17 / 0.92);
+  overflow: auto;
+}
+
+.cal-calibration[hidden] {
+  display: none;
+}
+
+.cal-card {
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--cal-accent);
+  border-radius: 3.18mm;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-calibration-controls {
+  display: grid;
+  gap: var(--cal-space-2);
+  max-width: 28rem;
+}
+
+.cal-calibration-controls p {
+  margin: 0;
+  color: var(--cal-muted);
+}
+
+.cal-scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-2);
+}
+
+.cal-scale-input {
+  flex: 1 1 10rem;
+}
+
+.cal-scale-value {
+  font-family: var(--cal-mono);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-calibration-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--cal-space-2);
+}
+
+.cal-primary {
+  background: var(--cal-accent);
+  color: var(--cal-stage);
+}
+
+/* -------------------------------------------------------------- problems */
+
+.cal-problems:empty {
+  display: none;
+}
+
+.cal-problems {
+  max-height: 40%;
+  overflow: auto;
+  border-top: 1px solid var(--cal-line);
+}
+
+.cal-problem {
+  padding: var(--cal-space-2) var(--cal-space-3);
+}
+
+.cal-problem-error {
+  background: #3a1518;
+  color: #ffd9d9;
+}
+
+.cal-problem-warning {
+  background: #3a2d10;
+  color: #ffe7b8;
+}
+
+.cal-problem pre {
+  margin: var(--cal-space-1) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

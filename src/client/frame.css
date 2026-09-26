@@ -1,0 +1,50 @@
+/*
+ * The host box of a device frame. The page fills the device's CSS viewport,
+ * as the app's host would give it the whole screen.
+ *
+ * Caliper's own panels use fixed values, not tokens: they must stay readable
+ * whatever CSS the project loads, and they share nothing with it.
+ */
+html,
+body,
+#caliper-host {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#caliper-problem,
+#caliper-warning {
+  position: fixed;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+  color: #fff;
+  overflow: auto;
+}
+
+#caliper-problem {
+  inset: 0;
+  padding: 16px;
+  background: rgb(80 10 10 / 0.94);
+}
+
+#caliper-problem strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+#caliper-problem pre {
+  margin: 0 0 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.45 ui-monospace, monospace;
+}
+
+#caliper-warning {
+  inset: 0 0 auto;
+  max-height: 40%;
+  padding: 6px 10px;
+  background: rgb(120 80 0 / 0.94);
+}
