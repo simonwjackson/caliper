@@ -90,3 +90,26 @@ export function frameGeometry(device, pxPerMm, room) {
     fit,
   }
 }
+
+/**
+ * Lay out several frames of one device side by side, for example every state
+ * of one part.
+ *
+ * Every frame has the same size, so a comparison between frames is fair. That
+ * size is the true size when one frame fits in `room`, with its caption. When
+ * one frame does not fit, all frames scale down together. Rows that do not fit
+ * the height scroll: a frame never shrinks only because there are many.
+ *
+ * @param {Device} device
+ * @param {number} pxPerMm chrome CSS px per millimetre on this monitor
+ * @param {{ width: number, height: number }} room chrome CSS px available
+ * @param {number} count how many frames
+ * @param {{ gap: number, caption: number }} spacing chrome CSS px between two
+ *   frames, and above each frame for its caption
+ * @returns {{ frame: FrameGeometry, columns: number }}
+ */
+export function gridGeometry(device, pxPerMm, room, count, spacing) {
+  const frame = frameGeometry(device, pxPerMm, { width: room.width, height: room.height - spacing.caption })
+  const fit = frame.width > 0 ? Math.floor((room.width + spacing.gap) / (frame.width + spacing.gap)) : 1
+  return { frame, columns: Math.max(1, Math.min(count, fit)) }
+}

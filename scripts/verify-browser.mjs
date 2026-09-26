@@ -135,6 +135,59 @@ try {
     assert.match(page.url(), /state=NoResults/, "the URL keeps the state")
     await page.screenshot({ path: join(out, "state.png") })
     console.log("a named state rendered")
+
+    // "All states" shows every state side by side, at one size, and a failing
+    // state fails in its own cell only.
+    writeFileSync(probePath, [
+      'export const name = "Caliper probe"',
+      "export default function Probe() { return <p>probe fixed</p> }",
+      "export const NoResults = () => <p>probe empty state</p>",
+      'export function Broken(): never { throw new Error("broken state exploded") }',
+      "",
+    ].join("\n"))
+    const allButton = page.locator('.cal-state[data-state="*"]')
+    await page.locator('.cal-state[data-state="Broken"]').waitFor({ timeout: 5000 })
+    assert.equal(await allButton.innerText(), "All 3 states")
+    await allButton.click()
+    await page.waitForFunction(() => {
+      const cells = [...document.querySelectorAll(".cal-cell")]
+      return cells.length === 3 && cells.every(cell => /** @type {HTMLElement} */ (cell).dataset.frameState !== "Loading")
+    }, undefined, { timeout: 15_000 })
+    const cells = await page.locator(".cal-cell").evaluateAll(nodes => nodes.map(node => {
+      const element = /** @type {HTMLElement} */ (node)
+      const box = element.querySelector(".cal-screen")?.getBoundingClientRect()
+      return { state: element.dataset.state, frame: element.dataset.frameState, label: element.querySelector(".cal-cell-label")?.textContent, width: box?.width, top: box?.top }
+    }))
+    assert.deepEqual(cells.map(cell => [cell.state, cell.frame, cell.label]), [
+      ["default", "Rendered", "Default"],
+      ["NoResults", "Rendered", "No results"],
+      ["Broken", "Failed", "Broken"],
+    ])
+    for (const cell of cells) assert(Math.abs((cell.width ?? 0) - 72 * PX_PER_MM) < 1, `${cell.state} is drawn at true size`)
+    assert.equal(new Set(cells.map(cell => cell.top)).size, 1, "three RG353M frames fit in one row at 1600 px")
+    assert.match(page.url(), /state=\*/, "the URL keeps the grid")
+    assert.match(await page.locator(".cal-problem-error").first().innerText(), /^Broken: /)
+    assert.match(await page.locator(".cal-grid-caption").innerText(), /3 states side by side.*True size/)
+    await page.screenshot({ path: join(out, "grid.png") })
+
+    // A narrow window puts the frames in one column that scrolls. They shrink only
+    // as far as one frame must to fit the stage, never because there are many.
+    await page.setViewportSize({ width: 700, height: 700 })
+    await page.waitForTimeout(200)
+    const narrow = await page.locator(".cal-cell .cal-screen").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left))
+    assert.equal(new Set(narrow).size, 1, "one column in a narrow window")
+    assert(await page.locator(".cal-grid").evaluate(grid => grid.scrollHeight > grid.clientHeight), "the grid scrolls")
+    await page.screenshot({ path: join(out, "grid-narrow.png") })
+    await page.setViewportSize({ width: 1600, height: 1000 })
+
+    // A cell's label opens that state alone.
+    await page.locator('.cal-cell[data-state="NoResults"] .cal-cell-label').click()
+    await page.waitForFunction(() => {
+      const doc = /** @type {HTMLIFrameElement} */ (document.querySelector(".cal-device .cal-frame")).contentDocument
+      return doc?.body?.innerText.includes("probe empty state")
+    }, undefined, { timeout: 10_000 })
+    assert.equal(await page.locator(".cal-cell").count(), 0, "the grid frames are gone in the single view")
+    console.log("all states rendered side by side")
   } finally {
     rmSync(probePath, { force: true })
   }

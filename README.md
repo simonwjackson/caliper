@@ -70,6 +70,12 @@ export const Busy = () => <Button label="Go" busy />       // "Busy"
 export function NoResults() { return <Button label="Retry" /> } // "No results"
 ```
 
+**All states** in that list shows every state side by side on the selected
+device. Each state has its own frame, so one that throws fails alone. All
+frames have the same size: true size when one frame fits the window, or scaled
+down together when not. More states add rows that scroll. Click a frame's label
+to show that state alone.
+
 ## Options
 
 Set an option only when the Setup panel reports a failure.

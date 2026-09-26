@@ -1,5 +1,5 @@
 // @ts-check
-import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry } from "./device-frame.js"
+import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
 
 /**
  * Caliper's chrome: the part list, one device frame and the calibration.
@@ -16,6 +16,8 @@ import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry } from "./device-frame.
  * @typedef {{ kind: "error" | "warning", title: string, detail: string }} Problem
  * @typedef {{ _tag: "Connecting" } | { _tag: "Ready", project: Project } | { _tag: "Unreachable", project: Project | null }} Connection
  * @typedef {{ part: string, partState: string, state: "Loading" | "Rendered" | "Empty" | "Failed", problems: Problem[] }} FrameReport
+ * @typedef {{ _tag: "One", export: string } | { _tag: "All" }} Shown
+ *   `One` shows one state of the part. `All` shows every state side by side.
  */
 
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
@@ -28,6 +30,12 @@ const STAGE_PADDING = 24
 const RING = 7
 const DEFAULT_DEVICE = /** @type {Device} */ (DEVICES[0])
 const DEFAULT_STATE = "default"
+/** The `state` value in the URL that shows every state. No export can have this name. */
+const ALL_STATES = "*"
+/** Chrome CSS px between two frames in the grid, ring to ring. */
+const GRID_GAP = 20
+/** Room above each frame in the grid for its label. */
+const GRID_LABEL = 36
 
 const saved = new URLSearchParams(location.hash.slice(1))
 const storedPxPerMm = Number(localStorage.getItem(STORAGE_PX_PER_MM))
@@ -37,15 +45,15 @@ const state = {
   connection: { _tag: "Connecting" },
   /** @type {string | null} */
   part: saved.get("part"),
-  /** The export of the part to render. */
-  partState: saved.get("state") ?? DEFAULT_STATE,
+  /** @type {Shown} */
+  shown: shownFrom(saved.get("state")),
   device: deviceById(saved.get("device") ?? localStorage.getItem(STORAGE_DEVICE)),
   pxPerMm: storedPxPerMm > 0 ? storedPxPerMm : DEFAULT_PX_PER_MM,
   calibrated: storedPxPerMm > 0,
   calibrating: false,
   filter: "",
-  /** @type {FrameReport | null} */
-  frame: null,
+  /** What each frame last reported, by state. @type {Map<string, FrameReport>} */
+  reports: new Map(),
 }
 
 // ---------------------------------------------------------------- DOM helpers
@@ -110,6 +118,9 @@ app.append(
           h("div", { class: "cal-screen" },
             h("iframe", { class: "cal-frame", title: "Device screen" })),
           h("figcaption", { class: "cal-caption" })),
+        h("section", { class: "cal-grid", hidden: true, "aria-label": "All states" },
+          h("p", { class: "cal-grid-caption" }),
+          h("div", { class: "cal-grid-cells" })),
         h("p", { class: "cal-empty" }),
         h("div", { class: "cal-calibration", hidden: true },
           h("div", { class: "cal-card", "aria-hidden": "true" }, "Match a credit card"),
@@ -141,10 +152,32 @@ function deviceById(id) {
   return DEVICES.find(device => device.id === id) ?? DEFAULT_DEVICE
 }
 
+/**
+ * @param {string | null} value the URL's `state`
+ * @returns {Shown}
+ */
+function shownFrom(value) {
+  if (value === ALL_STATES) return { _tag: "All" }
+  return { _tag: "One", export: value ?? DEFAULT_STATE }
+}
+
+/**
+ * What the stage shows for the current part. A part with one state has
+ * nothing to compare, so `All` shows it alone.
+ *
+ * @returns {Shown}
+ */
+function effectiveShown() {
+  const part = currentPart()
+  if (state.shown._tag === "All" && part && part.states.length === 1) return { _tag: "One", export: DEFAULT_STATE }
+  return state.shown
+}
+
 function saveLocation() {
   const params = new URLSearchParams()
   if (state.part) params.set("part", state.part)
-  if (state.partState !== DEFAULT_STATE) params.set("state", state.partState)
+  if (state.shown._tag === "All") params.set("state", ALL_STATES)
+  else if (state.shown.export !== DEFAULT_STATE) params.set("state", state.shown.export)
   params.set("device", state.device.id)
   history.replaceState(null, "", `#${params}`)
 }
@@ -153,24 +186,25 @@ function saveLocation() {
 function selectPart(file) {
   if (state.part === file) return
   state.part = file
-  state.partState = DEFAULT_STATE
-  state.frame = null
-  saveLocation()
-  renderParts()
-  renderBar()
-  renderFrame()
-  renderProblems()
+  // Keep comparing states when you move to another part.
+  if (state.shown._tag === "One") state.shown = { _tag: "One", export: DEFAULT_STATE }
+  showChanged()
 }
 
-/** @param {string} exportName */
-function selectState(exportName) {
-  if (state.partState === exportName) return
-  state.partState = exportName
-  state.frame = null
+/** @param {Shown} shown */
+function selectShown(shown) {
+  if (JSON.stringify(shown) === JSON.stringify(state.shown)) return
+  state.shown = shown
+  showChanged()
+}
+
+function showChanged() {
+  state.reports = new Map()
   saveLocation()
   renderParts()
   renderBar()
   renderFrame()
+  renderStage()
   renderProblems()
 }
 
@@ -269,25 +303,45 @@ function renderParts() {
  * @param {Part} part
  */
 function stateList(part) {
+  const shown = effectiveShown()
   return h("div", { class: "cal-states", role: "group", "aria-label": `${part.name} states` },
+    h("button", {
+      type: "button",
+      class: "cal-state cal-state-all",
+      "aria-current": shown._tag === "All" ? "true" : false,
+      title: "Every state side by side",
+      "data-state": ALL_STATES,
+      onClick: () => selectShown({ _tag: "All" }),
+    }, `All ${part.states.length} states`),
     ...part.states.map(partState => h("button", {
       type: "button",
       class: "cal-state",
-      "aria-current": partState.export === state.partState ? "true" : false,
-      title: partState.line ? `${part.file}:${partState.line}` : `${part.file}: default export`,
+      "aria-current": shown._tag === "One" && partState.export === shown.export ? "true" : false,
+      title: stateSite(part, partState),
       "data-state": partState.export,
-      onClick: () => selectState(partState.export),
+      onClick: () => selectShown({ _tag: "One", export: partState.export }),
     }, partState.label)))
 }
 
-function currentStateLabel() {
-  const part = currentPart()
-  return part?.states.find(partState => partState.export === state.partState)?.label ?? state.partState
+/**
+ * @param {Part} part
+ * @param {import("../types").PartState} partState
+ */
+function stateSite(part, partState) {
+  return partState.line ? `${part.file}:${partState.line}` : `${part.file}: default export`
+}
+
+/** @param {string} exportName */
+function stateLabel(exportName) {
+  return currentPart()?.states.find(partState => partState.export === exportName)?.label ?? exportName
 }
 
 function renderBar() {
   const part = currentPart()
-  const shownState = part && part.states.length > 1 ? ` · ${currentStateLabel()}` : ""
+  const shown = effectiveShown()
+  const shownState = !part || part.states.length === 1 ? ""
+    : shown._tag === "All" ? ` · All ${part.states.length} states`
+    : ` · ${stateLabel(shown.export)}`
   $(".cal-part-name").textContent = part ? `${part.name}${shownState}` : "No part selected"
   $(".cal-part-file").textContent = part ? (part.note ?? part.file) : ""
   const devices = $(".cal-devices")
@@ -302,24 +356,116 @@ function renderBar() {
   $(".cal-calibrate").classList.toggle("cal-attention", !state.calibrated)
 }
 
+/**
+ * @param {Part} part
+ * @param {string} exportName
+ */
+function frameSrc(part, exportName) {
+  return `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(exportName)}`
+}
+
 function renderFrame() {
   const part = currentPart()
+  const shown = effectiveShown()
   const figure = $(".cal-device")
+  const grid = $(".cal-grid")
   const empty = $(".cal-empty")
-  figure.hidden = part === null
+  figure.hidden = part === null || shown._tag === "All"
+  grid.hidden = part === null || shown._tag === "One"
   empty.hidden = part !== null
   if (part === null) {
     empty.textContent = currentProject()?.parts.length ? "Pick a part from the list." : ""
     frame.removeAttribute("src")
+    $(".cal-grid-cells").replaceChildren()
     return
   }
-  const src = `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(state.partState)}`
+  if (shown._tag === "All") {
+    frame.removeAttribute("src")
+    return renderGridCells(part)
+  }
+  $(".cal-grid-cells").replaceChildren()
+  const src = frameSrc(part, shown.export)
   if (frame.getAttribute("src") === src) return
   figure.dataset.frameState = "Loading"
   frame.setAttribute("src", src)
 }
 
+/**
+ * One labelled frame for each state of the part. Frames that already show the
+ * right state stay, so a new state does not reload the others.
+ *
+ * @param {Part} part
+ */
+function renderGridCells(part) {
+  const cells = $(".cal-grid-cells")
+  /** @type {Map<string, HTMLElement>} */
+  const existing = new Map()
+  for (const cell of cells.querySelectorAll("figure")) {
+    const src = cell.querySelector("iframe")?.getAttribute("src")
+    if (src) existing.set(src, /** @type {HTMLElement} */ (cell))
+  }
+  cells.replaceChildren(...part.states.map(partState => {
+    const src = frameSrc(part, partState.export)
+    const kept = existing.get(src)
+    const label = h("button", {
+      type: "button",
+      class: "cal-cell-label",
+      title: `Show ${partState.label} alone · ${stateSite(part, partState)}`,
+      onClick: () => selectShown({ _tag: "One", export: partState.export }),
+    }, partState.label)
+    if (kept) {
+      kept.querySelector(".cal-cell-label")?.replaceWith(label)
+      return kept
+    }
+    return h("figure", { class: "cal-cell", "data-state": partState.export, "data-frame-state": "Loading" },
+      h("figcaption", {}, label),
+      h("div", { class: "cal-screen" },
+        h("iframe", { class: "cal-frame", title: `${part.name}: ${partState.label}`, src })))
+  }))
+  sizeGrid()
+}
+
+/** Size the grid's frames and columns to the stage. */
+function sizeGrid() {
+  const device = state.device
+  const cells = [.../** @type {NodeListOf<HTMLElement>} */ ($(".cal-grid-cells").querySelectorAll(".cal-cell"))]
+  const grid = gridGeometry(device, state.pxPerMm, {
+    width: stage.clientWidth - (STAGE_PADDING + RING) * 2,
+    height: stage.clientHeight - (STAGE_PADDING + RING) * 2 - CAPTION_RESERVE,
+  }, Math.max(cells.length, 1), { gap: GRID_GAP + RING * 2, caption: GRID_LABEL })
+  const { frame: geometry } = grid
+  $(".cal-grid-cells").style.gridTemplateColumns = `repeat(${grid.columns}, ${geometry.width}px)`
+  $(".cal-grid-cells").style.gap = `${GRID_GAP + RING * 2}px`
+  for (const cell of cells) {
+    const screen = /** @type {HTMLElement} */ (cell.querySelector(".cal-screen"))
+    const iframe = /** @type {HTMLElement} */ (cell.querySelector("iframe"))
+    screen.style.width = `${geometry.width}px`
+    screen.style.height = `${geometry.height}px`
+    iframe.style.width = `${device.cssWidth}px`
+    iframe.style.height = `${device.cssHeight}px`
+    iframe.style.transform = `scale(${geometry.scale})`
+  }
+  $(".cal-grid-caption").replaceChildren(...captionFor(device, geometry.fit, `${cells.length} states side by side, each`))
+}
+
+/**
+ * The size line under a frame: the device, and whether the frame is true size.
+ *
+ * @param {Device} device
+ * @param {import("./device-frame.js").Fit} fit
+ * @param {string} [lead]
+ */
+function captionFor(device, fit, lead) {
+  const size = `${lead ? `${lead} ` : ""}${device.name} · ${device.widthMm} mm wide · ${device.cssWidth} × ${device.cssHeight} CSS px`
+  const note = fit._tag === "TrueSize"
+    ? h("span", { class: state.calibrated ? "cal-fit-true" : "cal-fit-warn" },
+      state.calibrated ? "True size" : "True size only after calibration (now assumes 96 px per inch)")
+    : h("span", { class: "cal-fit-warn" }, `Scaled to ${fit.percent}%: the window is too small for true size`)
+  return [h("span", { title: device.viewportNote }, size), " · ", note]
+}
+
 function renderStage() {
+  if (effectiveShown()._tag === "All") return sizeGrid()
   const device = state.device
   const room = {
     width: stage.clientWidth - (STAGE_PADDING + RING) * 2,
@@ -333,13 +479,7 @@ function renderStage() {
   frame.style.height = `${device.cssHeight}px`
   frame.style.transform = `scale(${geometry.scale})`
 
-  const caption = $(".cal-caption")
-  const size = `${device.name} · ${device.widthMm} mm wide · ${device.cssWidth} × ${device.cssHeight} CSS px`
-  const fit = geometry.fit._tag === "TrueSize"
-    ? h("span", { class: state.calibrated ? "cal-fit-true" : "cal-fit-warn" },
-      state.calibrated ? "True size" : "True size only after calibration (now assumes 96 px per inch)")
-    : h("span", { class: "cal-fit-warn" }, `Scaled to ${geometry.fit.percent}%: the window is too small for true size`)
-  caption.replaceChildren(h("span", { title: device.viewportNote }, size), " · ", fit)
+  $(".cal-device .cal-caption").replaceChildren(...captionFor(device, geometry.fit))
 }
 
 function renderCalibration() {
@@ -356,12 +496,19 @@ function renderCalibration() {
 function renderProblems() {
   const section = $(".cal-problems")
   section.replaceChildren()
-  const report = state.frame
-  if (!report || report.part !== state.part || report.partState !== state.partState) return
-  for (const problem of report.problems) {
-    section.append(h("div", { class: `cal-problem cal-problem-${problem.kind}`, role: problem.kind === "error" ? "alert" : "status" },
-      h("strong", {}, problem.title),
-      problem.detail ? h("pre", {}, problem.detail) : null))
+  const shown = effectiveShown()
+  const part = currentPart()
+  const exports = shown._tag === "One" ? [shown.export] : part?.states.map(partState => partState.export) ?? []
+  for (const exportName of exports) {
+    const report = state.reports.get(exportName)
+    if (!report || report.part !== state.part) continue
+    // In the grid, say which state each problem belongs to.
+    const prefix = shown._tag === "All" ? `${stateLabel(exportName)}: ` : ""
+    for (const problem of report.problems) {
+      section.append(h("div", { class: `cal-problem cal-problem-${problem.kind}`, role: problem.kind === "error" ? "alert" : "status" },
+        h("strong", {}, `${prefix}${problem.title}`),
+        problem.detail ? h("pre", {}, problem.detail) : null))
+    }
   }
 }
 
@@ -446,21 +593,25 @@ function connect() {
     state.connection = { _tag: "Ready", project }
     if (state.part === null || !project.parts.some(part => part.file === state.part)) {
       state.part = project.parts[0]?.file ?? null
-      state.partState = DEFAULT_STATE
+      if (state.shown._tag === "One") state.shown = { _tag: "One", export: DEFAULT_STATE }
       saveLocation()
     }
     // A save can remove the shown state. Fall back to the default export.
-    if (!currentPart()?.states.some(partState => partState.export === state.partState)) {
-      state.partState = DEFAULT_STATE
+    const shown = state.shown
+    if (shown._tag === "One" && !currentPart()?.states.some(partState => partState.export === shown.export)) {
+      state.shown = { _tag: "One", export: DEFAULT_STATE }
       saveLocation()
     }
     renderParts()
     renderSetup()
     renderBar()
     renderFrame()
+    renderStage()
     // The frame reloads itself when a part changes. A change to the global CSS
     // list or the wrapper changes the frame page, so reload it here.
-    if (before && setupKey(before) !== setupKey(project)) frame.contentWindow?.location.reload()
+    if (before && setupKey(before) !== setupKey(project)) {
+      for (const iframe of stage.querySelectorAll("iframe[src]")) /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
+    }
   })
   events.addEventListener("error", () => {
     state.connection = { _tag: "Unreachable", project: currentProject() }
@@ -470,8 +621,10 @@ function connect() {
 
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.data?.source !== "caliper-frame") return
-  state.frame = { part: event.data.part, partState: event.data.partState, state: event.data.state, problems: event.data.problems }
-  $(".cal-device").dataset.frameState = event.data.state
+  const sender = [...stage.querySelectorAll("iframe")].find(iframe => iframe.contentWindow === event.source)
+  const figure = sender?.closest("figure")
+  if (figure instanceof HTMLElement) figure.dataset.frameState = event.data.state
+  state.reports.set(event.data.partState, { part: event.data.part, partState: event.data.partState, state: event.data.state, problems: event.data.problems })
   renderProblems()
 })
 
