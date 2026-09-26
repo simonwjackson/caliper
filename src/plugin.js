@@ -8,6 +8,7 @@ import { loadEnv } from "vite"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { createTakesApi } from "./agent/api.js"
+import { listeningOrigin } from "./server-origin.js"
 import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
 import { flattenStylesheets, takeOverlay, withTake } from "./takes/overlay.js"
@@ -214,7 +215,7 @@ function createSession(server, root, options, env) {
     status: agent.status,
     connection: agent.connection,
     project: async () => (await load()).project,
-    serverUrl: () => server.resolvedUrls?.local[0] ?? null,
+    serverUrl: () => listeningOrigin(server),
     chromium: env.CHROMIUM,
     onChange: takesChanged,
   })
