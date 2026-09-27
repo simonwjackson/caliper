@@ -259,7 +259,9 @@ function shownFrom(value) {
 
 /** @returns {StateRef | null} */
 function subjectRef() {
-  return state.part === null || state.shown._tag === "All" ? null : { part: state.part, state: state.shown.export }
+  if (state.part === null) return null
+  if (state.shown._tag === "All") return currentPart()?.states.length === 1 ? { part: state.part, state: DEFAULT_STATE } : null
+  return { part: state.part, state: state.shown.export }
 }
 
 /** @returns {StateRef | null} */
@@ -710,7 +712,7 @@ function renderFrame() {
   const src = frameSrc(part, shown.export)
   if (frame.getAttribute("src") === src) return
   figure.dataset.frameState = "Loading"
-  const preview = /** @type {StateRef} */ (previewRef())
+  const preview = state.context ?? { part: part.file, state: shown.export }
   state.reports.delete(reportKey(null, preview.state, preview.part))
   frame.setAttribute("src", src)
 }

@@ -193,6 +193,25 @@ describe("declared preview scenarios", () => {
     })
   })
 
+  test("accept tolerates unrelated existing errors but rejects newly introduced declaration errors", async () => {
+    await withProject({ files: { ...composedFiles,
+      "src/Unrelated.part.tsx": 'export default function Part() { return null }\nexport const composition = { default: [{ part: "src/Gone.part.tsx", state: "default" }] }',
+    } }, async ({ url, get, write, root }) => {
+      const { take } = await (await post(url, "/__caliper/takes", ask)).json()
+      await settledTake(get, take)
+      write(`.caliper/takes/${take}/src/app.css`, ".chip { color: red }\n")
+      expect((await post(url, `/__caliper/takes/${take}/accept`, {})).status).toBe(200)
+      expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("red")
+      const second = await (await post(url, "/__caliper/takes", ask)).json()
+      await settledTake(get, second.take)
+      write(`.caliper/takes/${second.take}/src/New.part.tsx`, 'export default function Part() { return null }\nexport const composition = { default: [{ part: "src/Absent.part.tsx", state: "default" }] }')
+      const rejected = await post(url, `/__caliper/takes/${second.take}/accept`, {})
+      expect(rejected.status).toBe(400)
+      expect((await rejected.json()).error).toContain("src/Absent.part.tsx")
+      expect(existsSync(join(root, "src/New.part.tsx"))).toBe(false)
+    })
+  })
+
   test("a removed relationship blocks follow-up and accept but still permits discard", async () => {
     await withProject({ files: composedFiles }, async ({ url, get, write, project, root }) => {
       const { take } = await (await post(url, "/__caliper/takes", ask)).json()

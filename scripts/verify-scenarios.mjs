@@ -34,6 +34,7 @@ const files = {
   "tsconfig.json": JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }),
   "src/index.ts": 'import "./global.css"; export { Home } from "./Home"',
   "src/global.css": 'body { margin: 0; font: 16px system-ui; } .theme { color: #eee; background: #151515; height: 100%; } button { font: inherit; }',
+  "src/Badge.atom.part.tsx": 'export default function Badge() { return <span>Badge</span> }',
   "src/fixtures.ts": 'export const ready = [{id:"a", title:"Alpha", art:true},{id:"b", title:"Beta", art:true}]; export const mixed = [ready[0], {...ready[1], art:false}];',
   "src/Cart.tsx": 'import "./Cart.css"; export function Cart({game,onRemove}) { return <article className="cart" data-id={game.id}><span>{game.title}</span><p>{game.art ? "Artwork" : "No artwork"}</p><button onClick={() => onRemove(game.id)}>Remove {game.title}</button></article> }',
   "src/Cart.css": '.cart { border: 1px solid #888; padding: 8px; letter-spacing: 0px; }',
@@ -203,6 +204,10 @@ try {
   await page.locator(`[data-subject="${cart}#MissingArt"]`).click()
   assert.equal(await page.locator(".cal-device iframe").getAttribute("src"),failedSrc)
   assert.match(await page.locator(".cal-problems").innerText(),/Scenario failure/,"drilling into a child preserves the retained preview's error")
+  await page.locator('.cal-state[data-state="*"]').click()
+  await page.locator('.cal-part[title="src/Badge.atom.part.tsx"]').click()
+  await page.locator('.cal-device[data-frame-state="Rendered"]').waitFor()
+  assert.equal(await screen.getByText("Badge",{exact:true}).count(),1,"All states falls back to the only state of a single-state part")
   assert.deepEqual(errors,[])
   console.log(`PASS: working page state, transitive browsing, state-owned takes, context restore, repeated instances, frame isolation, CSS HMR, ${sizes.length} sizes, ${results.length} related renders, stale context, acceptance and visible declaration errors. Screenshots: ${out}`)
 } catch (error) {

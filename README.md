@@ -244,7 +244,8 @@ not find undeclared consumers. Removed states or context declarations block
 new prompts and acceptance until the declaration is restored or the take is
 discarded. Takes whose subjects were removed remain under **Unavailable states**
 for review and discard. Acceptance also validates the proposed part declarations
-before copying files. Existing takes without a context remain isolated.
+before copying files and rejects new declaration errors, not unrelated existing
+ones. Existing takes without a context remain isolated.
 
 `.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
 conversation lives only in the dev server: after a restart, the take's files

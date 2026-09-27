@@ -223,11 +223,13 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         json(response, 200, { take })
       } else if (action === "accept") {
         const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
-        validateTakeContext((await project()).parts, record)
+        const baseline = discoverParts(store.root)
+        validateTakeContext(baseline, record)
+        const existingProblems = new Set(baseline.flatMap(part => part.compositionProblems ?? []))
         const overrides = new Map(store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]))
         const proposed = discoverParts(store.root, overrides)
         validateTakeContext(proposed, record)
-        const problems = proposed.flatMap(part => part.compositionProblems ?? [])
+        const problems = proposed.flatMap(part => part.compositionProblems ?? []).filter(problem => !existingProblems.has(problem))
         if (problems.length) throw new Error(`The proposed files have invalid composition declarations:\n${problems.join("\n")}`)
         json(response, 200, { take, files: agents.accept(take) })
       } else if (action === "discard") {
