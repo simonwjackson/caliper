@@ -49,15 +49,18 @@ const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })
 try {
   page.on("pageerror", error => failures.push(`chrome page error: ${error.message}`))
   page.on("console", message => { if (message.type() === "error") failures.push(`chrome console: ${message.text()}`) })
-  await page.goto(base)
-  await page.evaluate(() => {
+  // Set the preferences before the chrome's script runs, and open the deep link
+  // once. A first visit without the hash would race: the chrome writes its
+  // first part into the URL when the project arrives.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("caliper-verify")) return
+    sessionStorage.setItem("caliper-verify", "1")
     localStorage.setItem("caliper:code-open", "true")
     localStorage.setItem("caliper:takes-open", "true")
     localStorage.removeItem("caliper:code-share")
   })
-  await page.goto(`${base}#part=${encodeURIComponent(part)}&device=rg353m`)
   const started = Date.now()
-  await page.reload()
+  await page.goto(`${base}#part=${encodeURIComponent(part)}&device=rg353m`)
 
   // 1. The pane opens the part's own component, as the real file.
   await page.locator(".cal-code .cm-editor").waitFor({ timeout: 20_000 })
