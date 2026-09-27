@@ -128,7 +128,7 @@ export function createIntegrationReview(store) {
         throw new Error(`Project source "${path}" was added after preparation. Prepare a new integration so its callers are checked.`)
       }
     }
-    if (hash(copies(integration.sourceTake)) !== integration.base.sourceRevision) {
+    if (hash({ record: record(integration.sourceTake), copies: copies(integration.sourceTake) }) !== integration.base.sourceRevision) {
       throw new Error("The source take changed after preparation. Prepare a new integration.")
     }
     for (const path of new Set([...Object.keys(integration.base.originals), ...paths])) {
@@ -165,6 +165,7 @@ export function createIntegrationReview(store) {
   /** @param {string} sourceTake @returns {string} */
   const begin = sourceTake => {
     const source = record(sourceTake)
+    if (source.integration) throw new Error("Prepare an alternate from an experiment, not another integration proposal.")
     const edited = copies(sourceTake)
     /** @type {Record<string, string>} */
     const originals = Object.create(null)
@@ -172,7 +173,7 @@ export function createIntegrationReview(store) {
       const content = original(path)
       if (content !== null) originals[path] = hash(content)
     }
-    const base = { originals, sourceRevision: hash(edited) }
+    const base = { originals, sourceRevision: hash({ record: source, copies: edited }) }
     // Spread the ask so future product context survives without another copier.
     const take = store.create({ ...source, name: `${source.name ?? `Take ${sourceTake}`} alternate`.slice(0, 80), integration: { _tag: "Preparing", sourceTake, base } })
     try {

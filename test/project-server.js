@@ -56,6 +56,9 @@ export async function withProject({ files, options, git = false }, test) {
       write,
     })
   } finally {
+    // A failing browser assertion can leave SSE open. Close it before waiting
+    // for the server so the assertion is reported instead of a test timeout.
+    if (server.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
     await server.close()
     rmSync(root, { recursive: true, force: true })
   }

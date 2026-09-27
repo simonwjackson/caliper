@@ -1016,6 +1016,7 @@ function renderTakeList() {
 
 function renderLog() {
   const log = $(".cal-log")
+  const focused = log.contains(document.activeElement) ? document.activeElement : null
   const take = currentTake()
   const pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 24
   if (!take) {
@@ -1038,6 +1039,7 @@ function renderLog() {
     ...(take.run._tag === "Failed" ? [h("div", { class: "cal-problem cal-problem-error", role: "alert" }, take.run.reason)] : []),
     ...(take.log.length === 0 ? [h("p", { class: "cal-note" }, "This take has no conversation since Vite started. Send a prompt to go on.")] : []),
   )
+  if (focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true })
   if (pinned) log.scrollTop = log.scrollHeight
 }
 

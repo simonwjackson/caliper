@@ -112,12 +112,13 @@ export function createIntegrationPanel() {
 
   /** @param {TakeView | null} take */
   return take => {
-    if (selected?.take !== take?.take) {
+    const identityChanged = selected?.take !== take?.take || selected?.created !== take?.created
+    if (identityChanged || (selected?.run._tag !== "Running" && take?.run._tag === "Running")) {
       review = null
       behaviorReviewed = false
       error = ""
     }
-    const changed = selected?.take !== take?.take || selected?.run._tag !== take?.run._tag || selected?.integration?._tag !== take?.integration?._tag
+    const changed = identityChanged || selected?.run._tag !== take?.run._tag || JSON.stringify(selected?.integration) !== JSON.stringify(take?.integration)
     selected = take
     if (changed || root.childNodes.length === 0) render()
     return root
