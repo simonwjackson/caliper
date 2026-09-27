@@ -75,6 +75,9 @@ export type Wrapper = {
   readonly renderedAt?: SourceSite
 }
 
+/** Declared composition level, ordered from the whole page to a leaf. */
+export type PartLayer = "page" | "template" | "organism" | "molecule" | "atom"
+
 export type Part = {
   /** Root-relative path, for example "src/ui/atoms/PicoButton.atom.part.tsx". */
   readonly file: string
@@ -82,6 +85,10 @@ export type Part = {
   readonly name: string
   /** The part's `export const note`, when it has one. */
   readonly note?: string
+  /** Literal `export const layer`, then the `.<layer>.part.tsx` suffix. Absent when unclassified. */
+  readonly layer?: PartLayer
+  /** The explicit layer export's location. Absent when the filename declares the layer. */
+  readonly layerSource?: SourceSite
   /** The part's states. The default export is always first. */
   readonly states: readonly PartState[]
 }

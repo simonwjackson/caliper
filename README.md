@@ -70,11 +70,20 @@ export const Busy = () => <Button label="Go" busy />       // "Busy"
 export function NoResults() { return <Button label="Retry" /> } // "No results"
 ```
 
-**All states** in that list shows every state side by side on the selected
-device. Each state has its own frame, so one that throws fails alone. All
-frames have the same size: true size when one frame fits the window, or scaled
-down together when not. More states add rows that scroll. Click a frame's label
+Click a part's name to show all its states side by side on the selected
+device. The separate arrow expands or collapses its state list without changing
+the preview. Click a child state to show it alone. Each state has its own frame,
+so one that throws fails alone. All frames have the same size: true size when
+one frame fits the window, or scaled down together when not. More states add rows that scroll. Click a frame's label
 to show that state alone.
+
+Navigation lists **Pages → Templates → Organisms → Molecules → Atoms**, then
+**Unclassified**. A part declares its layer with a filename suffix such as
+`Home.page.part.tsx`, or a literal `export const layer = "page"`. A valid
+export overrides the suffix. The five accepted values are `page`, `template`,
+`organism`, `molecule` and `atom`. Caliper does not execute computed layer
+exports or infer layers from folders. Parts without a recognised declaration
+remain unclassified. Within each layer, parts keep file-path order.
 
 ## Options
 
@@ -270,6 +279,7 @@ the agent's skills folder.
 bun install
 bun test
 bun run typecheck
+CHROMIUM=/path/to/chromium CALIPER_TEST_MODULES=/path/to/react-project/node_modules bun test test/navigation.test.js
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules

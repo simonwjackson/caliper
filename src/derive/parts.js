@@ -7,6 +7,7 @@ import ts from "typescript"
 /**
  * @typedef {import("../types").Part} Part
  * @typedef {import("../types").PartState} PartState
+ * @typedef {import("../types").PartLayer} PartLayer
  */
 
 export const PART_SUFFIX = ".part.tsx"
@@ -70,7 +71,7 @@ function walkedParts(root) {
 }
 
 /**
- * Read the part's `name` and `note` exports without running the file.
+ * Read the part's metadata and states without running the file.
  *
  * @param {string} root
  * @param {string} file
@@ -80,8 +81,9 @@ function walkedParts(root) {
 export function readPart(root, file, source = readFileSync(join(root, file), "utf8")) {
   const name = stringExport(source, "name") ?? nameFromFile(file)
   const note = stringExport(source, "note")
-  const states = [DEFAULT_STATE, ...namedStates(file, source)]
-  return note === undefined ? { file, name, states } : { file, name, note, states }
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const states = [DEFAULT_STATE, ...namedStates(tree)]
+  return { file, name, ...(note === undefined ? {} : { note }), states, ...partLayer(file, tree) }
 }
 
 /**
@@ -93,12 +95,10 @@ export function readPart(root, file, source = readFileSync(join(root, file), "ut
  * helpers are not states. The default export is always the first state, so
  * it is not listed here; the frame reports it when it is missing.
  *
- * @param {string} file
- * @param {string} source
+ * @param {ts.SourceFile} tree
  * @returns {PartState[]}
  */
-function namedStates(file, source) {
-  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+function namedStates(tree) {
   /** @type {PartState[]} */
   const states = []
   /** @param {ts.Node} node @param {string} exportName */
@@ -120,6 +120,37 @@ function namedStates(file, source) {
     }
   }
   return states
+}
+
+/** @type {readonly PartLayer[]} */
+const LAYERS = ["page", "template", "organism", "molecule", "atom"]
+
+/**
+ * An exported literal `layer` overrides the filename suffix. Folder names
+ * never classify a part. Read syntax only; computed values are not executed.
+ *
+ * @param {string} file
+ * @param {ts.SourceFile} tree
+ * @returns {Pick<Part, "layer" | "layerSource">}
+ */
+function partLayer(file, tree) {
+  for (const statement of tree.statements) {
+    if (!ts.isVariableStatement(statement)
+      || !(statement.declarationList.flags & ts.NodeFlags.Const)
+      || !statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "layer") continue
+      let value = declaration.initializer
+      while (value && (ts.isAsExpression(value) || ts.isSatisfiesExpression(value) || ts.isParenthesizedExpression(value))) value = value.expression
+      if (!value || !(ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))) continue
+      const layer = LAYERS.find(layer => layer === value.text)
+      if (layer) return { layer, layerSource: { file, line: tree.getLineAndCharacterOfPosition(declaration.getStart(tree)).line + 1 } }
+    }
+  }
+  const stem = basename(file, PART_SUFFIX)
+  const suffix = stem.includes(".") ? stem.split(".").at(-1) : undefined
+  const layer = LAYERS.find(layer => layer === suffix)
+  return layer ? { layer } : {}
 }
 
 /**

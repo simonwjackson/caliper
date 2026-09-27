@@ -236,8 +236,28 @@ pre {
   overflow-wrap: anywhere;
 }
 
+/* Disclosure never shares a hit target with selection. Labels wrap instead
+ * of taking the disclosure's space; the list scrolls on either short axis. */
+.cal-part-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+}
+
+.cal-part-toggle {
+  border: 0;
+  background: none;
+  min-height: 3rem;
+  padding: 0;
+}
+
+.cal-part-toggle:hover {
+  background: var(--cal-raised);
+}
+
 .cal-part {
   display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
   width: 100%;
   text-align: left;
   border: 0;
@@ -255,12 +275,16 @@ pre {
   color: var(--cal-stage);
 }
 
-/* The selected part's states, indented under its row. */
+/* Each part's states, indented under its row. */
 .cal-states {
   display: flex;
   flex-direction: column;
-  margin: 1px 0 var(--cal-space-1) var(--cal-space-3);
+  margin: 1px 0 var(--cal-space-1) calc(3rem + var(--cal-space-3));
   border-left: 1px solid var(--cal-accent);
+}
+
+.cal-states[hidden] {
+  display: none;
 }
 
 .cal-state {

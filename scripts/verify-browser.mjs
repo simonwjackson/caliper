@@ -123,6 +123,7 @@ try {
   // Every part renders, inside the wrapper, with the global CSS loaded.
   for (const part of project.parts) {
     await page.locator(`.cal-part[title="${part.file}"]`).click()
+    await page.locator(`[id="cal-states-${encodeURIComponent(part.file)}"] .cal-state[data-state="default"]`).click()
     const result = await frameResult(page, part.file)
     if (result.state !== "Rendered") failures.push(`${part.file}: ${result.state} ${JSON.stringify(result.problems)}`)
     if (!result.wrapperOk) failures.push(`${part.file}: wrapper elements missing`)
@@ -131,6 +132,7 @@ try {
   }
   console.log(`rendered ${project.parts.length} parts`)
   await page.locator(`.cal-part[title="${project.parts[0]?.file}"]`).click()
+  await page.locator(`[id="cal-states-${encodeURIComponent(project.parts[0]?.file ?? "")}"] .cal-state[data-state="default"]`).click()
   await frameResult(page, project.parts[0]?.file ?? "")
   await page.screenshot({ path: join(out, "rg353m-true-size.png") })
 
@@ -188,7 +190,8 @@ try {
       "export const NoResults = () => <p>probe empty state</p>",
       "",
     ].join("\n"))
-    const stateButton = page.locator('.cal-state[data-state="NoResults"]')
+    const probeStates = page.getByRole("group", { name: "Caliper probe states", exact: true })
+    const stateButton = probeStates.locator('.cal-state[data-state="NoResults"]')
     await stateButton.waitFor({ timeout: 5000 })
     assert.equal(await stateButton.innerText(), "No results", "the state label comes from the export name")
     await stateButton.click()
@@ -210,10 +213,9 @@ try {
       'export function Broken(): never { throw new Error("broken state exploded") }',
       "",
     ].join("\n"))
-    const allButton = page.locator('.cal-state[data-state="*"]')
-    await page.locator('.cal-state[data-state="Broken"]').waitFor({ timeout: 5000 })
-    assert.equal(await allButton.innerText(), "All 3 states")
-    await allButton.click()
+    await probeStates.locator('.cal-state[data-state="Broken"]').waitFor({ timeout: 5000 })
+    assert.equal(await page.locator('.cal-state[data-state="*"]').count(), 0, "there is no separate All states row")
+    await probeButton.click()
     await page.waitForFunction(() => {
       const cells = [...document.querySelectorAll(".cal-cell")]
       return cells.length === 3 && cells.every(cell => /** @type {HTMLElement} */ (cell).dataset.frameState !== "Loading")
@@ -265,7 +267,7 @@ try {
       "export const Landing = () => <><style>{'@keyframes cal-probe-drop { from { translate: 0 -200px } }'}</style><p style={{ animation: 'cal-probe-drop 10s steps(4, end)' }}>probe landed</p></>",
       "",
     ].join("\n"))
-    await page.locator('.cal-state[data-state="Wide"]').waitFor({ timeout: 5000 })
+    await probeStates.locator('.cal-state[data-state="Wide"]').waitFor({ timeout: 5000 })
     const cli = spawnSync(process.execPath, [
       join(dirname(fileURLToPath(import.meta.url)), "../bin/caliper-render.mjs"),
       "--url", args.url, "--part", probe, "--state", "*", "--out", join(out, "render"),

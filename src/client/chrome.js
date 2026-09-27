@@ -74,6 +74,8 @@ const state = {
   calibrated: storedPxPerMm > 0,
   calibrating: false,
   filter: "",
+  /** Explicit disclosure choices; the selected part opens by default. @type {Map<string, boolean>} */
+  expandedParts: new Map(),
   /** What each frame last reported, by `reportKey`. @type {Map<string, FrameReport>} */
   reports: new Map(),
   /** @type {TakesSnapshot | null} */
@@ -285,11 +287,18 @@ function saveLocation() {
 
 /** @param {string} file */
 function selectPart(file) {
-  if (state.part === file) return
+  if (state.part !== file) state.take = null
   state.part = file
-  state.take = null
-  // Keep comparing states, or takes, when you move to another part.
-  if (state.shown._tag !== "All") state.shown = { _tag: state.shown._tag, export: DEFAULT_STATE }
+  state.shown = { _tag: "All" }
+  state.expandedParts.set(file, true)
+  showChanged()
+}
+
+/** @param {string} file @param {string} exportName */
+function selectPartState(file, exportName) {
+  if (state.part !== file) state.take = null
+  state.part = file
+  state.shown = { _tag: "One", export: exportName }
   showChanged()
 }
 
@@ -355,8 +364,12 @@ function currentPart() {
   return currentProject()?.parts.find(part => part.file === state.part) ?? null
 }
 
+/** Top-down composition order; file paths break ties, including unclassified parts. */
+const PART_LAYERS = /** @type {const} */ (["page", "template", "organism", "molecule", "atom"])
+
 function renderParts() {
   const project = currentProject()
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.navKey : undefined
   $(".cal-project").textContent = project?.name ?? "Caliper"
   const count = $(".cal-count")
   const list = $(".cal-parts")
@@ -379,36 +392,58 @@ function renderParts() {
     list.append(h("p", { class: "cal-note" }, `No part matches “${state.filter}”.`))
     return
   }
-  /** @type {Map<string, Part[]>} */
-  const groups = new Map()
-  for (const part of shown) {
-    const folder = part.file.includes("/") ? part.file.slice(0, part.file.lastIndexOf("/")) : "."
-    groups.set(folder, [...(groups.get(folder) ?? []), part])
-  }
-  for (const [folder, parts] of groups) {
-    list.append(h("h2", { class: "cal-group" }, folder))
+  for (const layer of [...PART_LAYERS, undefined]) {
+    const parts = shown.filter(part => part.layer === layer).sort((a, b) => a.file.localeCompare(b.file))
+    if (!parts.length) continue
+    const label = layer ? `${layer[0]?.toUpperCase()}${layer.slice(1)}s` : "Unclassified"
+    list.append(h("h2", { class: "cal-group" }, label))
     for (const part of parts) {
-      list.append(h("button", {
-        type: "button",
-        class: "cal-part",
-        "aria-current": part.file === state.part ? "true" : false,
-        title: part.file,
-        onClick: () => selectPart(part.file),
-      }, h("span", { class: "cal-part-label" }, part.name)))
-      const takes = part.file === state.part ? partTakes().length : 0
-      if (part.file === state.part && (part.states.length > 1 || takes > 0)) list.append(stateList(part))
+      const expanded = state.expandedParts.get(part.file) ?? part.file === state.part
+      const statesId = `cal-states-${encodeURIComponent(part.file)}`
+      list.append(h("div", { class: "cal-part-row" },
+        h("button", {
+          type: "button",
+          class: "cal-part-toggle",
+          "data-nav-key": `toggle:${part.file}`,
+          "aria-label": `${expanded ? "Collapse" : "Expand"} ${part.name} states`,
+          "aria-expanded": String(expanded),
+          "aria-controls": statesId,
+          onClick: () => {
+            state.expandedParts.set(part.file, !expanded)
+            renderParts()
+          },
+        }, h("span", { "aria-hidden": "true" }, expanded ? "▾" : "▸")),
+        h("button", {
+          type: "button",
+          class: "cal-part",
+          "data-nav-key": `part:${part.file}`,
+          "aria-current": part.file === state.part ? "true" : false,
+          title: part.file,
+          onClick: () => selectPart(part.file),
+        }, h("span", {
+          class: "cal-part-label",
+          title: part.layerSource ? `${part.layer} · ${part.layerSource.file}:${part.layerSource.line}`
+            : part.layer ? `${part.layer} · filename suffix in ${part.file}` : `Unclassified · ${part.file}`,
+        }, part.name))))
+      const states = stateList(part)
+      states.id = statesId
+      states.hidden = !expanded
+      list.append(states)
     }
   }
+  // Rebuilding the list must not discard focus after keyboard activation or HMR.
+  if (focused) [...list.querySelectorAll("button")].find(button => button.dataset.navKey === focused)?.focus({ preventScroll: true })
 }
 
 /**
- * The selected part's states, under its row in the list.
+ * A part's states, under its independently collapsible row in the list.
  *
  * @param {Part} part
  */
 function stateList(part) {
   const shown = effectiveShown()
-  const takes = partTakes().length
+  const selected = part.file === state.part
+  const takes = selected ? partTakes().length : 0
   const current = shown._tag === "All" ? null : shown.export
   return h("div", { class: "cal-states", role: "group", "aria-label": `${part.name} states` },
     takes > 0
@@ -421,24 +456,17 @@ function stateList(part) {
         onClick: () => selectShown({ _tag: "Takes", export: current ?? DEFAULT_STATE }),
       }, `Compare ${takes} ${takes === 1 ? "take" : "takes"}`)
       : null,
-    part.states.length > 1
-      ? h("button", {
-        type: "button",
-        class: "cal-state cal-state-all",
-        "aria-current": shown._tag === "All" ? "true" : false,
-        title: "Every state side by side",
-        "data-state": ALL_STATES,
-        onClick: () => selectShown({ _tag: "All" }),
-      }, `All ${part.states.length} states`)
-      : null,
-    ...(part.states.length > 1 ? part.states : []).map(partState => h("button", {
+    ...part.states.map(partState => h("button", {
       type: "button",
       class: "cal-state",
-      "aria-current": shown._tag !== "All" && partState.export === shown.export ? "true" : false,
+      "aria-current": selected && shown._tag !== "All" && partState.export === shown.export ? "true" : false,
       title: stateSite(part, partState),
       "data-state": partState.export,
-      // In the takes view, a state picks what every frame shows.
-      onClick: () => selectShown({ _tag: shown._tag === "Takes" ? "Takes" : "One", export: partState.export }),
+      "data-nav-key": `state:${part.file}:${partState.export}`,
+      // Preserve comparison behavior only within the selected part's takes view.
+      onClick: () => selected && shown._tag === "Takes"
+        ? selectShown({ _tag: "Takes", export: partState.export })
+        : selectPartState(part.file, partState.export),
     }, partState.label)))
 }
 

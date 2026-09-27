@@ -60,9 +60,51 @@ describe("parts", () => {
   test("lists every *.part.tsx file with its name and note, sorted by path", async () => {
     await withProject({ files: picoShape }, async ({ project }) => {
       expect((await project()).parts).toEqual([
-        { file: "src/Button.atom.part.tsx", name: "Primary button", note: "The main call to action", states: [DEFAULT_STATE] },
-        { file: "src/pages/Home.page.part.tsx", name: "Home", states: [DEFAULT_STATE] },
+        { file: "src/Button.atom.part.tsx", name: "Primary button", note: "The main call to action", states: [DEFAULT_STATE], layer: "atom" },
+        { file: "src/pages/Home.page.part.tsx", name: "Home", states: [DEFAULT_STATE], layer: "page" },
       ])
+    })
+  })
+
+  test("derives layers from suffixes or literal exports, never project folders or executable code", async () => {
+    const part = "export default function Part() { return null }\n"
+    const files = {
+      "package.json": manifest(),
+      "src/index.ts": "export {}",
+      "arbitrary/A.page.part.tsx": part,
+      "arbitrary/B.template.part.tsx": part,
+      "arbitrary/C.organism.part.tsx": part,
+      "arbitrary/D.molecule.part.tsx": part,
+      "arbitrary/E.atom.part.tsx": part,
+      "atoms/Override.atom.part.tsx": `${part}export const layer: string = ("page" as const)\n`,
+      "anywhere/Explicit.part.tsx": `${part}export const layer = 'template' satisfies string\n`,
+      "pages/Unknown.part.tsx": part,
+      "atoms/Unknown.part.tsx": `${part}// export const layer = 'atom'\nconst text = \"export const layer = 'page'\"\n`,
+      "unknown/Invalid.part.tsx": `${part}export const layer = 'component'\n`,
+      "unknown/Computed.part.tsx": `${part}export const layer = (() => { throw new Error('must not run') })()\n`,
+      "unknown/Local.part.tsx": `${part}const layer = 'page'\n`,
+      "unknown/page.part.tsx": part,
+    }
+    await withProject({ files }, async ({ project }) => {
+      const parts = (await project()).parts
+      expect(parts.map(({ file, layer }) => [file, layer])).toEqual([
+        ["anywhere/Explicit.part.tsx", "template"],
+        ["arbitrary/A.page.part.tsx", "page"],
+        ["arbitrary/B.template.part.tsx", "template"],
+        ["arbitrary/C.organism.part.tsx", "organism"],
+        ["arbitrary/D.molecule.part.tsx", "molecule"],
+        ["arbitrary/E.atom.part.tsx", "atom"],
+        ["atoms/Override.atom.part.tsx", "page"],
+        ["atoms/Unknown.part.tsx", undefined],
+        ["pages/Unknown.part.tsx", undefined],
+        ["unknown/Computed.part.tsx", undefined],
+        ["unknown/Invalid.part.tsx", undefined],
+        ["unknown/Local.part.tsx", undefined],
+        ["unknown/page.part.tsx", undefined],
+      ])
+      expect(parts.find(part => part.file === "atoms/Override.atom.part.tsx")?.layerSource).toEqual({ file: "atoms/Override.atom.part.tsx", line: 2 })
+      expect(parts.find(part => part.file === "arbitrary/A.page.part.tsx")?.layerSource).toBeUndefined()
+      expect(parts.every(part => part.states.length === 1)).toBe(true)
     })
   })
 
