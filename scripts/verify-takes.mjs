@@ -47,16 +47,13 @@ const failures = []
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })
   page.on("pageerror", error => failures.push(`chrome page error: ${error.message}`))
-  await page.goto(base)
-  await page.evaluate(() => localStorage.setItem("caliper:takes-open", "true"))
+  await page.addInitScript(() => localStorage.setItem("caliper:takes-open", "true"))
   const selection = new URLSearchParams({ part: args.part, state: args.state, device: "rg353m" })
   if (args["context-part"]) {
     selection.set("contextPart", args["context-part"])
     selection.set("contextState", args["context-state"])
   }
   await page.goto(`${base}#${selection}`)
-  // A hash-only change does not reload the page, and the chrome reads the hash when it loads.
-  await page.reload()
   await page.locator(".cal-agent").filter({ hasNotText: "Connecting" }).waitFor()
   assert.equal(await page.locator('.cal-part[aria-current="true"]').getAttribute("title"), args.part, `${args.part} is a part of the project`)
   if (args["context-part"]) {
