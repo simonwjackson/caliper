@@ -121,6 +121,71 @@ function setup(root) {
 }
 
 describe("a take's agent", () => {
+  test("generates a name through the model tool and persists it across restart", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("name_take", { name: "Warm chip" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxText("Named the design.")]),
+      ])
+      const take = agents.start({ ...ask, prompt: "Warm it up" })
+      expect((await settled(take)).name).toBe("Warm chip")
+      expect(setup(root).agents.views().find(view => view.take === take)?.name).toBe("Warm chip")
+    })
+  })
+
+  test("reports a missing name without inventing a generated title", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      faux.setResponses([fauxAssistantMessage([fauxText("No name.")])])
+      const view = await settled(agents.start({ ...ask, prompt: "Do something" }))
+      expect(view.name).toBeUndefined()
+      expect(view.nameIssue).toContain("No generated name")
+    })
+  })
+
+  test("uses a planned title without needing another model call", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      faux.setResponses([fauxAssistantMessage([fauxText("Done.")])])
+      const view = await settled(agents.start({ ...ask, prompt: "Go", direction: { title: "Quiet contrast", brief: "Reduce emphasis." } }))
+      expect(view.name).toBe("Quiet contrast")
+      expect(view.nameIssue).toBeUndefined()
+    })
+  })
+
+  test("prepares an alternate separately and cannot replace through accept", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, store, settled } = setup(root)
+      const source = store.create(ask)
+      store.write(source, "src/chip.css", ".chip { color: red }")
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("reset_file", { path: "src/chip.css" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxToolCall("write_file", { path: "src/Alternate.part.tsx", content: "export default function Alternate() { return <span>alternate</span> }" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxToolCall("submit_integration", { strategy: "component", summary: "A separate chip", shared: "No behavior duplicated", preserved: "The existing chip is unchanged", usage: "Import the alternate chip", preview: { part: "src/Alternate.part.tsx", state: "default" } })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxText("Ready for review.")]),
+      ])
+      const proposal = agents.alternate(source)
+      expect(proposal).not.toBe(source)
+      const view = await settled(proposal)
+      expect(view.integration?._tag).toBe("Review")
+      expect(store.read(source, "src/chip.css")).toContain("red")
+      expect(store.original("src/chip.css")).toContain("blue")
+      expect(() => agents.accept(proposal)).toThrow("integration proposal")
+      expect(store.record(source)).not.toBeNull()
+      const review = await agents.integration.check(proposal, async () => "Fixture render checks passed.")
+      agents.apply(proposal, review.revision, true)
+      /** @type {any} */
+      let seen
+      faux.setResponses([context => { seen = context; return fauxAssistantMessage([fauxText("New experiment.")]) }])
+      const next = agents.start({ ...ask, part: "src/Alternate.part.tsx", prompt: "A new subject" })
+      expect(next).toBe(proposal)
+      await settled(next)
+      expect(seen.messages.filter((/** @type {any} */ message) => message.role === "user")).toHaveLength(1)
+      expect(seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text).toContain("The part is src/Alternate.part.tsx")
+    })
+  })
+
   test("edits a copy in its take, renders it, and reports", async () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, renders, settled } = setup(root)

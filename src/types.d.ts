@@ -215,6 +215,11 @@ export type TakeView = {
   readonly state: string
   readonly device: string
   readonly created: number
+  /** Generated descriptive name. Old records can omit it. */
+  readonly name?: string
+  readonly nameIssue?: string
+  /** A separately prepared alternate, never accepted through replacement. */
+  readonly integration?: { readonly _tag: "Preparing"; readonly sourceTake: string } | { readonly _tag: "Review"; readonly sourceTake: string; readonly proposal: import("./takes/integration.js").IntegrationProposal }
   /** The planner's direction for this take, when one prompt started several. */
   readonly direction?: Direction
   readonly run: TakeRun

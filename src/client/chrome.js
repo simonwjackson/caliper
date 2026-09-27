@@ -1,5 +1,10 @@
 // @ts-check
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
+import { createIntegrationPanel } from "./integration-review.js"
+
+const integrationPanel = createIntegrationPanel()
+/** @param {TakeView} take */
+const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take}`
 
 /**
  * Caliper's chrome: the part list, one device frame and the calibration.
@@ -474,7 +479,7 @@ function renderBar() {
 }
 
 /**
- * @param {Part} part
+ * @param {Pick<Part, 'file'>} part
  * @param {string} exportName
  * @param {string | null} [take]
  */
@@ -519,9 +524,11 @@ function renderFrame() {
       },
       ...partTakes().map(take => ({
         key: `take-${take.take}`,
-        label: `Take ${take.take}${take.direction ? ` · ${take.direction.title}` : ""}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
+        label: `${takeName(take)}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
         title: take.files.length ? `Changes ${take.files.join(", ")}` : "No changes yet",
-        src: frameSrc(part, shown.export, take.take),
+        src: take.integration?._tag === "Review"
+          ? frameSrc({ file: take.integration.proposal.preview.part }, take.integration.proposal.preview.state, take.take)
+          : frameSrc(part, shown.export, take.take),
         status: take.run._tag,
         select: () => selectTake(take.take),
       })),
@@ -883,8 +890,15 @@ async function followTake() {
 /** @param {TakeView} take */
 async function acceptTake(take) {
   const files = take.files.join("\n")
-  if (!confirm(`Copy take ${take.take} over the real files?\n\n${files}`)) return
+  if (!confirm(`Replace the real files with ${takeName(take)} (take ${take.take})?\n\n${files}`)) return
   await postTakes(`/takes/${take.take}/accept`)
+}
+
+/** @param {TakeView} take */
+async function prepareAlternate(take) {
+  if (state.sending) return
+  const result = await postTakes(`/takes/${take.take}/alternate`)
+  if (result) selectTake(result.take)
 }
 
 /** @param {TakeView} take */
@@ -955,15 +969,19 @@ function renderTakeList() {
       h("button", {
         type: "button",
         class: "cal-take-name",
-        title: [take.direction?.brief, take.files.join("\n") || "No changes yet"].filter(Boolean).join("\n\n"),
+        title: [takeName(take), take.direction?.brief, take.files.join("\n") || "No changes yet"].filter(Boolean).join("\n\n"),
         onClick: () => selectTake(take.take),
       },
-        h("strong", {}, `Take ${take.take}`), " ", h("span", { class: "cal-take-status" }, status),
-        ...(take.direction ? [h("span", { class: "cal-take-direction" }, take.direction.title)] : [])),
+        h("strong", {}, takeName(take)), " ", h("span", { class: "cal-take-status" }, status),
+        h("span", { class: "cal-take-direction" }, `Take ${take.take}${take.integration ? " · alternate proposal" : ""}`)),
+      ...(take.nameIssue ? [h("p", { class: "cal-note" }, take.nameIssue)] : []),
       h("div", { class: "cal-take-actions" },
         running
           ? h("button", { type: "button", onClick: () => void postTakes(`/takes/${take.take}/stop`) }, "Stop")
-          : h("button", { type: "button", class: "cal-accept", disabled: take.files.length === 0, onClick: () => void acceptTake(take) }, "Accept"),
+          : take.integration
+            ? h("button", { type: "button", onClick: () => selectTake(take.take) }, "Review alternate")
+            : h("button", { type: "button", class: "cal-accept", disabled: take.files.length === 0 || state.sending, onClick: () => void acceptTake(take) }, "Replace"),
+        ...(!running && !take.integration ? [h("button", { type: "button", disabled: take.files.length === 0 || state.sending || state.takes?.agent._tag !== "Ready", onClick: () => void prepareAlternate(take) }, "Add an alternate")] : []),
         h("button", { type: "button", onClick: () => void discardTake(take) }, "Discard")))
   }))
 }
@@ -979,7 +997,8 @@ function renderLog() {
   // A streaming reply starts empty; it shows once it has words.
   const entries = take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "")
   log.replaceChildren(
-    h("p", { class: "cal-log-title" }, `Take ${take.take} · asked on ${take.device}, state ${take.state}`),
+    h("p", { class: "cal-log-title" }, `${takeName(take)} · Take ${take.take} · asked on ${take.device}, state ${take.state}`),
+    ...(take.integration ? [integrationPanel(take)] : []),
     ...(take.direction ? [h("div", { class: "cal-log-direction" }, h("strong", {}, take.direction.title), " ", take.direction.brief)] : []),
     ...entries.map(entry => {
       if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)

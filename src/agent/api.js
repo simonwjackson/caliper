@@ -9,6 +9,10 @@ import { isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
 import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
+import { takeParts } from "../takes/parts.js"
+import { verifyIntegration } from "./verify-integration.js"
+import { Type } from "typebox"
+import { Value } from "typebox/value"
 
 /**
  * @typedef {import("node:http").IncomingMessage} IncomingMessage
@@ -24,6 +28,7 @@ const MAX_BODY = 64 * 1024
 const MAX_PROMPT = 8_000
 /** The most takes one prompt starts. The chrome offers the same. */
 const MAX_TAKES = 4
+const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behaviorReviewed: Type.Literal(true) }, { additionalProperties: false })
 
 /**
  * The takes API on the dev server, under `/__caliper/takes`. The chrome
@@ -54,7 +59,9 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
    * @param {{ state: string, devices: string[], take?: string }} request
    */
   const renderPart = async (part, { state, devices, take }) => {
-    const plan = planRenders(await project(), { part, state, devices, ...(take === undefined ? {} : { take }) })
+    const original = await project()
+    const viewed = take === undefined ? original : { ...original, parts: takeParts(store, take, original.parts) }
+    const plan = planRenders(viewed, { part, state, devices, ...(take === undefined ? {} : { take }) })
     if (plan._tag === "Invalid") throw new Error(plan.reason)
     if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
     const url = serverUrl()
@@ -65,9 +72,38 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
   const agents = createTakeAgents({
     store,
     engine,
-    renderFor: (take, ask) => request => renderPart(ask.part, { ...request, take }),
+    renderFor: (take, ask) => request => renderPart(request.part ?? ask.part, { ...request, take }),
     onChange,
   })
+
+  /** Checks hold a take still until they finish, including follow-up and discard. */
+  const checking = new Set()
+
+  /** @param {string} take */
+  const checkIntegration = async take => {
+    agents.assertIdle(take)
+    checking.add(take)
+    onChange()
+    try {
+      return await agents.integration.check(take, async () => {
+        const original = await project()
+        const proposal = agents.integration.review(take).proposal
+        if (original.parts.find(part => part.file === proposal.preview.part)?.states.some(state => state.export === proposal.preview.state)) {
+          throw new Error("The alternate needs a new named state or part that opts into the new choice. Existing states must stay unchanged.")
+        }
+        if (!chromium) throw new Error("Set CHROMIUM before checking an integration.")
+        const url = serverUrl()
+        if (!url) throw new Error("The dev server is not listening yet.")
+        const jobs = original.parts.flatMap(part => part.states.flatMap(state => DEVICES.map(device => ({ part: part.file, state: state.export, device: device.id }))))
+        const originals = () => renderJobs({ url, jobs, out: join(renderDir, `check-${take}-original`), executablePath: chromium })
+        const proposed = () => renderJobs({ url, jobs: jobs.map(job => ({ ...job, take })), out: join(renderDir, `check-${take}-proposed`), executablePath: chromium })
+        return verifyIntegration({ originals, proposed, alternate: () => renderPart(proposal.preview.part, { state: proposal.preview.state, devices: ["*"], take }) })
+      })
+    } finally {
+      checking.delete(take)
+      onChange()
+    }
+  }
 
   /**
    * Ask the planner for different directions for one prompt. It sees the
@@ -130,7 +166,20 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         json(response, 404, { error: `Take ${take} does not exist.` })
         return true
       }
-      if (action === "prompt") {
+      if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
+      if (action === "alternate") {
+        json(response, 201, { take: agents.alternate(take) })
+      } else if (action === "review") {
+        agents.assertIdle(take)
+        json(response, 200, agents.integration.review(take))
+      } else if (action === "check") {
+        json(response, 200, await checkIntegration(take))
+      } else if (action === "apply") {
+        agents.assertIdle(take)
+        if (!Value.Check(applySchema, body)) throw new Error("Apply needs the reviewed revision and confirmation of product checks.")
+        const files = agents.apply(take, body.revision, body.behaviorReviewed)
+        json(response, 200, { take, files })
+      } else if (action === "prompt") {
         agents.follow(take, validPrompt(body))
         json(response, 200, { take })
       } else if (action === "stop") {

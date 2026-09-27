@@ -157,8 +157,10 @@ has its own agent, and they run at the same time. An agent can read project
 files, edit and write files in its own take, and render its take. It cannot
 run commands or write anywhere else. The stage shows the original and every
 take of the part, and each frame reloads when its take changes. Send a take
-another prompt, stop it, accept it (its files are copied over the real files)
-or discard it.
+another prompt, stop it, replace the real files with it, or discard it.
+Each take gets a descriptive name from its agent. Planned takes start with their
+direction title. Numeric IDs stay stable. Names survive a server restart. An old
+or unnamed take keeps its numeric label and shows a naming hint.
 
 When you ask for two or more takes, a planner first turns the prompt into one
 different direction per take, for example "realistic data", "edge cases" and
@@ -170,6 +172,41 @@ sensible answer, and says why. It costs one model call of about 10 s.
 `.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
 conversation lives only in the dev server: after a restart, the take's files
 remain, and its next prompt starts a new conversation.
+
+### Add an alternate without replacing existing callers
+
+Choose **Add an alternate** on an experiment. Caliper copies it into a separate
+proposal take and asks the agent to integrate an explicit new choice. The source
+experiment stays available. The agent can use a named component variant or a
+separate component that shares unchanged behavior. It must preserve existing
+callers and add a product-owned preview state for the alternate.
+
+The proposal explains the choice, shared behavior, preserved defaults, and caller
+usage. **Review changes** shows the exact before and after files. The comparison
+frame shows the new alternate state, even before that state exists in production.
+
+**Check original and alternate** renders every existing state on both devices
+twice to establish a stable baseline. It compares the proposal's existing states
+against that baseline, then checks the alternate for render errors and spill.
+An unstable baseline or changed existing state blocks apply. Intentional empty
+original states are valid; the alternate must render visible content.
+
+Before **Apply reviewed alternate**, review the files and verify product types,
+interactions, and existing callers. The checkbox records your confirmation; it
+does not run product tests. Caliper cannot prove behavioral compatibility from
+screenshots. Its agent cannot run a shell or test commands.
+
+Checks and apply are bound to the reviewed file revision. Later proposal edits
+require resubmission and fresh checks. Later project or source-experiment edits
+require preparing a new proposal. A successful apply removes only the proposal
+take. The alternate then works without Caliper. A failed file copy rolls back
+writes, but this is not crash-safe filesystem transaction storage.
+
+Costs: preparing an alternate adds an agent pass and review. Full render checks
+can take minutes, and looping animation can make them inconclusive. Baselines
+cover discovered project files, so even an unrelated source edit requires a new
+proposal. Keep an experiment as a take when the product does not need another
+supported choice.
 
 ## How a part renders
 
@@ -235,6 +272,7 @@ bun test
 bun run typecheck
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 ```
 
 `scripts/verify-css-loading.mjs` creates a temporary React project and starts
@@ -246,6 +284,11 @@ check neither changes the supplied project nor uses its Vite cache.
 `scripts/verify-takes.mjs` checks the Takes panel against a real model: it
 starts takes from the chrome, waits for the agents, checks every take frame,
 takes screenshots at three window sizes and discards the takes.
+
+`scripts/verify-integration.mjs` checks alternate preview, unchanged original
+renders, real click behavior, revision-bound review/apply, and review controls at
+five container sizes. It uses a temporary React consumer. Add `--live` to also
+exercise naming and alternate preparation through the configured local proxy.
 
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
 every part of a running project and checks true size, scaling, calibration, a

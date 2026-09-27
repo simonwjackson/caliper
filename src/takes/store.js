@@ -19,7 +19,7 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
  *   `file` is root-relative, with forward slashes.
  * @typedef {{ title: string, brief: string }} Direction
  *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
- * @typedef {{ part: string, state: string, device: string, created: number, direction?: Direction, others?: string[] }} TakeRecord
+ * @typedef {{ part: string, state: string, device: string, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration }} TakeRecord
  *   The part the take changes, the state and device it was asked about, when, the direction it was
  *   given, and the titles of the directions its sibling takes got from the same prompt.
  */
@@ -88,14 +88,28 @@ function symlinkEscape(root, absolute) {
 export function createTakeStore(root) {
   const takesDir = join(root, TAKES_DIR)
 
-  /** @param {string} take */
-  const folder = take => {
-    if (!isTakeId(take)) throw new Error(`"${take}" is not a take number.`)
-    return join(takesDir, take)
+  /** Metadata and copies must never alias real project files, even inside root.
+   * @param {string} path
+   */
+  const safeTakePath = path => {
+    let current = root
+    for (const segment of relative(root, path).split(sep)) {
+      current = join(current, segment)
+      const stat = lstatSync(current, { throwIfNoEntry: false })
+      if (stat?.isSymbolicLink()) throw new Error(`Unsafe symbolic link in take storage: ${current}.`)
+      if (!stat) break
+    }
+    return path
   }
 
   /** @param {string} take */
-  const recordFile = take => `${folder(take)}.json`
+  const folder = take => {
+    if (!isTakeId(take)) throw new Error(`"${take}" is not a take number.`)
+    return safeTakePath(join(takesDir, take))
+  }
+
+  /** @param {string} take */
+  const recordFile = take => safeTakePath(`${folder(take)}.json`)
 
   /**
    * @param {string} file what the agent asked for
@@ -109,6 +123,7 @@ export function createTakeStore(root) {
 
   /** @returns {string[]} take numbers, lowest first */
   const list = () => {
+    safeTakePath(takesDir)
     if (!existsSync(takesDir)) return []
     return readdirSync(takesDir)
       .filter(name => name.endsWith(".json") && isTakeId(name.slice(0, -5)))
@@ -123,8 +138,8 @@ export function createTakeStore(root) {
    * @returns {string} the take number
    */
   const create = ask => {
-    mkdirSync(takesDir, { recursive: true })
-    const ignore = join(root, CALIPER_DIR, ".gitignore")
+    mkdirSync(safeTakePath(takesDir), { recursive: true })
+    const ignore = safeTakePath(join(root, CALIPER_DIR, ".gitignore"))
     if (!existsSync(ignore)) writeFileSync(ignore, "# Caliper's takes. Nothing here belongs in Git.\n*\n")
     const used = readdirSync(takesDir).map(name => Number.parseInt(name, 10)).filter(Number.isFinite)
     const take = String(Math.max(0, ...used) + 1)
@@ -144,6 +159,27 @@ export function createTakeStore(root) {
     return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null
   }
 
+  /** @param {string} take @param {Partial<TakeRecord>} patch */
+  const update = (take, patch) => {
+    const current = record(take)
+    if (current === null) throw new Error(`Take ${take} does not exist.`)
+    writeFileSync(recordFile(take), `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`)
+  }
+
+  /** @param {string} file @returns {string | null} */
+  const original = file => {
+    const path = join(root, fence(file))
+    return existsSync(path) ? readFileSync(path, "utf8") : null
+  }
+
+  /** Remove an edited copy, so the take uses the original again. @param {string} take @param {string} file */
+  const reset = (take, file) => {
+    const inside = fence(file)
+    const copy = safeTakePath(join(folder(take), inside))
+    if (symlinkEscape(folder(take), copy) !== null) throw new Error(`"${file}" leaves take ${take}.`)
+    rmSync(copy, { force: true })
+  }
+
   /**
    * A project file as the take sees it: the take's copy when it has one,
    * else the real file.
@@ -153,7 +189,8 @@ export function createTakeStore(root) {
    */
   const read = (take, file) => {
     const inside = fence(file)
-    const copy = join(folder(take), inside)
+    const copy = safeTakePath(join(folder(take), inside))
+    if (existsSync(copy) && symlinkEscape(folder(take), copy) !== null) throw new Error(`"${file}" leaves take ${take}.`)
     const source = existsSync(copy) ? copy : join(root, inside)
     if (!existsSync(source)) throw new Error(`"${inside}" does not exist.`)
     if (lstatSync(source).isDirectory()) throw new Error(`"${inside}" is a folder. Use list_files.`)
@@ -172,11 +209,11 @@ export function createTakeStore(root) {
     const inside = fence(file)
     const base = folder(take)
     if (!existsSync(base)) throw new Error(`Take ${take} does not exist.`)
-    const copy = join(base, inside)
+    const copy = safeTakePath(join(base, inside))
     mkdirSync(dirname(copy), { recursive: true })
     // The take folder is Caliper's own; a link inside it could still point out.
     const real = relative(realpathSync(base), realpathSync(dirname(copy)))
-    if (real.startsWith("..") || isAbsolute(real)) throw new Error(`"${inside}" leaves take ${take}.`)
+    if (real.startsWith("..") || isAbsolute(real) || symlinkEscape(base, copy) !== null) throw new Error(`"${inside}" leaves take ${take}.`)
     writeFileSync(copy, content)
     return inside
   }
@@ -215,8 +252,9 @@ export function createTakeStore(root) {
 
   /** @param {string} take */
   const discard = take => {
+    const metadata = recordFile(take)
     rmSync(folder(take), { recursive: true, force: true })
-    rmSync(recordFile(take), { force: true })
+    rmSync(metadata, { force: true })
   }
 
   /**
@@ -236,7 +274,7 @@ export function createTakeStore(root) {
       .sort()
   }
 
-  return { root, list, create, record, read, write, files, listFiles, accept, discard }
+  return { root, list, create, record, update, original, reset, read, write, files, listFiles, accept, discard }
 }
 
 /** @typedef {ReturnType<typeof createTakeStore>} TakeStore */

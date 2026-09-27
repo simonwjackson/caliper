@@ -736,8 +736,34 @@ pre {
 
 .cal-take-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--cal-space-1);
 }
+
+/* Review stays in the conversation's scroll region. Long source lines wrap
+ * without widening the panel; no action disappears in a narrow container. */
+.cal-integration {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: var(--cal-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  padding: var(--cal-space-2);
+}
+
+.cal-integration :is(p, h3, h4, pre) { margin: 0; }
+.cal-integration pre {
+  white-space: pre-wrap;
+  font-size: var(--cal-text-sm);
+  padding: var(--cal-space-2);
+  background: var(--cal-raised);
+}
+.cal-integration summary { cursor: pointer; }
+.cal-integration label { line-height: 1.5; }
+.cal-integration [role="alert"] { color: var(--cal-bad); }
 
 .cal-take-actions button {
   min-height: 2rem;

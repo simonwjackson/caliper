@@ -10,7 +10,7 @@ import { Type } from "typebox"
  * @typedef {import("@earendil-works/pi-agent-core").AgentTool<any>} AgentTool
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
  * @typedef {import("../render/render.js").RenderResult} RenderResult
- * @typedef {(request: { state: string, devices: string[] }) => Promise<RenderResult[]>} RenderTake
+ * @typedef {(request: { state: string, devices: string[], part?: string }) => Promise<RenderResult[]>} RenderTake
  *   Renders the take's part. `state` is an export name or "*".
  */
 
@@ -110,13 +110,14 @@ export function takeTools({ store, take, render, defaults }) {
       "Render after each change, and read the verdict before you look at the picture.",
     ].join(" "),
     parameters: Type.Object({
+      part: Type.Optional(Type.String({ description: "Optional root-relative part path, including a new part added by this take." })),
       state: Type.Optional(Type.String({ description: `A state export of the part, or "*" for every state. Default: "${defaults.state}"` })),
       device: Type.Optional(Type.String({ description: `A device id, or "*" for every device. Default: "${defaults.device}"` })),
     }),
     executionMode: "sequential",
     execute: async (_id, params) => {
-      const { state, device } = /** @type {{ state?: string, device?: string }} */ (params)
-      const results = await render({ state: state ?? defaults.state, devices: [device ?? defaults.device] })
+      const { state, device, part } = /** @type {{ state?: string, device?: string, part?: string }} */ (params)
+      const results = await render({ state: state ?? defaults.state, devices: [device ?? defaults.device], ...(part ? { part } : {}) })
       const verdicts = results.map(({ png: _png, ...result }) => result)
       const images = results.slice(0, IMAGE_LIMIT).map(result => ({
         type: /** @type {const} */ ("image"),

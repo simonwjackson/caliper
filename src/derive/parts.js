@@ -74,10 +74,10 @@ function walkedParts(root) {
  *
  * @param {string} root
  * @param {string} file
+ * @param {string} [source] Optional take copy; no module is executed.
  * @returns {Part}
  */
-function readPart(root, file) {
-  const source = readFileSync(join(root, file), "utf8")
+export function readPart(root, file, source = readFileSync(join(root, file), "utf8")) {
   const name = stringExport(source, "name") ?? nameFromFile(file)
   const note = stringExport(source, "note")
   const states = [DEFAULT_STATE, ...namedStates(file, source)]

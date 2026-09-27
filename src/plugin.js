@@ -13,6 +13,7 @@ import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
+import { takeParts } from "./takes/parts.js"
 
 /**
  * @typedef {import("./types").CaliperOptions} CaliperOptions
@@ -29,6 +30,7 @@ export const CALIPER_PATH = "/__caliper"
 const CLIENT_DIR = fileURLToPath(new URL("./client/", import.meta.url))
 const CLIENT_FILES = new Map([
   ["chrome.js", "text/javascript"],
+  ["integration-review.js", "text/javascript"],
   ["chrome.css", "text/css"],
   ["device-frame.js", "text/javascript"],
   ["frame.js", "text/javascript"],
@@ -53,7 +55,8 @@ const TAKES_DELAY_MS = 100
 export function caliper(options = {}) {
   /** @type {string} */
   let root = process.cwd()
-  const overlay = takeOverlay(() => root)
+  let cacheDir = join(root, "node_modules/.vite")
+  const overlay = takeOverlay(() => root, () => cacheDir)
   /** @type {Record<string, string | undefined>} */
   let env = { ...process.env }
 
@@ -76,6 +79,7 @@ export function caliper(options = {}) {
 
     configResolved(config) {
       root = config.root
+      cacheDir = config.cacheDir
       // The shell's environment wins over .env files, as in Vite itself.
       env = { ...loadEnv(config.mode, typeof config.envDir === "string" ? config.envDir : root, ""), ...process.env }
     },
@@ -153,6 +157,7 @@ function createSession(server, root, options, env, overlay) {
   const streams = new Set()
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let refreshTimer
+  let closed = false
 
   /** @param {string} specifier @param {string} importer */
   const resolve = async (specifier, importer) => {
@@ -174,9 +179,12 @@ function createSession(server, root, options, env, overlay) {
 
   /** Derive again, and tell every open chrome when the result changed. */
   const refresh = () => {
+    if (closed) return
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(async () => {
+      if (closed) return
       const before = current ? (await current).json : null
+      if (closed) return
       current = null
       const after = (await load()).json
       if (after === before) return
@@ -205,12 +213,20 @@ function createSession(server, root, options, env, overlay) {
   let takesTimer
   /** Tell every open chrome about the takes, at most once per TAKES_DELAY_MS while an agent streams. */
   const takesChanged = () => {
+    if (closed) return
     takesTimer ??= setTimeout(() => {
       takesTimer = undefined
       const data = JSON.stringify(takes.snapshot())
       for (const stream of streams) stream.write(`event: takes\ndata: ${data}\n\n`)
     }, TAKES_DELAY_MS)
   }
+  server.httpServer?.once("close", () => {
+    closed = true
+    clearTimeout(refreshTimer)
+    clearTimeout(takesTimer)
+    for (const stream of streams) stream.end()
+    streams.clear()
+  })
   const takes = createTakesApi({
     store,
     status: agent.status,
@@ -256,7 +272,8 @@ function createSession(server, root, options, env, overlay) {
    */
   const sendFrame = async (partFile, stateName, take, response) => {
     const { project } = await load()
-    const part = project.parts.find(candidate => candidate.file === partFile)
+    const parts = take !== null && isTakeId(take) && store.record(take) !== null ? takeParts(store, take, project.parts) : project.parts
+    const part = parts.find(candidate => candidate.file === partFile)
     const problem = part === undefined
       ? `"${partFile}" is not a part of ${project.name}. Pick a part from the list.`
       : !part.states.some(state => state.export === stateName)

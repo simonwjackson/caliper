@@ -55,6 +55,31 @@ describe("fenceProjectPath", () => {
 })
 
 describe("the take store", () => {
+  test("metadata updates refuse aliases to real files", async () => {
+    await inFolder({ "package.json": "original" }, root => {
+      const store = createTakeStore(root)
+      const take = store.create(ask)
+      const metadata = join(root, ".caliper/takes", `${take}.json`)
+      rmSync(metadata)
+      symlinkSync(join(root, "package.json"), metadata)
+      expect(() => store.update(take, { name: "Unsafe" })).toThrow("symbolic link")
+      expect(readFileSync(join(root, "package.json"), "utf8")).toBe("original")
+    })
+  })
+
+  test("reset and write refuse a take folder aliased to the project", async () => {
+    await inFolder({ "src/a.css": "original" }, root => {
+      const store = createTakeStore(root)
+      const take = store.create(ask)
+      const folder = join(root, ".caliper/takes", take)
+      rmSync(folder, { recursive: true })
+      symlinkSync(root, folder)
+      expect(() => store.reset(take, "src/a.css")).toThrow("symbolic link")
+      expect(() => store.write(take, "src/a.css", "unsafe")).toThrow("symbolic link")
+      expect(readFileSync(join(root, "src/a.css"), "utf8")).toBe("original")
+    })
+  })
+
   test("numbers takes from 1 and keeps .caliper out of Git", async () => {
     await inFolder({}, root => {
       const store = createTakeStore(root)

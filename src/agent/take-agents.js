@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import { Agent } from "@earendil-works/pi-agent-core"
 import { DEVICES } from "../client/device-frame.js"
 import { takeTools } from "./tools.js"
+import { metadataTools } from "./metadata-tools.js"
+import { createIntegrationReview } from "../takes/integration.js"
 
 /**
  * @typedef {import("./model.js").Engine} Engine
@@ -37,6 +39,7 @@ export const MAX_TURNS = 40
 export function createTakeAgents({ store, engine, renderFor, onChange }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
+  const integration = createIntegrationReview(store)
 
   /**
    * Start a new take of a part and give its agent the first prompt.
@@ -45,7 +48,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
    * @returns {string} the take number
    */
   const start = ({ prompt, ...ask }) => {
-    const take = store.create(ask)
+    const take = store.create({ ...ask, ...(ask.direction ? { name: ask.direction.title } : {}) })
     void send(take, prompt)
     return take
   }
@@ -71,6 +74,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   /** @param {string} take */
   const accept = take => {
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it before you accept it.`)
+    if (store.record(take)?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
     const changed = store.accept(take)
     live.delete(take)
     onChange()
@@ -97,6 +101,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
       device: record.device,
       created: record.created,
       ...(record.direction === undefined ? {} : { direction: record.direction }),
+      ...(record.name ? { name: record.name } : {}),
+      ...(!record.name && !record.direction && state?.run._tag !== "Running" ? { nameIssue: "No generated name. Ask the agent to name this take." } : {}),
+      ...(record.integration ? { integration: integration.summary(take) } : {}),
       run: state?.run ?? { _tag: "Idle" },
       files: store.files(take),
       log: state?.log ?? [],
@@ -144,7 +151,10 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
    */
   const createAgent = (take, ask, render, entry) => {
     const { models, model, reasoning } = engine()
-    const tools = takeTools({ store, take, render, defaults: { state: ask.state, device: ask.device } })
+    const tools = [
+      ...takeTools({ store, take, render, defaults: { state: ask.state, device: ask.device } }),
+      ...metadataTools({ store, take, onChange, integration }),
+    ]
     let turns = 0
     const agent = new Agent({
       initialState: { systemPrompt: systemPrompt(take), model, thinkingLevel: reasoning, tools },
@@ -165,7 +175,29 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     return agent
   }
 
-  return { start, follow, stop, accept, discard, views }
+  /** @param {string} take */
+  const assertIdle = take => {
+    if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
+  }
+
+  /** Prepare separately so the original experiment remains available for replacement. @param {string} source */
+  const alternate = source => {
+    assertIdle(source)
+    const take = integration.begin(source)
+    void send(take, INTEGRATION_PROMPT)
+    return take
+  }
+
+  /** @param {string} take @param {string} revision @param {boolean} behaviorReviewed */
+  const apply = (take, revision, behaviorReviewed) => {
+    assertIdle(take)
+    const files = integration.apply(take, revision, behaviorReviewed)
+    live.delete(take)
+    onChange()
+    return files
+  }
+
+  return { start, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**
@@ -258,13 +290,21 @@ Terms:
 Tools: read_file, list_files, edit_file and write_file work on project files as this take sees them. render shows the take in a headless browser and returns a verdict and screenshots.
 
 How to work:
-1. Read the files you need before you change them. Keep the project's structure, naming and CSS style.
+1. Call name_take with a short descriptive name for this design, unless the existing direction title already fits. Read the files you need before you change them. Keep the project's structure, naming and CSS style.
 2. Make the smallest change that does what the user asked.
 3. Call render after each change. Fix every problem and console error. A spill is content past the screen edge: fix it, or say why it is intended.
 4. Stop when the request is done and the render is clean. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
 
 Do not ask the user questions. When a request is unclear, make a sensible choice and say which one.`
 }
+
+const INTEGRATION_PROMPT = `Prepare this experiment as an additional supported choice, not a replacement. You are working in a separate proposal take copied from the experiment. No real files have changed.
+
+Read the original files with read_original. Preserve every existing caller's default behavior and every existing part state's output. Reuse an existing variant mechanism when the design fits it; otherwise add a separate named component sharing unchanged dependencies. Do not blindly duplicate behavior or change a global token for the alternate. Use reset_file to remove experiment edits that would change existing callers.
+
+Add an explicit product-owned part state that demonstrates the alternate. Keep existing states unchanged. You may add a new part file. The render tool accepts part and state so you can inspect both original and alternate. Keep real actions and local fixture behavior. Do not introduce request interception or replace child fixtures in a composed scenario.
+
+Render the alternate and original states. Then call submit_integration with strategy, summary, shared behavior, preserved defaults, exact caller usage, and preview part/state. Do not claim screenshots prove interaction behavior or type safety. The user will inspect diffs, run render checks, and confirm product checks separately. Stop after submitting. Never apply changes yourself.`
 
 /**
  * The part of the first message that gives the take its direction, so

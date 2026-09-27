@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { manifest, withProject } from "./project-server.js"
+import { createTakeStore } from "../src/takes/store.js"
+import { createIntegrationReview } from "../src/takes/integration.js"
 
 const files = {
   "package.json": manifest(),
@@ -89,6 +91,45 @@ describe("the takes API", () => {
       const accepted = await post(url, `/__caliper/takes/${take}/accept`, {})
       expect(await accepted.json()).toEqual({ take, files: ["src/app.css"] })
       expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("red")
+    })
+  })
+
+  test("serves take-only preview parts and states without adding them to the real project", async () => {
+    await withProject({ files }, async ({ root, get, project }) => {
+      const store = createTakeStore(root)
+      const take = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m" })
+      store.write(take, "src/Alternate.part.tsx", "export default () => <button>Alternate</button>\nexport const Quiet = () => <button>Quiet</button>")
+      expect((await get(`/__caliper/frame?part=src/Alternate.part.tsx&state=Quiet&take=${take}`)).status).toBe(200)
+      expect((await get(`/__caliper/frame?part=src/Alternate.part.tsx&state=Quiet`)).status).toBe(404)
+      expect((await get(`/__caliper/frame?part=src/Alternate.part.tsx&state=Missing&take=${take}`)).status).toBe(404)
+      expect((await project()).parts).toHaveLength(1)
+      store.write(take, "src/New.ts", "export const value = 42")
+      store.write(take, "src/New.part.tsx", 'import { value } from "./New"; export default function Part() { return value }')
+      const module = await get(`/src/New.part.tsx?take=${take}`)
+      expect(module.status).toBe(200)
+      expect(await module.text()).toContain(`/src/New.ts?take=${take}`)
+      expect((await get(`/src/New.ts?take=${take}`)).status).toBe(200)
+      expect((await get("/src/New.ts")).status).toBe(404)
+    })
+  })
+
+  test("requires review, checks, and explicit confirmation before applying an alternate", async () => {
+    await withProject({ files }, async ({ root, url }) => {
+      const store = createTakeStore(root)
+      const integration = createIntegrationReview(store)
+      const source = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m" })
+      store.write(source, "src/app.css", ".chip { color: red }")
+      const take = integration.begin(source)
+      store.reset(take, "src/app.css")
+      store.write(take, "src/Alternate.part.tsx", "export default () => <button>Alternate</button>")
+      integration.submit(take, { strategy: "component", summary: "Separate alternate", shared: "Existing chip unchanged", preserved: "No existing files changed", usage: "Import Alternate", preview: { part: "src/Alternate.part.tsx", state: "default" } })
+      const review = await (await post(url, `/__caliper/takes/${take}/review`, {})).json()
+      expect(review.files[0].path).toBe("src/Alternate.part.tsx")
+      expect((await post(url, `/__caliper/takes/${take}/accept`, {})).status).toBe(400)
+      expect((await post(url, `/__caliper/takes/${take}/apply`, { revision: review.revision, behaviorReviewed: true })).status).toBe(400)
+      expect((await post(url, `/__caliper/takes/${take}/apply`, { revision: review.revision })).status).toBe(400)
+      expect(existsSync(join(root, "src/Alternate.part.tsx"))).toBe(false)
+      expect(store.record(source)).not.toBeNull()
     })
   })
 

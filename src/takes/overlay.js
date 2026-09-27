@@ -1,8 +1,8 @@
 // @ts-check
-import { existsSync, readFileSync } from "node:fs"
-import { dirname, join, relative, resolve as resolvePath } from "node:path"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path"
 import { parse as parseCss } from "postcss"
-import { isTakeId, TAKES_DIR } from "./store.js"
+import { fenceProjectPath, isTakeId, TAKES_DIR } from "./store.js"
 
 /**
  * A take is overlaid on the real project inside the one Vite server.
@@ -61,6 +61,31 @@ export function copyFor(root, take, file) {
 function isProjectSource(root, file) {
   const inside = relative(root, file)
   return !inside.startsWith("..") && !inside.includes("node_modules") && !inside.startsWith(TAKES_DIR)
+}
+
+/** Resolve only local new modules; package resolution remains Vite's job.
+ * @param {string} root @param {string} take @param {string} source @param {string | undefined} importer
+ */
+function addedModule(root, take, source, importer) {
+  const path = fileOf(source)
+  const absolute = path.startsWith(`${root}/`) ? path
+    : path.startsWith("/@fs/") ? path.slice(4)
+      : path.startsWith("/") ? join(root, path)
+        : path.startsWith(".") && importer ? resolvePath(dirname(fileOf(importer)), path) : null
+  if (!absolute || !isProjectSource(root, absolute)) return null
+  const query = new URLSearchParams(source.split("?")[1] ?? "")
+  query.delete("take")
+  const suffix = query.size ? `?${query}` : ""
+  for (const extension of ["", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json", "/index.tsx", "/index.ts", "/index.jsx", "/index.js"]) {
+    const logical = `${absolute}${extension}`
+    const file = relative(root, logical)
+    if (fenceProjectPath(root, file)._tag !== "Inside") continue
+    const folder = join(root, TAKES_DIR, take)
+    if (!existsSync(folder) || fenceProjectPath(folder, file)._tag !== "Inside") continue
+    const copy = copyFor(root, take, logical)
+    if (copy && statSync(copy).isFile()) return withTake(`${logical}${suffix}`, take)
+  }
+  return null
 }
 
 // A top-level `@import "x";` or `@import url(x);` with no layer, media or supports condition.
@@ -137,8 +162,15 @@ export function flattenStylesheets(root, take, stylesheets) {
  * plugin calls them from its own hooks.
  *
  * @param {() => string} getRoot
+ * @param {() => string} [getCacheDir] Vite's prebundled dependencies are never project source.
  */
-export function takeOverlay(getRoot) {
+export function takeOverlay(getRoot, getCacheDir = () => join(getRoot(), "node_modules/.vite")) {
+  /** @param {string} file */
+  const sourceFile = file => {
+    const cacheRelative = relative(getCacheDir(), file)
+    const cached = cacheRelative === "" || (!cacheRelative.startsWith("..") && !isAbsolute(cacheRelative))
+    return !cached && isProjectSource(getRoot(), file)
+  }
   // Only imports scheduled by a frame can be removed from its CSS. Component
   // CSS now loads through the part, so it is no longer flattened by default.
   /** @type {Map<string, Set<string>>} */
@@ -171,13 +203,20 @@ export function takeOverlay(getRoot) {
      * @param {any} options
      */
     async resolveId(source, importer, options) {
-      if (!importer || takeOf(source) !== null) return null
-      const take = takeOf(importer)
+      const take = takeOf(source) ?? (importer ? takeOf(importer) : null)
       if (take === null) return null
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true })
-      if (!resolved || resolved.external) return resolved
-      if (!isProjectSource(getRoot(), fileOf(resolved.id))) return resolved
-      return { ...resolved, id: withTake(resolved.id, take) }
+      if (resolved?.external) return resolved
+      if (resolved && !sourceFile(fileOf(resolved.id))) return resolved
+      // Vite cannot resolve a file that exists only in the take. Resolve local
+      // imports against their logical project path, never create placeholder
+      // files in the real project just to satisfy its filesystem resolver.
+      if (!resolved || !existsSync(fileOf(resolved.id))) {
+        const added = addedModule(getRoot(), take, resolved?.id ?? source, importer)
+        if (added) return added
+      }
+      if (!resolved) return null
+      return takeOf(resolved.id) ? resolved : { ...resolved, id: withTake(resolved.id, take) }
     },
 
     /**
@@ -190,7 +229,7 @@ export function takeOverlay(getRoot) {
       if (take === null) return null
       const root = getRoot()
       const file = fileOf(id)
-      if (!isProjectSource(root, file)) return null
+      if (!sourceFile(file)) return null
       const copy = copyFor(root, take, file)
       if (copy) this.addWatchFile(copy)
       if (!file.endsWith(".css")) return copy ? readFileSync(copy, "utf8") : null
