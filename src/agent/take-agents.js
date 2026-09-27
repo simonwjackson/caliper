@@ -13,7 +13,7 @@ import { createIntegrationReview } from "../takes/integration.js"
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").TakeRun} TakeRun
  * @typedef {import("../types").TakeLogEntry} TakeLogEntry
- * @typedef {{ part: string, state: string, device: string, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
  *   `direction` is the planner's way for this take to answer the prompt;
  *   `others` are the titles of the directions its sibling takes got.
  * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[] }} Live
@@ -100,6 +100,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
       state: record.state,
       device: record.device,
       created: record.created,
+      ...(record.context === undefined ? {} : { context: record.context }),
       ...(record.direction === undefined ? {} : { direction: record.direction }),
       ...(record.name ? { name: record.name } : {}),
       ...(!record.name && !record.direction && state?.run._tag !== "Running" ? { nameIssue: "No generated name. Ask the agent to name this take." } : {}),
@@ -151,8 +152,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
    */
   const createAgent = (take, ask, render, entry) => {
     const { models, model, reasoning } = engine()
+    const preview = ask.context ?? ask
     const tools = [
-      ...takeTools({ store, take, render, defaults: { state: ask.state, device: ask.device } }),
+      ...takeTools({ store, take, render, defaults: { part: preview.part, state: preview.state, device: ask.device } }),
       ...metadataTools({ store, take, onChange, integration }),
     ]
     let turns = 0
@@ -249,7 +251,7 @@ function lastAssistant(log) {
  * @param {Record<string, unknown>} args
  */
 function subjectOf(name, args) {
-  if (name === "render") return [args?.state, args?.device].filter(Boolean).join("@") || "as asked"
+  if (name === "render") return args?.related ? "all declared related scenarios" : [args?.part, args?.state, args?.device].filter(Boolean).join("@") || "as asked"
   if (name === "list_files") return String(args?.folder || ".")
   return String(args?.path ?? "")
 }
@@ -269,7 +271,7 @@ function detailOf(result, isError) {
         verdict.console?.length ? `${verdict.console.length} console errors` : "",
         verdict.spill ? "spill" : "",
       ].filter(Boolean).join(", ")
-      return `${verdict.state}@${verdict.device}: ${verdict.frame}${notes ? ` (${notes})` : ""}`
+      return `${verdict.part} · ${verdict.state}@${verdict.device}: ${verdict.frame}${notes ? ` (${notes})` : ""}`
     }).join("; ")
   }
   return text.split("\n")[0]?.slice(0, 200) ?? ""
@@ -285,6 +287,8 @@ You work on take ${take}. A take is one proposed version of a part. Your edits g
 Terms:
 - A part is a file named *.part.tsx. Its default export and its other exported components are its states: example renders with realistic data.
 - The part renders the project's real components with the project's real CSS. To change how something looks, edit the component or its CSS, not the part file. Edit the part file only when the user asks about its example data or states.
+- A take belongs to one editing subject and state. Its preview can be a different, product-owned composed scenario. Keep that scenario's real data flow; never substitute an isolated child fixture into it.
+- The subject is the requested editing focus, not a new filesystem restriction. Your writes are fenced to your take folder; accepting shared source edits affects other states and consumers too.
 - Devices: ${devices}. Every size you see is the device's CSS viewport.
 
 Tools: read_file, list_files, edit_file and write_file work on project files as this take sees them. render shows the take in a headless browser and returns a verdict and screenshots.
@@ -292,8 +296,8 @@ Tools: read_file, list_files, edit_file and write_file work on project files as 
 How to work:
 1. Call name_take with a short descriptive name for this design, unless the existing direction title already fits. Read the files you need before you change them. Keep the project's structure, naming and CSS style.
 2. Make the smallest change that does what the user asked.
-3. Call render after each change. Fix every problem and console error. A spill is content past the screen edge: fix it, or say why it is intended.
-4. Stop when the request is done and the render is clean. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
+3. Call render after each change. It defaults to the selected preview. Before finishing, also call render with related:true to check all subject states and declared composed scenarios. Fix errors, and explain intentional Empty results or spill. Empty means nothing rendered, not automatically a defect.
+4. State what you checked and what remains unverified. Screenshots do not prove interactions, fixture isolation, or undeclared consumers. Stop when the request is done and the declared checks are clean. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
 
 Do not ask the user questions. When a request is unclear, make a sensible choice and say which one.`
 }
@@ -333,16 +337,19 @@ function directionText(ask) {
  */
 async function firstMessage(ask, prompt, render, store, take) {
   const source = store.read(take, ask.part)
+  const preview = ask.context ?? ask
+  const contextSource = ask.context !== undefined && ask.context.part !== ask.part
+    ? `\n\n<file path="${ask.context.part}">\n${store.read(take, ask.context.part)}\n</file>` : ""
   /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
   const content = [{
     type: "text",
-    text: `${prompt}${directionText(ask)}\n\nThe part is ${ask.part}. The user is looking at its state "${ask.state}" on the device ${ask.device}.\n\n<file path="${ask.part}">\n${source}\n</file>`,
+    text: `${prompt}${directionText(ask)}\n\nThe editing subject is ${ask.part}, state "${ask.state}". The preview is ${preview.part}, state "${preview.state}", on ${ask.device}.\n${ask.context ? "This is a declared composed scenario. Edit the subject while preserving the page's real composition and fixture data flow." : "The preview shows the subject in isolation."}\n\n<file path="${ask.part}">\n${source}\n</file>${contextSource}`,
   }]
   try {
-    const [result] = await render({ state: ask.state, devices: [ask.device] })
+    const [result] = await render({ state: preview.state, devices: [ask.device] })
     if (result !== undefined) {
       const { png, ...verdict } = result
-      content.push({ type: "text", text: `How the part renders now:\n${JSON.stringify(verdict, null, 2)}` })
+      content.push({ type: "text", text: `How the selected preview renders now:\n${JSON.stringify(verdict, null, 2)}` })
       content.push({ type: "image", data: readFileSync(png).toString("base64"), mimeType: "image/png" })
     }
   } catch (error) {

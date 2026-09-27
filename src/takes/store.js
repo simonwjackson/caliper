@@ -19,9 +19,10 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
  *   `file` is root-relative, with forward slashes.
  * @typedef {{ title: string, brief: string }} Direction
  *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
- * @typedef {{ part: string, state: string, device: string, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration }} TakeRecord
- *   The part the take changes, the state and device it was asked about, when, the direction it was
- *   given, and the titles of the directions its sibling takes got from the same prompt.
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration }} TakeRecord
+ *   `part` and `state` identify the editing subject. Optional `context` identifies a declared
+ *   composed preview. It does not restrict edits beyond the existing take-folder fence.
+ *   Names, planner directions, and integration review metadata remain independent of that context.
  */
 
 export const CALIPER_DIR = ".caliper"

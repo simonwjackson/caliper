@@ -10,8 +10,10 @@ import { Type } from "typebox"
  * @typedef {import("@earendil-works/pi-agent-core").AgentTool<any>} AgentTool
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
  * @typedef {import("../render/render.js").RenderResult} RenderResult
- * @typedef {(request: { state: string, devices: string[], part?: string }) => Promise<RenderResult[]>} RenderTake
- *   Renders the take's part. `state` is an export name or "*".
+ * @typedef {(request: { state: string, devices: string[], part?: string, related?: boolean }) => Promise<RenderResult[]>} RenderTake
+ *   Renders the chosen preview by default. `part` selects the subject or a declared related
+ *   scenario, or an integration's alternate part. `related` checks every subject state and
+ *   declared context; `state` is ignored.
  */
 
 /** The most files list_files returns, so a large project does not flood the context. */
@@ -22,7 +24,7 @@ const READ_LIMIT = 200_000
 const IMAGE_LIMIT = 4
 
 /**
- * @param {{ store: TakeStore, take: string, render: RenderTake, defaults: { state: string, device: string } }} input
+ * @param {{ store: TakeStore, take: string, render: RenderTake, defaults: { part?: string, state: string, device: string } }} input
  * @returns {AgentTool[]}
  */
 export function takeTools({ store, take, render, defaults }) {
@@ -105,19 +107,26 @@ export function takeTools({ store, take, render, defaults }) {
     name: "render",
     label: "Render",
     description: [
-      "Render the part as this take changes it, in a headless browser at each device's CSS viewport. Returns a JSON verdict per state and device, and the screenshots.",
+      "Render the selected preview scenario as this take changes it, in a headless browser at each device's CSS viewport. Returns a JSON verdict per part, state and device, and screenshots.",
+      "Use related:true to check all states of the editing subject and their declared composed scenarios. This checks declared coverage only, not every possible consumer or interaction.",
       '`frame` is "Rendered", "Empty" or "Failed". `problems` are load and render errors with stacks. `console` holds browser errors. `spill` is null when the part fits the screen; otherwise it names the elements past the edge.',
       "Render after each change, and read the verdict before you look at the picture.",
     ].join(" "),
     parameters: Type.Object({
-      part: Type.Optional(Type.String({ description: "Optional root-relative part path, including a new part added by this take." })),
-      state: Type.Optional(Type.String({ description: `A state export of the part, or "*" for every state. Default: "${defaults.state}"` })),
+      part: Type.Optional(Type.String({ description: `An editing-subject part or declared related scenario. An integration proposal can also render its new alternate part. Default: the selected preview${defaults.part ? ` (${defaults.part})` : ""}.` })),
+      state: Type.Optional(Type.String({ description: `A state export, or "*" for every related state of this part (every state when preparing an integration). Default: "${defaults.state}" in the selected preview, or "default" when part changes.` })),
       device: Type.Optional(Type.String({ description: `A device id, or "*" for every device. Default: "${defaults.device}"` })),
+      related: Type.Optional(Type.Boolean({ description: "Check every subject state and its declared composed contexts. Ignores state; omit part." })),
     }),
     executionMode: "sequential",
     execute: async (_id, params) => {
-      const { state, device, part } = /** @type {{ state?: string, device?: string, part?: string }} */ (params)
-      const results = await render({ state: state ?? defaults.state, devices: [device ?? defaults.device], ...(part ? { part } : {}) })
+      const { state, device, part, related } = /** @type {{ state?: string, device?: string, part?: string, related?: boolean }} */ (params)
+      const results = await render({
+        state: state ?? (part !== undefined && part !== defaults.part ? "default" : defaults.state),
+        devices: [device ?? defaults.device],
+        ...(part === undefined ? {} : { part }),
+        ...(related === undefined ? {} : { related }),
+      })
       const verdicts = results.map(({ png: _png, ...result }) => result)
       const images = results.slice(0, IMAGE_LIMIT).map(result => ({
         type: /** @type {const} */ ("image"),

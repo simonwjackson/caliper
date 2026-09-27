@@ -78,6 +78,9 @@ export type Wrapper = {
 /** Declared composition level, ordered from the whole page to a leaf. */
 export type PartLayer = "page" | "template" | "organism" | "molecule" | "atom"
 
+/** A product-owned state, identified independently of where it is previewed. */
+export type StateRef = Readonly<import("typebox").Static<typeof import("./scenario-contract.js").StateRefSchema>>
+
 export type Part = {
   /** Root-relative path, for example "src/ui/atoms/PicoButton.atom.part.tsx". */
   readonly file: string
@@ -91,6 +94,10 @@ export type Part = {
   readonly layerSource?: SourceSite
   /** The part's states. The default export is always first. */
   readonly states: readonly PartState[]
+  /** Declared child states in each scenario. This metadata never changes how a state renders. */
+  readonly composition?: Readonly<Record<string, readonly StateRef[]>>
+  /** Invalid declarations are reported instead of supplying inferred relationships. */
+  readonly compositionProblems?: readonly string[]
 }
 
 /**
@@ -218,8 +225,11 @@ export type TakePlan = {
 /** One take, as the chrome shows it. */
 export type TakeView = {
   readonly take: string
+  /** The editing subject, independent of the composed preview. */
   readonly part: string
   readonly state: string
+  /** The product-owned scenario used for the initial preview. Absent for isolated takes. */
+  readonly context?: StateRef
   readonly device: string
   readonly created: number
   /** Generated descriptive name. Old records can omit it. */

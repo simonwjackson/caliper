@@ -2,14 +2,17 @@
 import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Check } from "typebox/value"
+import { StateRefSchema } from "../scenario-contract.js"
+import { discoverParts, PART_SUFFIX } from "../derive/parts.js"
 import { DEVICES } from "../client/device-frame.js"
+import { contextsFor, relatedStates, sameState, stateExists } from "../client/scenarios.js"
 import { planRenders } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
 import { isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
 import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
-import { takeParts } from "../takes/parts.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { Type } from "typebox"
 import { Value } from "typebox/value"
@@ -52,6 +55,23 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     return connectEngine(connection)
   }
 
+  /** @param {string} take */
+  const proposedParts = take => discoverParts(store.root, new Map(
+    store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]),
+  ))
+
+  /** An integration preserves the source take's subject and review context. @param {string} take */
+  const validateIntegrationContext = take => {
+    const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
+    const baseline = discoverParts(store.root)
+    validateTakeContext(baseline, record)
+    const proposed = proposedParts(take)
+    validateTakeContext(proposed, record)
+    const existing = new Set(baseline.flatMap(part => part.compositionProblems ?? []))
+    const problems = proposed.flatMap(part => part.compositionProblems ?? []).filter(problem => !existing.has(problem))
+    if (problems.length) throw new Error(`The proposed files have invalid composition declarations:\n${problems.join("\n")}`)
+  }
+
   /**
    * Render a part, as a take changes it or as the real files are.
    *
@@ -60,7 +80,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
    */
   const renderPart = async (part, { state, devices, take }) => {
     const original = await project()
-    const viewed = take === undefined ? original : { ...original, parts: takeParts(store, take, original.parts) }
+    const viewed = take === undefined ? original : { ...original, parts: proposedParts(take) }
     const plan = planRenders(viewed, { part, state, devices, ...(take === undefined ? {} : { take }) })
     if (plan._tag === "Invalid") throw new Error(plan.reason)
     if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
@@ -72,7 +92,16 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
   const agents = createTakeAgents({
     store,
     engine,
-    renderFor: (take, ask) => request => renderPart(request.part ?? ask.part, { ...request, take }),
+    renderFor: (take, ask) => async request => {
+      const original = await project()
+      validateTakeContext(original.parts, ask)
+      const viewed = { ...original, parts: proposedParts(take) }
+      const jobs = planTakeRenders(viewed, ask, request, take, Boolean(store.record(take)?.integration))
+      if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+      const url = serverUrl()
+      if (url === null) throw new Error("The dev server is not listening yet.")
+      return renderJobs({ url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium })
+    },
     onChange,
   })
 
@@ -86,6 +115,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     onChange()
     try {
       return await agents.integration.check(take, async () => {
+        validateIntegrationContext(take)
         const original = await project()
         const proposal = agents.integration.review(take).proposal
         if (original.parts.find(part => part.file === proposal.preview.part)?.states.some(state => state.export === proposal.preview.state)) {
@@ -120,14 +150,17 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     }
     const connected = engine()
     /** @type {import("./planner.js").Content[]} */
-    const context = [{ type: "text", text: `<file path="${ask.part}">\n${readFileSync(join(store.root, ask.part), "utf8")}\n</file>` }]
+    const context = [...new Set([ask.part, ask.context?.part].filter(file => file !== undefined))].map(file => ({
+      type: "text", text: `<file path="${file}">\n${readFileSync(join(store.root, file), "utf8")}\n</file>`,
+    }))
+    const preview = ask.context ?? ask
     try {
-      const [result] = await renderPart(ask.part, { state: ask.state, devices: [ask.device] })
+      const [result] = await renderPart(preview.part, { state: preview.state, devices: [ask.device] })
       if (result !== undefined) context.push({ type: "image", data: readFileSync(result.png).toString("base64"), mimeType: "image/png" })
     } catch (error) {
       context.push({ type: "text", text: `Caliper could not render the part: ${error instanceof Error ? error.message : String(error)}` })
     }
-    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context })
+    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, ...(ask.context === undefined ? {} : { preview: ask.context }) })
   }
 
   /** @returns {TakesSnapshot} */
@@ -168,6 +201,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       }
       if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
       if (action === "alternate") {
+        validateTakeContext(discoverParts(store.root), /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
         json(response, 201, { take: agents.alternate(take) })
       } else if (action === "review") {
         agents.assertIdle(take)
@@ -177,15 +211,24 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       } else if (action === "apply") {
         agents.assertIdle(take)
         if (!Value.Check(applySchema, body)) throw new Error("Apply needs the reviewed revision and confirmation of product checks.")
+        validateIntegrationContext(take)
         const files = agents.apply(take, body.revision, body.behaviorReviewed)
         json(response, 200, { take, files })
       } else if (action === "prompt") {
+        validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
         agents.follow(take, validPrompt(body))
         json(response, 200, { take })
       } else if (action === "stop") {
         agents.stop(take)
         json(response, 200, { take })
       } else if (action === "accept") {
+        const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
+        validateTakeContext((await project()).parts, record)
+        const overrides = new Map(store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]))
+        const proposed = discoverParts(store.root, overrides)
+        validateTakeContext(proposed, record)
+        const problems = proposed.flatMap(part => part.compositionProblems ?? [])
+        if (problems.length) throw new Error(`The proposed files have invalid composition declarations:\n${problems.join("\n")}`)
         json(response, 200, { take, files: agents.accept(take) })
       } else if (action === "discard") {
         agents.discard(take)
@@ -201,18 +244,86 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
 
   /** @param {unknown} body */
   const validAsk = async body => {
-    const { part, state, device } = /** @type {Record<string, unknown>} */ (body ?? {})
+    const { part, state, device, context } = /** @type {Record<string, unknown>} */ (body ?? {})
     const prompt = validPrompt(body)
-    const known = (await project()).parts.find(candidate => candidate.file === part)
+    const parts = (await project()).parts
+    const known = parts.find(candidate => candidate.file === part)
     if (known === undefined) throw new Error(`"${part}" is not a part.`)
     const stateName = typeof state === "string" ? state : "default"
     if (!known.states.some(candidate => candidate.export === stateName)) throw new Error(`${known.file} has no state "${stateName}".`)
     const deviceId = typeof device === "string" ? device : DEVICES[0]?.id ?? ""
     if (!DEVICES.some(candidate => candidate.id === deviceId)) throw new Error(`Caliper has no device "${deviceId}".`)
-    return { part: known.file, state: stateName, device: deviceId, prompt }
+    const ask = { part: known.file, state: stateName, device: deviceId, prompt, ...(context === undefined ? {} : { context: readContext(context) }) }
+    validateTakeContext(parts, ask)
+    return ask
   }
 
   return { handle, snapshot }
+}
+
+/**
+ * Validate a persisted or requested subject and its composed preview against the current project.
+ * A missing relationship must never turn a composed review into an isolated one.
+ *
+ * @param {readonly import("../types").Part[]} parts
+ * @param {import("../types").StateRef & { context?: import("../types").StateRef }} ask
+ */
+export function validateTakeContext(parts, ask) {
+  if (!stateExists(parts, ask)) throw new Error(`The take's subject ${ask.part} · ${ask.state} no longer exists.`)
+  if (ask.context === undefined) return
+  const context = readContext(ask.context)
+  if (!stateExists(parts, context)) throw new Error(`The preview scenario ${context.part} · ${context.state} no longer exists.`)
+  if (!contextsFor(parts, ask).some(candidate => sameState(candidate, context))) {
+    throw new Error(`${context.part} · ${context.state} is not a declared context for ${ask.part} · ${ask.state}. Choose a declared preview scenario.`)
+  }
+}
+
+/** @param {unknown} raw @returns {import("../types").StateRef} */
+function readContext(raw) {
+  if (!Check(StateRefSchema, raw)) {
+    throw new Error("A preview context needs a part path and a state export, with no extra fields.")
+  }
+  return { part: raw.part, state: raw.state }
+}
+
+/**
+ * Regular takes render only the subject's own states and declared composed scenarios.
+ * Integrations can explicitly render new alternate states and parts. Their default remains
+ * the selected composed preview, and related checks still use the declared scenario graph.
+ *
+ * @param {Project} project
+ * @param {import("../types").StateRef & { context?: import("../types").StateRef }} ask
+ * @param {Parameters<import("./tools.js").RenderTake>[0]} request
+ * @param {string} take
+ * @param {boolean} [integration] Whether this is a separately prepared alternate proposal.
+ * @returns {import("../render/plan.js").RenderJob[]}
+ */
+export function planTakeRenders(project, ask, request, take, integration = false) {
+  validateTakeContext(project.parts, ask)
+  const allowed = relatedStates(project.parts, ask)
+  if (request.related && request.part !== undefined) throw new Error("Use related without a part override to check all declared scenarios.")
+  const preview = ask.context ?? ask
+  const part = request.part ?? preview.part
+  if (integration && !request.related) {
+    const plan = planRenders(project, { part, state: request.state, devices: request.devices, take })
+    if (plan._tag === "Invalid") throw new Error(plan.reason)
+    return plan.jobs
+  }
+  const targets = request.related ? allowed
+    : request.state === "*" ? allowed.filter(ref => ref.part === part)
+      : [{ part, state: request.state }]
+  if (targets.length === 0) throw new Error(`No declared states of ${part} are related to this take.`)
+  /** @type {Map<string, import("../render/plan.js").RenderJob>} */
+  const jobs = new Map()
+  for (const target of targets) {
+    if (!allowed.some(candidate => sameState(candidate, target))) {
+      throw new Error(`${target.part} · ${target.state} is not the take's subject or a declared related scenario.`)
+    }
+    const plan = planRenders(project, { ...target, devices: request.devices, take })
+    if (plan._tag === "Invalid") throw new Error(plan.reason)
+    for (const job of plan.jobs) jobs.set(JSON.stringify([job.part, job.state, job.device]), job)
+  }
+  return [...jobs.values()]
 }
 
 /**

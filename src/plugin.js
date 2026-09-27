@@ -33,6 +33,7 @@ const CLIENT_FILES = new Map([
   ["integration-review.js", "text/javascript"],
   ["chrome.css", "text/css"],
   ["device-frame.js", "text/javascript"],
+  ["scenarios.js", "text/javascript"],
   ["frame.js", "text/javascript"],
   ["frame.css", "text/css"],
 ])
@@ -303,6 +304,7 @@ function createSession(server, root, options, env, overlay) {
       warnings: [
         ...(project.css._tag === "Failed" ? [`${project.css.reason} ${project.css.hint}`] : []),
         ...(flat?.problems ?? []),
+        ...(part?.compositionProblems ?? []).map(problem => `Composition: ${problem}`),
       ],
       wrapper,
       react: `${base}/@id/__x00__${RESOLVED_REACT_MODULE.slice(1)}`,

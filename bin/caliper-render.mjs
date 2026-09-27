@@ -24,7 +24,7 @@ Options:
              replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
   --chromium Chromium executable. Default: the CHROMIUM environment variable
-  --list     Print every part with its states, and the devices, as JSON
+  --list     Print every part with its states, composition links and problems, and devices, as JSON
 
 Output: one JSON object on stdout.
   { "results": [ { part, state, device, take?, viewport, frame, png, problems, console, spill } ] }
@@ -94,7 +94,11 @@ const project = await fetch(new URL("/__caliper/project.json", url))
 if (args.list) {
   print({
     project: project.name,
-    parts: project.parts.map(part => ({ file: part.file, name: part.name, states: part.states.map(state => state.export) })),
+    parts: project.parts.map(part => ({
+      file: part.file, name: part.name, states: part.states.map(state => state.export),
+      ...(part.composition === undefined ? {} : { composition: part.composition }),
+      ...(part.compositionProblems === undefined ? {} : { compositionProblems: part.compositionProblems }),
+    })),
     devices: DEVICES.map(device => ({ id: device.id, name: device.name, cssWidth: device.cssWidth, cssHeight: device.cssHeight, widthMm: device.widthMm })),
   })
   process.exit(0)

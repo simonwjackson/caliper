@@ -7,6 +7,7 @@
  *   CHROMIUM=/path/to/chromium node scripts/verify-takes.mjs \
  *     --url http://127.0.0.1:5173 --part src/ui/atoms/Button.atom.part.tsx \
  *     --prompt "Make the button red" [--takes 2] [--out /tmp/caliper-takes]
+ *     [--state MissingArt --context-part src/Home.page.part.tsx --context-state NoArtwork]
  *
  * It types the prompt in the chrome, starts the takes, waits until every
  * agent is done, checks that each take frame renders, and takes screenshots
@@ -23,6 +24,9 @@ const { values: args } = parseArgs({
   options: {
     url: { type: "string" },
     part: { type: "string" },
+    state: { type: "string", default: "default" },
+    "context-part": { type: "string" },
+    "context-state": { type: "string", default: "default" },
     prompt: { type: "string" },
     takes: { type: "string", default: "2" },
     out: { type: "string", default: "/tmp/caliper-takes" },
@@ -45,11 +49,19 @@ try {
   page.on("pageerror", error => failures.push(`chrome page error: ${error.message}`))
   await page.goto(base)
   await page.evaluate(() => localStorage.setItem("caliper:takes-open", "true"))
-  await page.goto(`${base}#part=${encodeURIComponent(args.part)}&device=rg353m`)
+  const selection = new URLSearchParams({ part: args.part, state: args.state, device: "rg353m" })
+  if (args["context-part"]) {
+    selection.set("contextPart", args["context-part"])
+    selection.set("contextState", args["context-state"])
+  }
+  await page.goto(`${base}#${selection}`)
   // A hash-only change does not reload the page, and the chrome reads the hash when it loads.
   await page.reload()
   await page.locator(".cal-agent").filter({ hasNotText: "Connecting" }).waitFor()
   assert.equal(await page.locator('.cal-part[aria-current="true"]').getAttribute("title"), args.part, `${args.part} is a part of the project`)
+  if (args["context-part"]) {
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("contextPart"), args["context-part"], "the selected context is declared")
+  }
   const agent = await page.locator(".cal-agent").textContent()
   console.log(`agent: ${agent}`)
   assert(!(await page.locator(".cal-prompt").isDisabled()), "the prompt box is enabled, so the agent is ready")
@@ -99,6 +111,11 @@ try {
   })))
   console.log(JSON.stringify(cells))
   for (const cell of cells) assert.equal(cell.frame, "Rendered", `${cell.key} rendered`)
+  if (args["context-part"]) {
+    const snapshot = await (await fetch(new URL("takes.json", base))).json()
+    const selected = snapshot.takes.filter((/** @type {import("../src/types").TakeView} */ take) => take.part === args.part && take.state === args.state)
+    assert(selected.some((/** @type {import("../src/types").TakeView} */ take) => take.context?.part === args["context-part"] && take.context?.state === args["context-state"]), "the take records its subject and composed context")
+  }
   const log = await page.locator(".cal-log").innerText()
   console.log(`log of the selected take:\n${log.slice(0, 1500)}`)
 

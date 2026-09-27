@@ -146,6 +146,77 @@ describe("the takes API", () => {
   })
 })
 
+describe("declared preview scenarios", () => {
+  const context = { part: "src/Home.part.tsx", state: "Ready" }
+  const composedFiles = {
+    ...files,
+    "src/Home.part.tsx": 'export default function Part() { return null }\nexport function Ready() { return null }\nexport const composition = { Ready: [{ part: "src/Chip.part.tsx", state: "default" }] }\n',
+  }
+  const ask = { part: "src/Chip.part.tsx", state: "default", prompt: "Red", context }
+
+  test("the API persists the editing subject separately from its composed preview", async () => {
+    await withProject({ files: composedFiles }, async ({ url, get, root }) => {
+      const created = await post(url, "/__caliper/takes", ask)
+      expect(created.status).toBe(201)
+      const { take } = await created.json()
+      expect(await settledTake(get, take)).toMatchObject({ part: ask.part, state: ask.state, context })
+      expect(JSON.parse(readFileSync(join(root, `.caliper/takes/${take}.json`), "utf8"))).toMatchObject({ part: ask.part, state: ask.state, context })
+    })
+  })
+
+  test("create and plan reject malformed, missing and undeclared contexts before model work", async () => {
+    await withProject({ files: composedFiles }, async ({ url }) => {
+      for (const path of ["/__caliper/takes", "/__caliper/takes/plan"]) {
+        for (const invalid of [null, "Ready", {}, { part: context.part }, { ...context, extra: true }, { part: "../secret", state: "default" }, { ...context, state: "default" }]) {
+          const response = await post(url, path, { ...ask, context: invalid, count: 2 })
+          expect(response.status).toBe(400)
+          expect((await response.json()).error).not.toContain("agent is off")
+        }
+      }
+    })
+  })
+
+  test("accept validates proposed part metadata before copying any files", async () => {
+    await withProject({ files: composedFiles }, async ({ url, get, write, root }) => {
+      const { take } = await (await post(url, "/__caliper/takes", ask)).json()
+      await settledTake(get, take)
+      write(`.caliper/takes/${take}/src/app.css`, ".chip { color: red }\n")
+      write(`.caliper/takes/${take}/src/Home.part.tsx`, "export default function Part() { return null }\nexport function Ready() { return null }\n")
+      const rejected = await post(url, `/__caliper/takes/${take}/accept`, {})
+      expect(rejected.status).toBe(400)
+      expect((await rejected.json()).error).toContain("not a declared context")
+      expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("blue")
+      expect(existsSync(join(root, `.caliper/takes/${take}.json`))).toBe(true)
+      write(`.caliper/takes/${take}/src/Home.part.tsx`, composedFiles["src/Home.part.tsx"])
+      expect((await post(url, `/__caliper/takes/${take}/accept`, {})).status).toBe(200)
+      expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("red")
+    })
+  })
+
+  test("a removed relationship blocks follow-up and accept but still permits discard", async () => {
+    await withProject({ files: composedFiles }, async ({ url, get, write, project, root }) => {
+      const { take } = await (await post(url, "/__caliper/takes", ask)).json()
+      await settledTake(get, take)
+      write(`.caliper/takes/${take}/src/app.css`, ".chip { color: red }\n")
+      write("src/Home.part.tsx", "export default function Part() { return null }\nexport function Ready() { return null }\n")
+      let refreshed = false
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (!(await project()).parts.find(part => part.file === context.part)?.composition) { refreshed = true; break }
+        await new Promise(resolve => setTimeout(resolve, 20))
+      }
+      expect(refreshed).toBe(true)
+      for (const action of ["prompt", "accept"]) {
+        const response = await post(url, `/__caliper/takes/${take}/${action}`, { prompt: "Again" })
+        expect(response.status).toBe(400)
+        expect((await response.json()).error).toContain("not a declared context")
+      }
+      expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("blue")
+      expect(existsSync(join(root, `.caliper/takes/${take}/src/app.css`))).toBe(true)
+      expect((await post(url, `/__caliper/takes/${take}/discard`, {})).status).toBe(200)
+    })
+  })
+})
+
 describe("the plan endpoint", () => {
   test("names the problem when the agent is off, or the count is wrong", async () => {
     await withProject({ files }, async ({ url }) => {

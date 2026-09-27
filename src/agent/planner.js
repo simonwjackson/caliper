@@ -38,12 +38,13 @@ const planTool = {
  *   state: string,
  *   device: string,
  *   context: Content[],
+ *   preview?: import("../types").StateRef,
  *   signal?: AbortSignal,
  * }} input
  *   `context` is what the planner sees of the part: its source and how it renders now.
  * @returns {Promise<TakePlan>}
  */
-export async function planDirections({ engine, prompt, count, part, state, device, context, signal }) {
+export async function planDirections({ engine, prompt, count, part, state, device, context, preview, signal }) {
   const { models, model, reasoning } = engine
   const message = await models.completeSimple(model, {
     systemPrompt: systemPrompt(count),
@@ -52,7 +53,7 @@ export async function planDirections({ engine, prompt, count, part, state, devic
       role: "user",
       timestamp: Date.now(),
       content: [
-        { type: "text", text: `The user's request: ${prompt}\n\nPropose up to ${count} directions. The part is ${part}; the user is looking at its state "${state}" on the device ${device}.` },
+        { type: "text", text: `The user's request: ${prompt}\n\nPropose up to ${count} directions. The editing subject is ${part}, state "${state}". The preview is ${preview?.part ?? part}, state "${preview?.state ?? state}", on ${device}.${preview ? " This is a product-owned composed scenario. Plan changes to the subject, not a replacement of the page with its standalone fixture." : ""}` },
         ...context,
       ],
     }],
@@ -105,6 +106,7 @@ A good set of directions:
 - Each direction is a real, reasonable answer to the request, not a strawman.
 - They differ in approach, not only in degree: different structure, different source of data, different emphasis, different trade-off. "Red" and "darker red" are one direction.
 - Each brief says concretely what that take changes (which component, CSS or example data) and how it differs from the others. Each agent sees only its own brief and the titles of the others.
+- When the preview differs from the editing subject, preserve the preview's real composition and fixture data flow. The scenario is where changes are judged, not permission to change unrelated components.
 
 Return fewer directions when the request has only one or two sensible answers, for example a precise fix or a narrow data change. Never invent a direction only to fill the count. When you return fewer, say why in one sentence in note.
 

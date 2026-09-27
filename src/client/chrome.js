@@ -1,6 +1,7 @@
 // @ts-check
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
 import { createIntegrationPanel } from "./integration-review.js"
+import { contextsFor, sameState, stateExists, subjectsOf } from "./scenarios.js"
 
 const integrationPanel = createIntegrationPanel()
 /** @param {TakeView} take */
@@ -27,7 +28,8 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
  * @typedef {import("../types").TakesSnapshot} TakesSnapshot
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").Direction} Direction
- * @typedef {{ part: string, state: string, device: string, prompt: string }} TakeAsk
+ * @typedef {import("../types").StateRef} StateRef
+ * @typedef {{ part: string, state: string, device: string, prompt: string, context?: StateRef }} TakeAsk
  * @typedef {{ _tag: "None" }
  *   | { _tag: "Planning", ask: TakeAsk, count: number, id: number }
  *   | { _tag: "Review", ask: TakeAsk, directions: Array<{ title: string, brief: string }>, note?: string }} Plan
@@ -69,6 +71,9 @@ const state = {
   part: saved.get("part"),
   /** @type {Shown} */
   shown: shownFrom(saved.get("state")),
+  /** The product-owned scenario used to judge the selected subject. @type {StateRef | null} */
+  context: saved.has("contextPart") ? { part: saved.get("contextPart") ?? "", state: saved.get("contextState") ?? "default" } : null,
+  contextNote: "",
   device: deviceById(saved.get("device") ?? localStorage.getItem(STORAGE_DEVICE)),
   pxPerMm: storedPxPerMm > 0 ? storedPxPerMm : DEFAULT_PX_PER_MM,
   calibrated: storedPxPerMm > 0,
@@ -97,9 +102,10 @@ const state = {
 /**
  * @param {string | null} take
  * @param {string} partState
+ * @param {string} part
  */
-function reportKey(take, partState) {
-  return `${take ?? ""}|${partState}`
+function reportKey(take, partState, part) {
+  return JSON.stringify([part, partState, take])
 }
 
 // ---------------------------------------------------------------- DOM helpers
@@ -251,12 +257,29 @@ function shownFrom(value) {
   return { _tag: "One", export: value ?? DEFAULT_STATE }
 }
 
-/** The takes of the selected part, oldest first. @returns {TakeView[]} */
-function partTakes() {
-  return state.takes?.takes.filter(take => take.part === state.part) ?? []
+/** @returns {StateRef | null} */
+function subjectRef() {
+  return state.part === null || state.shown._tag === "All" ? null : { part: state.part, state: state.shown.export }
 }
 
-/** The take whose conversation the panel shows, when it belongs to the selected part. */
+/** @returns {StateRef | null} */
+function previewRef() {
+  return state.context ?? subjectRef()
+}
+
+/** @param {StateRef} ref */
+function refLabel(ref) {
+  const part = currentProject()?.parts.find(part => part.file === ref.part)
+  const label = part?.states.find(candidate => candidate.export === ref.state)?.label ?? ref.state
+  return `${part?.name ?? ref.part} · ${label}`
+}
+
+/** Takes belong to the editing state, not the preview's component. @param {string} [exportName] @returns {TakeView[]} */
+function partTakes(exportName = subjectRef()?.state) {
+  return state.takes?.takes.filter(take => take.part === state.part && take.state === exportName) ?? []
+}
+
+/** The take whose conversation belongs to the selected editing state. */
 function currentTake() {
   return partTakes().find(take => take.take === state.take) ?? null
 }
@@ -282,6 +305,10 @@ function saveLocation() {
   else if (state.shown.export !== DEFAULT_STATE) params.set("state", state.shown.export)
   params.set("device", state.device.id)
   if (state.take) params.set("take", state.take)
+  if (state.context) {
+    params.set("contextPart", state.context.part)
+    params.set("contextState", state.context.state)
+  }
   history.replaceState(null, "", `#${params}`)
 }
 
@@ -289,6 +316,9 @@ function saveLocation() {
 function selectPart(file) {
   if (state.part !== file) state.take = null
   state.part = file
+  state.take = null
+  state.context = null
+  state.contextNote = ""
   state.shown = { _tag: "All" }
   state.expandedParts.set(file, true)
   showChanged()
@@ -296,7 +326,9 @@ function selectPart(file) {
 
 /** @param {string} file @param {string} exportName */
 function selectPartState(file, exportName) {
-  if (state.part !== file) state.take = null
+  if (state.part !== file) state.context = null
+  state.take = null
+  state.contextNote = ""
   state.part = file
   state.shown = { _tag: "One", export: exportName }
   showChanged()
@@ -306,11 +338,35 @@ function selectPartState(file, exportName) {
 function selectShown(shown) {
   if (JSON.stringify(shown) === JSON.stringify(state.shown)) return
   state.shown = shown
+  state.take = null
+  state.contextNote = ""
+  showChanged()
+}
+
+/** A stale declaration never silently selects another page scenario. */
+function reconcileContext() {
+  if (!state.context) return
+  const subject = subjectRef()
+  const parts = currentProject()?.parts ?? []
+  if (subject && contextsFor(parts, subject).some(ref => state.context !== null && sameState(ref, state.context))) return
+  state.contextNote = `The selected context is not declared for this state. Showing the isolated state; choose another Preview below.`
+  state.context = null
+}
+
+/** @param {StateRef} subject @param {StateRef | null} context */
+function selectSubject(subject, context) {
+  state.part = subject.part
+  state.expandedParts.set(subject.part, true)
+  state.shown = { _tag: "One", export: subject.state }
+  state.context = context
+  state.contextNote = ""
+  state.take = null
   showChanged()
 }
 
 function showChanged() {
-  state.reports = new Map()
+  reconcileContext()
+  state.plan = { _tag: "None" }
   saveLocation()
   renderParts()
   renderBar()
@@ -379,6 +435,7 @@ function renderParts() {
     list.append(h("p", { class: "cal-note" }, state.connection._tag === "Connecting" ? "Connecting to Vite…" : "Vite is not reachable."))
     return
   }
+  list.append(contextControls(project), unavailableTakes(project))
   const needle = state.filter.trim().toLowerCase()
   const shown = project.parts.filter(part => !needle || part.name.toLowerCase().includes(needle) || part.file.toLowerCase().includes(needle))
   count.textContent = state.connection._tag === "Unreachable"
@@ -432,7 +489,10 @@ function renderParts() {
     }
   }
   // Rebuilding the list must not discard focus after keyboard activation or HMR.
-  if (focused) [...list.querySelectorAll("button")].find(button => button.dataset.navKey === focused)?.focus({ preventScroll: true })
+  if (focused) {
+    const control = [...list.querySelectorAll("[data-nav-key]")].find(node => /** @type {HTMLElement} */ (node).dataset.navKey === focused)
+    if (control instanceof HTMLElement) control.focus({ preventScroll: true })
+  }
 }
 
 /**
@@ -443,31 +503,107 @@ function renderParts() {
 function stateList(part) {
   const shown = effectiveShown()
   const selected = part.file === state.part
-  const takes = selected ? partTakes().length : 0
-  const current = shown._tag === "All" ? null : shown.export
   return h("div", { class: "cal-states", role: "group", "aria-label": `${part.name} states` },
-    takes > 0
-      ? h("button", {
-        type: "button",
-        class: "cal-state cal-state-all",
-        "aria-current": shown._tag === "Takes" ? "true" : false,
-        title: "The original next to each take",
-        "data-state": TAKES_PREFIX,
-        onClick: () => selectShown({ _tag: "Takes", export: current ?? DEFAULT_STATE }),
-      }, `Compare ${takes} ${takes === 1 ? "take" : "takes"}`)
-      : null,
-    ...part.states.map(partState => h("button", {
-      type: "button",
-      class: "cal-state",
-      "aria-current": selected && shown._tag !== "All" && partState.export === shown.export ? "true" : false,
-      title: stateSite(part, partState),
-      "data-state": partState.export,
-      "data-nav-key": `state:${part.file}:${partState.export}`,
-      // Preserve comparison behavior only within the selected part's takes view.
-      onClick: () => selected && shown._tag === "Takes"
-        ? selectShown({ _tag: "Takes", export: partState.export })
-        : selectPartState(part.file, partState.export),
-    }, partState.label)))
+    ...part.states.map(partState => {
+      const takes = state.takes?.takes.filter(take => take.part === part.file && take.state === partState.export) ?? []
+      return h("div", { class: "cal-state-group", "data-state-group": partState.export },
+        h("button", {
+          type: "button", class: "cal-state",
+          "aria-current": selected && shown._tag !== "All" && partState.export === shown.export ? "true" : false,
+          title: stateSite(part, partState), "data-state": partState.export,
+          "data-nav-key": `state:${part.file}:${partState.export}`,
+          onClick: () => selectPartState(part.file, partState.export),
+        }, partState.label),
+        takes.length ? h("div", { class: "cal-state-takes" },
+          h("button", {
+            type: "button", class: "cal-state", "data-state": `${TAKES_PREFIX}${partState.export}`,
+            "aria-current": selected && shown._tag === "Takes" && shown.export === partState.export ? "true" : false,
+            "data-nav-key": `compare:${part.file}:${partState.export}`,
+            onClick: () => {
+              if (!selected) state.context = null
+              state.part = part.file
+              state.take = null
+              state.contextNote = ""
+              state.shown = { _tag: "Takes", export: partState.export }
+              showChanged()
+            },
+          }, `Compare ${takes.length} ${takes.length === 1 ? "take" : "takes"}`),
+          ...takes.map(take => h("button", {
+            type: "button", class: "cal-state", "data-take": take.take,
+            "data-nav-key": `take:${take.take}`,
+            "aria-current": state.take === take.take ? "true" : false,
+            onClick: () => selectTake(take.take),
+          }, `${takeName(take)} · Take ${take.take}`))) : null)
+    }))
+}
+
+/** Removed states keep their takes reachable for review and discard. @param {Project} project */
+function unavailableTakes(project) {
+  const stale = state.takes?.takes.filter(take => !stateExists(project.parts, take)) ?? []
+  const section = h("section", { class: "cal-unavailable", "aria-label": "Unavailable states" })
+  if (!stale.length) return section
+  section.append(h("h2", { class: "cal-group" }, "Unavailable states"))
+  /** @type {Map<string, HTMLElement>} */
+  const groups = new Map()
+  for (const take of stale) {
+    const key = JSON.stringify([take.part, take.state])
+    if (!groups.has(key)) {
+      const group = h("div", { class: "cal-states" }, h("p", { class: "cal-note" }, `${refLabel(take)} · removed`))
+      groups.set(key, group)
+      section.append(group)
+    }
+    groups.get(key)?.append(h("button", {
+      type: "button", class: "cal-state", "data-stale-take": take.take,
+      "data-nav-key": `stale:${take.take}`,
+      onClick: () => selectTake(take.take),
+    }, `Take ${take.take} · review or discard`))
+  }
+  return section
+}
+
+/** @param {TakeView} take */
+function takeAvailable(take) {
+  const parts = currentProject()?.parts ?? []
+  return stateExists(parts, take) && (take.context === undefined || contextsFor(parts, take).some(ref => sameState(ref, /** @type {StateRef} */ (take.context))))
+}
+
+/** Controls stay in the existing scrollable part list at every container size. @param {Project} project */
+function contextControls(project) {
+  const subject = subjectRef()
+  const preview = previewRef()
+  const section = h("section", { class: "cal-context", "aria-label": "Scenario context" })
+  if (!subject || !preview) return section
+  const contexts = contextsFor(project.parts, subject)
+  const choices = [null, ...contexts]
+  const select = h("select", {
+    "aria-label": "Preview scenario", "data-nav-key": "preview",
+    onChange: event => {
+      const index = Number(/** @type {HTMLSelectElement} */ (event.target).value)
+      state.context = choices[index] ?? null
+      state.contextNote = ""
+      showChanged()
+    },
+  }, ...choices.map((ref, index) => h("option", {
+    value: String(index), selected: ref === null ? state.context === null : state.context !== null && sameState(ref, state.context),
+  }, ref === null ? `Isolated · ${refLabel(subject)}` : refLabel(ref))))
+  section.append(h("p", { class: "cal-context-subject" }, `Editing ${refLabel(subject)}`),
+    h("label", {}, "Preview", select))
+  if (state.contextNote) section.append(h("p", { role: "status", class: "cal-context-note" }, state.contextNote))
+  if (state.context) section.append(h("button", {
+    type: "button", class: "cal-state", "data-nav-key": `context:${preview.part}:${preview.state}`, onClick: () => selectSubject(preview, null),
+  }, `Edit whole scenario: ${refLabel(preview)}`))
+  const children = subjectsOf(project.parts, preview)
+  if (children.length) section.append(h("details", { class: "cal-context-children", open: true },
+    h("summary", {}, "States in this scenario"),
+    ...children.map(ref => h("button", {
+      type: "button", class: "cal-state", "data-subject": `${ref.part}#${ref.state}`,
+      "data-nav-key": `subject:${ref.part}:${ref.state}`,
+      "aria-current": sameState(ref, subject) ? "true" : false,
+      onClick: () => selectSubject(ref, preview),
+    }, refLabel(ref)))))
+  if (contexts.length === 0 && children.length === 0) section.append(h("p", { class: "cal-context-note" },
+    "No composed scenarios declared. Add composition to a part file to connect its real scenarios to child states."))
+  return section
 }
 
 /**
@@ -493,7 +629,7 @@ function renderBar() {
     : part.states.length === 1 ? ""
     : ` · ${stateLabel(shown.export)}`
   $(".cal-part-name").textContent = part ? `${part.name}${shownState}` : "No part selected"
-  $(".cal-part-file").textContent = part ? (part.note ?? part.file) : ""
+  $(".cal-part-file").textContent = state.context ? `Preview: ${refLabel(state.context)}` : part ? (part.note ?? part.file) : ""
   const devices = $(".cal-devices")
   devices.replaceChildren(...DEVICES.map(device =>
     h("button", {
@@ -512,7 +648,17 @@ function renderBar() {
  * @param {string | null} [take]
  */
 function frameSrc(part, exportName, take = null) {
-  return `frame?part=${encodeURIComponent(part.file)}&state=${encodeURIComponent(exportName)}${take ? `&take=${take}` : ""}`
+  return refSrc(state.context ?? { part: part.file, state: exportName }, take)
+}
+
+/** @param {StateRef} preview @param {string | null} take */
+function refSrc(preview, take) {
+  return `frame?part=${encodeURIComponent(preview.part)}&state=${encodeURIComponent(preview.state)}${take ? `&take=${take}` : ""}`
+}
+
+/** An opt-in alternate must use its declared new scenario, not the unchanged parent. @param {TakeView} take @param {StateRef} fallback */
+function takePreview(take, fallback) {
+  return take.integration?._tag === "Review" ? take.integration.proposal.preview : fallback
 }
 
 function renderFrame() {
@@ -525,7 +671,7 @@ function renderFrame() {
   grid.hidden = part === null || shown._tag === "One"
   empty.hidden = part !== null
   if (part === null) {
-    empty.textContent = currentProject()?.parts.length ? "Pick a part from the list." : ""
+    empty.textContent = currentTake() ? "This take's part is no longer available. Restore it or discard the take." : currentProject()?.parts.length ? "Pick a part from the list." : ""
     frame.removeAttribute("src")
     $(".cal-grid-cells").replaceChildren()
     return
@@ -552,11 +698,9 @@ function renderFrame() {
       },
       ...partTakes().map(take => ({
         key: `take-${take.take}`,
-        label: `${takeName(take)}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
+        label: `${takeName(take)}${take.integration?._tag === "Review" ? ` · Alternate: ${refLabel(take.integration.proposal.preview)}` : ""}${take.run._tag === "Running" ? " · working" : take.run._tag === "Failed" ? " · failed" : ""}`,
         title: take.files.length ? `Changes ${take.files.join(", ")}` : "No changes yet",
-        src: take.integration?._tag === "Review"
-          ? frameSrc({ file: take.integration.proposal.preview.part }, take.integration.proposal.preview.state, take.take)
-          : frameSrc(part, shown.export, take.take),
+        src: refSrc(takePreview(take, state.context ?? { part: part.file, state: shown.export }), take.take),
         status: take.run._tag,
         select: () => selectTake(take.take),
       })),
@@ -566,6 +710,8 @@ function renderFrame() {
   const src = frameSrc(part, shown.export)
   if (frame.getAttribute("src") === src) return
   figure.dataset.frameState = "Loading"
+  const preview = /** @type {StateRef} */ (previewRef())
+  state.reports.delete(reportKey(null, preview.state, preview.part))
   frame.setAttribute("src", src)
 }
 
@@ -587,6 +733,10 @@ function renderGridCells(wanted, lead) {
   }
   cells.replaceChildren(...wanted.map(want => {
     const kept = existing.get(want.src)
+    if (!kept) {
+      const query = new URL(want.src, location.href).searchParams
+      state.reports.delete(reportKey(query.get("take"), query.get("state") ?? DEFAULT_STATE, query.get("part") ?? ""))
+    }
     const label = h("button", {
       type: "button",
       class: "cal-cell-label",
@@ -680,16 +830,19 @@ function renderProblems() {
   section.replaceChildren()
   const shown = effectiveShown()
   const part = currentPart()
+  const preview = previewRef()
   /** @type {Array<{ key: string, prefix: string }>} */
-  const sources = shown._tag === "One"
-    ? [{ key: reportKey(null, shown.export), prefix: "" }]
-    : shown._tag === "Takes"
-      ? [{ key: reportKey(null, shown.export), prefix: "Original: " }, ...partTakes().map(take => ({ key: reportKey(take.take, shown.export), prefix: `Take ${take.take}: ` }))]
-      // In the grid, say which state each problem belongs to.
-      : part?.states.map(partState => ({ key: reportKey(null, partState.export), prefix: `${partState.label}: ` })) ?? []
+  const sources = shown._tag === "One" && preview
+    ? [{ key: reportKey(null, preview.state, preview.part), prefix: "" }]
+    : shown._tag === "Takes" && preview
+      ? [{ key: reportKey(null, preview.state, preview.part), prefix: "Original: " }, ...partTakes().map(take => {
+        const ref = takePreview(take, preview)
+        return { key: reportKey(take.take, ref.state, ref.part), prefix: `Take ${take.take}: ` }
+      })]
+      : part?.states.map(partState => ({ key: reportKey(null, partState.export, part.file), prefix: `${partState.label}: ` })) ?? []
   for (const { key, prefix } of sources) {
     const report = state.reports.get(key)
-    if (!report || report.part !== state.part) continue
+    if (!report) continue
     for (const problem of report.problems) {
       section.append(h("div", { class: `cal-problem cal-problem-${problem.kind}`, role: problem.kind === "error" ? "alert" : "status" },
         h("strong", {}, `${prefix}${problem.title}`),
@@ -704,15 +857,17 @@ function renderSetup() {
   body.replaceChildren()
   if (!project) return
   const derivations = [project.entry, project.css, project.wrapper]
-  const failures = derivations.filter(derivation => derivation._tag === "Failed").length
+  const compositionProblems = project.parts.flatMap(part => (part.compositionProblems ?? []).map(problem => `${part.file}: ${problem}`))
+  const failures = derivations.filter(derivation => derivation._tag === "Failed").length + compositionProblems.length
   const details = /** @type {HTMLDetailsElement} */ ($(".cal-setup"))
   $(".cal-setup summary").textContent = failures
-    ? `Setup · ${failures} not found`
+    ? `Setup · ${failures} problems`
     : "Setup · entry, CSS and wrapper found"
   details.classList.toggle("cal-setup-failed", failures > 0)
   if (failures > 0) details.open = true
 
   body.append(
+    ...compositionProblems.map(problem => h("p", { class: "cal-agent-failed", role: "alert" }, problem)),
     setupRow("Entry", project.entry, entry => [h("code", {}, entry.file)]),
     setupRow("Global CSS", project.css, css => [
       css.stylesheets.length === 0
@@ -782,7 +937,7 @@ function takesArrived(snapshot) {
     const [files, run] = previous.split("|")
     if (files !== take.files.join(",") || (run === "Running" && take.run._tag !== "Running")) reloadTakeFrames(take.take)
   }
-  const countBefore = before?.takes.filter(take => take.part === state.part).length ?? 0
+  const countBefore = before?.takes.filter(take => take.part === state.part && take.state === subjectRef()?.state).length ?? 0
   const shapeChanged = countBefore !== partTakes().length
     || JSON.stringify(before?.takes.map(take => [take.take, take.run._tag])) !== JSON.stringify(snapshot.takes.map(take => [take.take, take.run._tag]))
   if (state.take !== null && !snapshot.takes.some(take => take.take === state.take)) {
@@ -803,16 +958,24 @@ function reloadTakeFrames(take) {
   for (const iframe of stage.querySelectorAll("iframe[src]")) {
     const src = iframe.getAttribute("src") ?? ""
     if (new URLSearchParams(src.slice(src.indexOf("?"))).get("take") === take) {
-      /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
+      const query = new URL(src, location.href).searchParams
+      state.reports.delete(reportKey(take, query.get("state") ?? DEFAULT_STATE, query.get("part") ?? ""))
+      const target = /** @type {HTMLIFrameElement} */ (iframe)
+      target.contentWindow?.location.reload()
     }
   }
 }
 
 /** @param {string} take */
 function selectTake(take) {
+  const record = state.takes?.takes.find(candidate => candidate.take === take)
+  if (!record) return
+  state.part = record.part
+  state.expandedParts.set(record.part, true)
+  state.shown = { _tag: "Takes", export: record.state }
+  state.context = record.context ?? null
+  state.contextNote = ""
   state.take = take
-  const shown = effectiveShown()
-  if (shown._tag !== "Takes") state.shown = { _tag: "Takes", export: shown._tag === "One" ? shown.export : DEFAULT_STATE }
   showChanged()
 }
 
@@ -855,8 +1018,9 @@ async function startTakes() {
   const part = currentPart()
   const prompt = promptBox().value.trim()
   if (!part || !prompt) return
-  const shown = effectiveShown()
-  const ask = { part: part.file, state: shown._tag === "All" ? DEFAULT_STATE : shown.export, device: state.device.id, prompt }
+  const subject = subjectRef()
+  if (!subject) return
+  const ask = { ...subject, device: state.device.id, prompt, ...(state.context ? { context: state.context } : {}) }
   if (state.parallel === 1) return launch(ask, [undefined])
   // Several takes: ask the planner for one different direction per take first.
   const id = Date.now()
@@ -893,8 +1057,10 @@ async function launch(ask, directions) {
   if (started.length === 0) return
   promptBox().value = ""
   state.plan = { _tag: "None" }
+  state.part = ask.part
   state.take = started[0] ?? null
   state.shown = { _tag: "Takes", export: ask.state }
+  state.context = ask.context ?? null
   showChanged()
 }
 
@@ -926,7 +1092,15 @@ async function acceptTake(take) {
 async function prepareAlternate(take) {
   if (state.sending) return
   const result = await postTakes(`/takes/${take.take}/alternate`)
-  if (result) selectTake(result.take)
+  if (result) {
+    // The POST can finish before the event stream publishes the proposal.
+    state.part = take.part
+    state.shown = { _tag: "Takes", export: take.state }
+    state.context = take.context ?? null
+    state.take = result.take
+    state.expandedParts.set(take.part, true)
+    showChanged()
+  }
 }
 
 /** @param {TakeView} take */
@@ -987,7 +1161,7 @@ function renderTakeList() {
   const list = $(".cal-take-list")
   const takes = partTakes()
   if (takes.length === 0) {
-    list.replaceChildren(h("p", { class: "cal-note" }, currentPart() ? `No takes of ${currentPart()?.name} yet.` : ""))
+    list.replaceChildren(h("p", { class: "cal-note" }, currentPart() ? `No takes of this state yet.` : ""))
     return
   }
   list.replaceChildren(...takes.map(take => {
@@ -1008,8 +1182,8 @@ function renderTakeList() {
           ? h("button", { type: "button", onClick: () => void postTakes(`/takes/${take.take}/stop`) }, "Stop")
           : take.integration
             ? h("button", { type: "button", onClick: () => selectTake(take.take) }, "Review alternate")
-            : h("button", { type: "button", class: "cal-accept", disabled: take.files.length === 0 || state.sending, onClick: () => void acceptTake(take) }, "Replace"),
-        ...(!running && !take.integration ? [h("button", { type: "button", disabled: take.files.length === 0 || state.sending || state.takes?.agent._tag !== "Ready", onClick: () => void prepareAlternate(take) }, "Add an alternate")] : []),
+            : h("button", { type: "button", class: "cal-accept", disabled: take.files.length === 0 || state.sending || !takeAvailable(take), onClick: () => void acceptTake(take) }, "Replace"),
+        ...(!running && !take.integration ? [h("button", { type: "button", disabled: take.files.length === 0 || state.sending || state.takes?.agent._tag !== "Ready" || !takeAvailable(take), onClick: () => void prepareAlternate(take) }, "Add an alternate")] : []),
         h("button", { type: "button", onClick: () => void discardTake(take) }, "Discard")))
   }))
 }
@@ -1026,8 +1200,10 @@ function renderLog() {
   // A streaming reply starts empty; it shows once it has words.
   const entries = take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "")
   log.replaceChildren(
-    h("p", { class: "cal-log-title" }, `${takeName(take)} · Take ${take.take} · asked on ${take.device}, state ${take.state}`),
+    h("p", { class: "cal-log-title" }, `${takeName(take)} · Take ${take.take} · ${refLabel(take)} · ${take.device}`),
     ...(take.integration ? [integrationPanel(take)] : []),
+    h("p", { class: "cal-note" }, take.context ? `Created in ${refLabel(take.context)}. Shared source edits can affect other states.` : "Created in isolation. Shared source edits can affect other states."),
+    ...(!takeAvailable(take) ? [h("p", { class: "cal-agent-failed", role: "alert" }, "The editing state or its recorded context is unavailable. Restore the declaration or discard this take.")] : []),
     ...(take.direction ? [h("div", { class: "cal-log-direction" }, h("strong", {}, take.direction.title), " ", take.direction.brief)] : []),
     ...entries.map(entry => {
       if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)
@@ -1059,19 +1235,20 @@ function renderComposer() {
   $(".cal-parallel").hidden = planning
   back.hidden = !planning
   back.textContent = plan._tag === "Planning" ? "Cancel" : "Back"
-  start.disabled = plan._tag === "Planning" || state.sending || (plan._tag === "Review" ? reviewed === 0 : !ready || !part || !text)
+  start.disabled = plan._tag === "Planning" || state.sending || (plan._tag === "Review" ? reviewed === 0 : !ready || !part || !subjectRef() || !stateExists(currentProject()?.parts ?? [], /** @type {StateRef} */ (subjectRef())) || !text)
   start.textContent = plan._tag === "Planning" ? "Planning…"
     : plan._tag === "Review" ? `Start ${reviewed} ${reviewed === 1 ? "take" : "takes"}`
     : state.parallel === 1 ? "New take" : `Plan ${state.parallel} takes`
   follow.hidden = take === null || planning
-  follow.disabled = !ready || !text || state.sending || take?.run._tag === "Running"
+  follow.disabled = !ready || !text || state.sending || take?.run._tag === "Running" || (take !== null && !takeAvailable(take))
   follow.textContent = take ? `Send to take ${take.take}` : ""
   const note = $(".cal-composer-note")
   note.className = state.takeError ? "cal-composer-note cal-agent-failed" : "cal-composer-note"
   note.textContent = state.takeError
     ?? (plan._tag === "Planning" ? `Asking ${state.takes?.agent._tag === "Ready" ? state.takes.agent.model : "the model"} for ${plan.count} different directions…`
       : plan._tag === "Review" ? "Edit or remove directions. Each take follows one, and knows what the others try."
-      : ready && part ? `${part.name} on ${state.device.name}. ${state.parallel === 1 ? "Ctrl+Enter starts a take" : "Ctrl+Enter plans the takes"}${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.`
+      : ready && part && !subjectRef() ? "Choose one state before starting a take."
+      : ready && part ? `Editing ${refLabel(/** @type {StateRef} */ (subjectRef()))}${state.context ? ` in ${refLabel(state.context)}` : ""} on ${state.device.name}. ${state.parallel === 1 ? "Ctrl+Enter starts a take" : "Ctrl+Enter plans the takes"}${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.`
       : "")
   renderPlan()
 }
@@ -1153,20 +1330,24 @@ function connect() {
     state.connection = { _tag: "Ready", project }
     if (state.part === null || !project.parts.some(part => part.file === state.part)) {
       state.part = project.parts[0]?.file ?? null
-      if (state.shown._tag === "One") state.shown = { _tag: "One", export: DEFAULT_STATE }
+      if (state.shown._tag !== "All") state.shown = { _tag: "One", export: DEFAULT_STATE }
       saveLocation()
     }
     // A save can remove the shown state. Fall back to the default export.
     const shown = state.shown
-    if (shown._tag === "One" && !currentPart()?.states.some(partState => partState.export === shown.export)) {
+    if (shown._tag !== "All" && !currentPart()?.states.some(partState => partState.export === shown.export)) {
+      state.contextNote = `The selected state no longer exists. Showing Default.`
       state.shown = { _tag: "One", export: DEFAULT_STATE }
-      saveLocation()
+      state.take = null
     }
+    reconcileContext()
+    saveLocation()
     renderParts()
     renderSetup()
     renderBar()
     renderFrame()
     renderStage()
+    renderTakes()
     // The frame reloads itself when a part changes. A change to the global CSS
     // list or the wrapper changes the frame page, so reload it here.
     if (before && setupKey(before) !== setupKey(project)) {
@@ -1187,10 +1368,11 @@ function connect() {
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.data?.source !== "caliper-frame") return
   const sender = [...stage.querySelectorAll("iframe")].find(iframe => iframe.contentWindow === event.source)
-  const figure = sender?.closest("figure")
+  if (!sender) return
+  const figure = sender.closest("figure")
   if (figure instanceof HTMLElement) figure.dataset.frameState = event.data.state
   const take = event.data.take ?? null
-  state.reports.set(reportKey(take, event.data.partState), { part: event.data.part, partState: event.data.partState, take, state: event.data.state, problems: event.data.problems })
+  state.reports.set(reportKey(take, event.data.partState, event.data.part), { part: event.data.part, partState: event.data.partState, take, state: event.data.state, problems: event.data.problems })
   renderProblems()
 })
 

@@ -162,10 +162,10 @@ export function flattenStylesheets(root, take, stylesheets) {
  * plugin calls them from its own hooks.
  *
  * @param {() => string} getRoot
- * @param {() => string} [getCacheDir] Vite's prebundled dependencies are never project source.
+ * @param {() => string} [getCacheDir] Vite's resolved dependency cache, which may live outside node_modules.
  */
 export function takeOverlay(getRoot, getCacheDir = () => join(getRoot(), "node_modules/.vite")) {
-  /** @param {string} file */
+  /** Optimized dependencies must keep their untagged identity, especially React. @param {string} file */
   const sourceFile = file => {
     const cacheRelative = relative(getCacheDir(), file)
     const cached = cacheRelative === "" || (!cacheRelative.startsWith("..") && !isAbsolute(cacheRelative))

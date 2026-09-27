@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { basename, join, relative } from "node:path"
 import ts from "typescript"
+import { readComposition, validateCompositions } from "./composition.js"
 
 /**
  * @typedef {import("../types").Part} Part
@@ -23,14 +24,16 @@ export const DEFAULT_STATE = /** @type {const} */ ({ export: "default", label: "
  * walks the folder and skips dot-folders. `node_modules` never counts.
  *
  * @param {string} root absolute Vite root
+ * @param {ReadonlyMap<string, string>} [overrides] Proposed part sources, including new files, when validating a take before acceptance
  * @returns {Part[]} sorted by file path
  */
-export function discoverParts(root) {
-  const files = gitListedParts(root) ?? walkedParts(root)
-  return files
-    .filter(file => !/(^|\/)node_modules\//.test(file) && existsSync(join(root, file)))
+export function discoverParts(root, overrides = new Map()) {
+  const files = [...new Set([...(gitListedParts(root) ?? walkedParts(root)), ...overrides.keys()])]
+  const parts = files
+    .filter(file => file.endsWith(PART_SUFFIX) && !/(^|\/)node_modules\//.test(file) && (overrides.has(file) || existsSync(join(root, file))))
     .sort((left, right) => left.localeCompare(right))
-    .map(file => readPart(root, file))
+    .map(file => readPart(root, file, overrides.get(file)))
+  return validateCompositions(parts)
 }
 
 /**
@@ -83,7 +86,7 @@ export function readPart(root, file, source = readFileSync(join(root, file), "ut
   const note = stringExport(source, "note")
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const states = [DEFAULT_STATE, ...namedStates(tree)]
-  return { file, name, ...(note === undefined ? {} : { note }), states, ...partLayer(file, tree) }
+  return { file, name, ...(note === undefined ? {} : { note }), states, ...partLayer(file, tree), ...readComposition(file, source) }
 }
 
 /**

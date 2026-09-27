@@ -85,6 +85,58 @@ export overrides the suffix. The five accepted values are `page`, `template`,
 exports or infer layers from folders. Parts without a recognised declaration
 remain unclassified. Within each layer, parts keep file-path order.
 
+## Browse states in a composition
+
+A **scenario** is an executable part state with product-owned fixture data and
+action behavior. Caliper runs that state unchanged. It does not replace child
+components with their standalone examples.
+
+A parent part can declare the child states its scenarios contain:
+
+```tsx
+import { Home } from "./Home"
+import { readyLibrary, libraryWithMissingArt } from "./fixtures"
+
+export default function Ready() {
+  return <Home initialLibrary={readyLibrary} />
+}
+export function MissingArtwork() {
+  return <Home initialLibrary={libraryWithMissingArt} />
+}
+
+export const composition = {
+  default: [{ part: "src/Cart.molecule.part.tsx", state: "default" }],
+  MissingArtwork: [{ part: "src/Cart.molecule.part.tsx", state: "MissingArt" }],
+}
+```
+
+The keys are this part's export names. `default` means the default export,
+regardless of its function name. Child paths are relative to the Vite root.
+Each child state must exist. Literal objects, arrays, strings, `as const` and
+`satisfies` are supported. Calls, spreads and imported metadata are not evaluated.
+Missing references, duplicates and cycles appear in Setup. Invalid declarations
+supply no relationships.
+
+In the part list, **States in this scenario** selects a child as the editing
+subject while the frame keeps showing the whole scenario. **Preview** selects
+the isolated subject or a declared parent scenario. Relationships can pass
+through several levels, such as page → shelf → cart. Choosing another child
+state does not alter the page's props: select a complete declared scenario
+that contains that state. An unavailable context returns to isolation with a
+visible explanation.
+
+The declaration describes fixture intent, not runtime evidence. Repeated
+instances can use the same child state; declare that reference once. Distinct
+instance inputs and interactions belong in the parent fixture. Caliper cannot
+infer which instance should change or verify that the declaration matches the
+rendered tree. Product tests must check that relationship.
+
+Use local, deterministic inputs and real action handlers that update fixture
+state. A no-op callback does not become interactive because it appears inside
+a page. Caliper does not prove that a scenario avoids network access, time,
+randomness or shared storage. A render check proves rendering, not interaction
+correctness or exhaustive state coverage.
+
 ## Options
 
 Set an option when discovery fails or the project's global styles do not follow
@@ -164,9 +216,9 @@ missing.
 In the Takes panel, describe a change and start one or more takes. Each take
 has its own agent, and they run at the same time. An agent can read project
 files, edit and write files in its own take, and render its take. It cannot
-run commands or write anywhere else. The stage shows the original and every
-take of the part, and each frame reloads when its take changes. Send a take
-another prompt, stop it, replace the real files with it, or discard it.
+run commands or write anywhere else. The stage shows the original and the
+takes of the selected state, and each frame reloads when its take changes. Send a
+take another prompt, stop it, replace the real files with it, or discard it.
 Each take gets a descriptive name from its agent. Planned takes start with their
 direction title. Numeric IDs stay stable. Names survive a server restart. An old
 or unnamed take keeps its numeric label and shows a naming hint.
@@ -177,6 +229,22 @@ different direction per take, for example "realistic data", "edge cases" and
 takes start. Each take's agent follows one direction and knows the titles of
 the others. The planner returns fewer directions when the prompt has only one
 sensible answer, and says why. It costs one model call of about 10 s.
+
+A take belongs to the selected **editing state**. Its optional **context** is
+the complete scenario used to preview it. The state list nests takes under their
+editing state. Selecting a take restores its recorded context; changing Preview
+compares the same takes in another declared scenario. Source edits still affect
+all consumers when accepted. State ownership is not a state-local write fence.
+
+The planner and agent receive both identities and both part sources. The first
+screenshot and the default `render` use the context. The agent can pass `part`
+to render its isolated subject or a related scenario, or `related: true` to
+check every subject state and its declared parent scenarios. These checks do
+not find undeclared consumers. Removed states or context declarations block
+new prompts and acceptance until the declaration is restored or the take is
+discarded. Takes whose subjects were removed remain under **Unavailable states**
+for review and discard. Acceptance also validates the proposed part declarations
+before copying files. Existing takes without a context remain isolated.
 
 `.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
 conversation lives only in the dev server: after a restart, the take's files
@@ -283,6 +351,7 @@ CHROMIUM=/path/to/chromium CALIPER_TEST_MODULES=/path/to/react-project/node_modu
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
 ```
 
 `scripts/verify-css-loading.mjs` creates a temporary React project and starts
@@ -290,6 +359,13 @@ real Vite servers. It checks exact stylesheet sets, shared motion, CSS modules,
 missing imports, hot reload, take isolation, explicit globals and Setup
 provenance. The supplied `node_modules` must contain React and React DOM. The
 check neither changes the supplied project nor uses its Vite cache.
+
+`scripts/verify-scenarios.mjs` runs a local interactive consumer in real Vite and
+Chromium. It checks parent-owned state changes, transitive scenario browsing,
+state-owned takes, composed CSS overrides, frame isolation, URL restoration,
+five container sizes, related renders, stale declarations, removed-state take
+recovery and retained preview errors. It makes no model
+calls and changes no supplied project files.
 
 `scripts/verify-takes.mjs` checks the Takes panel against a real model: it
 starts takes from the chrome, waits for the agents, checks every take frame,

@@ -64,10 +64,11 @@ reachable and reproducible, not that all theoretical combinations are enumerated
 
 ### Implementation status
 
-This is the agreed direction, not a claim that Caliper enforces it today.
-Separate editing and viewing contexts, state-level take navigation, and composed
-scenario selection remain unimplemented. No new scenario API or automatic
-child-to-parent state mapping is established by this decision.
+Caliper now separates editing and viewing contexts, groups takes under states,
+and browses declared composed scenarios. Decisions 19 and 20 define that
+implementation. The product still owns fixture isolation and action behavior.
+Caliper does not prove hermeticity, infer child-to-parent input mappings, or
+verify every theoretical state combination.
 
 ## Reviewed alternate integration
 
@@ -107,3 +108,10 @@ Missing names remain visible instead of being presented as model-generated text.
 The review uses GitHub's separation of description, changed files, and final
 action. It does not copy its full pull-request workflow. Reference inspected:
 https://mobbin.com/screens/e9bad011-d5c5-4e8d-b56f-4fba2ffde691.
+
+## Implementation choices
+
+| # | Decision | Why |
+|---|---|---|
+| 19 | Composed previews run product-owned scenarios. An optional literal `composition` export in a part maps its state exports to child `{ part, state }` references. Caliper reads and validates those links without executing source. It browses the links in both directions, including transitive parents, but never substitutes standalone child fixtures or changes parent inputs. The product owns deterministic fixture data and action behavior. | The user chose coherent page behavior over automatic visual substitution. An empty library can remove a shelf and change the whole page; inserting an empty shelf bypasses that behavior. Caliper cannot infer parent inputs from an arbitrary child render function. Cost: the product must author and test the links. Caliper validates references, not whether the rendered composition matches them, avoids every external dependency, or covers all possible states. |
+| 20 | Takes belong to an editing part and state. Optional `context` records the declared composed scenario used to judge that subject. Navigation nests takes under their state; the planner, agent and default render distinguish subject from context. The render tool can check every subject state and its declared parent scenarios. Existing take records without context remain isolated. | The editing scope and viewing scope must be separate to work on a low-level component inside a page. State ownership organizes review; it does not isolate shared source edits to that state. Acceptance still replaces files. Removed subjects or context declarations block prompts and acceptance rather than silently changing the take's meaning. Declared related checks do not discover every affected consumer or prove interactions. |

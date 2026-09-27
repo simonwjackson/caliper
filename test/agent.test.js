@@ -95,7 +95,7 @@ function setup(root) {
   const models = createModels()
   models.setProvider(faux.provider)
   const store = createTakeStore(root)
-  /** @type {Array<{ take: string, state: string, devices: string[] }>} */
+  /** @type {Array<{ take: string, state: string, devices: string[], part?: string, related?: boolean }>} */
   const renders = []
   const png = join(root, "shot.png")
   writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
@@ -104,9 +104,9 @@ function setup(root) {
   const agents = createTakeAgents({
     store,
     engine: () => ({ models, model: faux.getModel(), reasoning: "high" }),
-    renderFor: take => async request => {
+    renderFor: (take, subject) => async request => {
       renders.push({ take, ...request })
-      return [{ part: ask.part, state: request.state, device: request.devices[0] ?? "", take, viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }]
+      return [{ part: request.part ?? subject.context?.part ?? subject.part, state: request.state, device: request.devices[0] ?? "", take, viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }]
     },
     onChange: () => { for (const resolve of waiting.splice(0)) resolve() },
   })
@@ -182,7 +182,7 @@ describe("a take's agent", () => {
       expect(next).toBe(proposal)
       await settled(next)
       expect(seen.messages.filter((/** @type {any} */ message) => message.role === "user")).toHaveLength(1)
-      expect(seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text).toContain("The part is src/Alternate.part.tsx")
+      expect(seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text).toContain("The editing subject is src/Alternate.part.tsx")
     })
   })
 
@@ -229,6 +229,50 @@ describe("a take's agent", () => {
       expect(kinds).toEqual(["text", "text", "image"])
       expect(user.content[0].text).toContain("export default function Part()")
       expect(seen.options.reasoning).toBe("high")
+    })
+  })
+
+  test("a composed take persists its preview and gives the model both sources and context-default rendering", async () => {
+    await inFolder({ ...projectFiles, "src/Home.part.tsx": "export function Ready() { return <main>home</main> }" }, async root => {
+      const { faux, store, agents, renders, settled } = setup(root)
+      let seen = ""
+      faux.setResponses([
+        context => {
+          seen = JSON.stringify(context)
+          return fauxAssistantMessage([fauxToolCall("render", {})], { stopReason: "toolUse" })
+        },
+        fauxAssistantMessage([fauxToolCall("render", { part: ask.part })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxToolCall("render", { related: true, device: "*" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxText("Checked the declared scenarios.")]),
+      ])
+      const context = { part: "src/Home.part.tsx", state: "Ready" }
+      const take = agents.start({ ...ask, context, prompt: "Change the chip in Home" })
+      const view = await settled(take)
+      expect(view.context).toEqual(context)
+      expect(store.record(take)?.context).toEqual(context)
+      expect(seen).toContain("The editing subject is src/Chip.part.tsx")
+      expect(seen).toContain("The preview is src/Home.part.tsx")
+      expect(seen).toContain("<main>home</main>")
+      expect(seen).toContain("export default function Part()")
+      expect(renders).toEqual([
+        { take, state: "Ready", devices: ["rg353m"] },
+        { take, state: "Ready", devices: ["rg353m"] },
+        { take, part: ask.part, state: "default", devices: ["rg353m"] },
+        { take, state: "Ready", devices: ["*"], related: true },
+      ])
+      expect(view.log.some(entry => entry._tag === "Tool" && entry.subject === "all declared related scenarios")).toBe(true)
+    })
+  })
+
+  test("old take records remain isolated when the server reloads them", async () => {
+    await inFolder(projectFiles, async root => {
+      const { store } = setup(root)
+      const take = store.create(ask)
+      const { agents, faux, settled } = setup(root)
+      expect(agents.views()[0]?.context).toBeUndefined()
+      faux.setResponses([fauxAssistantMessage([fauxText("Continued.")])])
+      agents.follow(take, "Go on")
+      expect((await settled(take)).run).toEqual({ _tag: "Idle" })
     })
   })
 

@@ -27,6 +27,9 @@
   --cal-side-min: 15rem;
   --cal-side-max: 20rem;
   --cal-takes-width: 24rem;
+  /* Room for captions and a small preview before its region must scroll. */
+  --cal-stage-min: 12rem;
+  --cal-navigation-min: 6rem;
 }
 
 * {
@@ -43,7 +46,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   color: inherit;
 }
@@ -58,6 +62,7 @@ button {
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--cal-accent);
   outline-offset: 1px;
@@ -187,11 +192,13 @@ pre {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: auto;
   background: var(--cal-panel);
   border-right: 1px solid var(--cal-line);
 }
 
 .cal-side-head {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   gap: var(--cal-space-2);
@@ -215,6 +222,7 @@ pre {
 }
 
 .cal-filter {
+  flex-shrink: 0;
   margin: 0 var(--cal-space-3) var(--cal-space-2);
   padding: var(--cal-space-1) var(--cal-space-2);
   border: 1px solid var(--cal-line);
@@ -224,7 +232,7 @@ pre {
 
 .cal-parts {
   flex: 1;
-  min-height: 0;
+  min-height: var(--cal-navigation-min);
   overflow: auto;
   padding: 0 var(--cal-space-2) var(--cal-space-3);
 }
@@ -309,12 +317,61 @@ pre {
   box-shadow: inset 2px 0 0 var(--cal-accent);
 }
 
+.cal-state-takes {
+  margin-left: var(--cal-space-3);
+  border-left: 1px solid var(--cal-line);
+}
+
+/* Context controls share the part list's scroll area, not the stage's height.
+ * One column fits both the narrow-tall and wide-short container cases. */
+.cal-context {
+  display: grid;
+  gap: var(--cal-space-2);
+  padding: var(--cal-space-2);
+  border-bottom: 1px solid var(--cal-line);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-context:empty {
+  display: none;
+}
+
+.cal-context p {
+  margin: 0;
+}
+
+.cal-context label {
+  display: grid;
+  gap: var(--cal-space-1);
+  min-width: 0;
+}
+
+.cal-context select {
+  width: 100%;
+  min-width: 0;
+  padding: var(--cal-space-2);
+  background: var(--cal-bg);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+}
+
+.cal-context-note {
+  color: var(--cal-muted);
+}
+
+.cal-context-children summary {
+  padding-block: var(--cal-space-2);
+  cursor: pointer;
+}
+
 .cal-note {
   color: var(--cal-muted);
   padding: 0 var(--cal-space-2);
 }
 
 .cal-setup {
+  flex-shrink: 0;
   border-top: 1px solid var(--cal-line);
   max-height: 50%;
   overflow: auto;
@@ -383,9 +440,11 @@ pre {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: auto;
 }
 
 .cal-bar {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -444,7 +503,7 @@ pre {
 .cal-stage {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: var(--cal-stage-min);
   display: grid;
   place-items: center;
   padding: 24px;
