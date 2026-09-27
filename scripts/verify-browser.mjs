@@ -59,6 +59,67 @@ try {
   await page.locator(".cal-part").first().waitFor()
   assert.equal(await page.locator(".cal-part").count(), project.parts.length, "the list shows every part")
 
+  // Check the workspace, not just its iframes. A hidden Takes panel must not
+  // acquire implicit grid tracks when a container query changes its display.
+  const rem = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize))
+  const sizes = [
+    { width: 1600, height: 1000 },
+    { width: 1000, height: 750 },
+    { width: 755, height: 1000 },
+    { width: 412, height: 620 },
+    { width: 320, height: 480 },
+    { width: 1280, height: 300 },
+    ...[44, 72].flatMap(limit => [-1, 0, 1].map(offset => ({ width: Math.round(limit * rem) + offset, height: 900 }))),
+  ]
+  for (const size of sizes) {
+    await page.setViewportSize(size)
+    // Reload with the last saved closed state, then open, reload open, close.
+    for (const phase of ["closed-saved", "open", "open-saved", "closed"]) {
+      const open = phase.startsWith("open")
+      if (phase.endsWith("saved")) await page.reload()
+      else await page.locator(".cal-takes-toggle").click()
+      await page.waitForFunction(expected => document.querySelector(".cal-takes-toggle")?.getAttribute("aria-expanded") === String(expected), open)
+      const selected = await page.locator('.cal-part[aria-current="true"]').getAttribute("title")
+      assert(selected, "a real project part is selected")
+      assert.equal((await frameResult(page, selected)).state, "Rendered", "the workspace preview renders")
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      const layout = await page.evaluate(() => {
+        const panel = /** @type {HTMLElement} */ (document.querySelector(".cal-takes"))
+        const main = /** @type {HTMLElement} */ (document.querySelector(".cal-main"))
+        const app = /** @type {HTMLElement} */ (document.querySelector(".cal"))
+        const root = /** @type {HTMLElement} */ (document.querySelector(".cal-root"))
+        const doc = /** @type {Element} */ (document.scrollingElement)
+        return {
+          hidden: panel.hidden,
+          display: getComputedStyle(panel).display,
+          main: main.getBoundingClientRect().toJSON(),
+          app: app.getBoundingClientRect().toJSON(),
+          overflow: Math.max(doc.scrollHeight - doc.clientHeight, doc.scrollWidth - doc.clientWidth, root.scrollHeight - root.clientHeight, root.scrollWidth - root.clientWidth),
+        }
+      })
+      const label = `${size.width}x${size.height}-${phase}`
+      await page.screenshot({ path: join(out, `layout-${label}.png`) })
+      assert.equal(layout.hidden, !open, `${label}: hidden state agrees with the toggle`)
+      assert.equal(layout.display === "none", !open, `${label}: closed Takes must stay out of layout`)
+      assert.equal(layout.overflow, 0, `${label}: the page does not scroll`)
+      if (!open) {
+        assert(Math.abs(layout.main.right - layout.app.right) < 1, `${label}: the preview regains the panel's space`)
+        const frame = await page.locator(".cal-screen").boundingBox()
+        assert(frame && frame.width > 0 && frame.height > 0, `${label}: the device preview has not collapsed`)
+      }
+      for (const selector of open ? [".cal-takes-toggle", ".cal-prompt", ".cal-start"] : [".cal-takes-toggle"]) {
+        const control = page.locator(selector)
+        await control.scrollIntoViewIfNeeded()
+        const box = await control.boundingBox()
+        // Browser scrolling rounds fractional CSS pixels to a device pixel.
+        assert(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
+          `${label}: ${selector} stays reachable (${JSON.stringify(box)})`)
+      }
+    }
+  }
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  console.log(`workspace layout passed at ${sizes.length} sizes, open and closed, including reloads`)
+
   // Every part renders, inside the wrapper, with the global CSS loaded.
   for (const part of project.parts) {
     await page.locator(`.cal-part[title="${part.file}"]`).click()

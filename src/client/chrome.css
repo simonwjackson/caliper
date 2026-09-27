@@ -107,7 +107,9 @@ pre {
   grid-template-areas: "side main";
 }
 
-.cal-takes[hidden] {
+/* Outrank the responsive panel rules below. A visible panel with no named
+ * grid area creates implicit tracks and collapses the preview. */
+.cal > .cal-takes[hidden] {
   display: none;
 }
 
