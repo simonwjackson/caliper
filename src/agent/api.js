@@ -15,7 +15,6 @@ import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { Type } from "typebox"
-import { Value } from "typebox/value"
 
 /**
  * @typedef {import("node:http").IncomingMessage} IncomingMessage
@@ -60,8 +59,8 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]),
   ))
 
-  /** An integration preserves the source take's subject and review context. @param {string} take */
-  const validateIntegrationContext = take => {
+  /** Both replacement and alternate proposals preserve their subject and context. @param {string} take */
+  const validateProposedContext = take => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     const baseline = discoverParts(store.root)
     validateTakeContext(baseline, record)
@@ -115,7 +114,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     onChange()
     try {
       return await agents.integration.check(take, async () => {
-        validateIntegrationContext(take)
+        validateProposedContext(take)
         const original = await project()
         const proposal = agents.integration.review(take).proposal
         if (original.parts.find(part => part.file === proposal.preview.part)?.states.some(state => state.export === proposal.preview.state)) {
@@ -210,8 +209,8 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         json(response, 200, await checkIntegration(take))
       } else if (action === "apply") {
         agents.assertIdle(take)
-        if (!Value.Check(applySchema, body)) throw new Error("Apply needs the reviewed revision and confirmation of product checks.")
-        validateIntegrationContext(take)
+        if (!Check(applySchema, body)) throw new Error("Apply needs the reviewed revision and confirmation of product checks.")
+        validateProposedContext(take)
         const files = agents.apply(take, body.revision, body.behaviorReviewed)
         json(response, 200, { take, files })
       } else if (action === "prompt") {
@@ -222,15 +221,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         agents.stop(take)
         json(response, 200, { take })
       } else if (action === "accept") {
-        const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
-        const baseline = discoverParts(store.root)
-        validateTakeContext(baseline, record)
-        const existingProblems = new Set(baseline.flatMap(part => part.compositionProblems ?? []))
-        const overrides = new Map(store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]))
-        const proposed = discoverParts(store.root, overrides)
-        validateTakeContext(proposed, record)
-        const problems = proposed.flatMap(part => part.compositionProblems ?? []).filter(problem => !existingProblems.has(problem))
-        if (problems.length) throw new Error(`The proposed files have invalid composition declarations:\n${problems.join("\n")}`)
+        validateProposedContext(take)
         json(response, 200, { take, files: agents.accept(take) })
       } else if (action === "discard") {
         agents.discard(take)

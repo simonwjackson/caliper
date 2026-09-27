@@ -233,8 +233,9 @@ sensible answer, and says why. It costs one model call of about 10 s.
 A take belongs to the selected **editing state**. Its optional **context** is
 the complete scenario used to preview it. The state list nests takes under their
 editing state. Selecting a take restores its recorded context; changing Preview
-compares the same takes in another declared scenario. Source edits still affect
-all consumers when accepted. State ownership is not a state-local write fence.
+compares experiments in another declared scenario. Alternate proposals show
+their explicit new preview state, not the unchanged source context. Source edits
+still affect all consumers when accepted. State ownership is not a state-local write fence.
 
 The planner and agent receive both identities and both part sources. The first
 screenshot and the default `render` use the context. The agent can pass `part`

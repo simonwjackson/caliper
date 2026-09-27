@@ -12,6 +12,7 @@ import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
 import { createTakeStore } from "../src/takes/store.js"
+import { createIntegrationReview } from "../src/takes/integration.js"
 import { planRenders } from "../src/render/plan.js"
 import { renderJobs } from "../src/render/render.js"
 import { relatedStates } from "../src/client/scenarios.js"
@@ -204,10 +205,24 @@ try {
   await page.locator(`[data-subject="${cart}#MissingArt"]`).click()
   assert.equal(await page.locator(".cal-device iframe").getAttribute("src"),failedSrc)
   assert.match(await page.locator(".cal-problems").innerText(),/Scenario failure/,"drilling into a child preserves the retained preview's error")
-  await page.locator('.cal-state[data-state="*"]').click()
+  await page.locator(`.cal-part[title="${cart}"]`).click()
   await page.locator('.cal-part[title="src/Badge.atom.part.tsx"]').click()
   await page.locator('.cal-device[data-frame-state="Rendered"]').waitFor()
   assert.equal(await screen.getByText("Badge",{exact:true}).count(),1,"All states falls back to the only state of a single-state part")
+  write(home,files[home])
+  const experiment = store.create({part:cart,state:"MissingArt",context,device:"rg353m",name:"Context experiment"})
+  store.write(experiment,"src/proposal-note.ts","export const note = 'experiment'\n")
+  const integration = createIntegrationReview(store)
+  const proposal = integration.begin(experiment)
+  store.write(proposal,home,`${files[home]}\nexport function Alternate() { return <Home initial={[{id:"alternate",title:"Alternate choice",art:false}]} /> }`)
+  integration.submit(proposal,{strategy:"variant",summary:"An explicit alternate scenario",shared:"The real Home renderer",preserved:"Existing scenario exports",usage:"Choose the Alternate state",preview:{part:home,state:"Alternate"}})
+  await page.reload()
+  await page.locator(`.cal-part[title="${cart}"]`).click()
+  await page.locator(`[data-take="${proposal}"]`).click()
+  await page.locator(`.cal-cell[data-key="take-${proposal}"][data-frame-state="Rendered"]`).waitFor()
+  const alternate = page.frameLocator(`.cal-cell[data-key="take-${proposal}"] iframe`)
+  assert.equal(await alternate.getByText("Alternate choice",{exact:true}).count(),1,"an alternate's explicit preview is not replaced by the source take's context")
+  assert.equal(await alternate.getByText("Beta",{exact:true}).count(),0)
   assert.deepEqual(errors,[])
   console.log(`PASS: working page state, transitive browsing, state-owned takes, context restore, repeated instances, frame isolation, CSS HMR, ${sizes.length} sizes, ${results.length} related renders, stale context, acceptance and visible declaration errors. Screenshots: ${out}`)
 } catch (error) {
