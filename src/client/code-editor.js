@@ -226,14 +226,6 @@ export function createEditor(parent, hooks) {
     rekey: next => {
       key = next
     },
-    /** Forget kept files, for example when their take is gone. The open file stays. @param {(key: string) => boolean} drop */
-    forget: drop => {
-      for (const known of [...states.keys()]) if (known !== key && drop(known)) {
-        states.delete(known)
-        scrolls.delete(known)
-        modes.delete(known)
-      }
-    },
     content: () => view.state.doc.toString(),
     /** @param {string} exportName */
     revealState: exportName => {

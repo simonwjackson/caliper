@@ -287,6 +287,45 @@ cover discovered project files, so even an unrelated source edit requires a new
 proposal. Keep an experiment as a take when the product does not need another
 supported choice.
 
+## Edit code in Caliper
+
+The **Code** button opens the code pane next to the stage. It sits beside the
+stage when the main column is wide, and under it otherwise. Drag the divider to
+resize it; double-click the divider to reset it. The pane needs no agent.
+
+The pane shows the files of the part you edit. Tabs hold the part file, the
+files it imports directly, and the files a take changes. **Files** lists every
+local module and stylesheet the part reaches, nearest first. A take lists the
+files it changes first, with the lines each one adds and removes. It also lists
+files it changes that this part does not import, because they change other
+parts.
+
+Caliper never writes a real file from the pane. When you type in a real file,
+Caliper starts a take named "Hand edit of <file>" that holds your edit. The
+stage then shows the original next to the take. Your next edits save to the
+take after a short pause, or at once with Ctrl+S. Undo can take the file back
+to the real text. The take then changes nothing, and you can discard it.
+Replace is still the only way a real file changes.
+
+In a take, the pane shows the take's file against the real file. Removed
+lines show above the lines that replace them, and long runs of unchanged lines
+fold away. Alt+Up and Alt+Down move between changes. **Revert** on a change
+puts the real lines back into the take.
+
+While a take's agent works, the pane is read-only. It moves to each file the
+agent starts to change, until you pick a file yourself. Text that arrives from
+disk is marked for a moment. When you send the agent another prompt, Caliper
+tells it which files you edited by hand, so it reads them again. Your edits also
+show in the take's conversation.
+
+In a part file, a line above each exported state names it. Click it to show
+that state on the stage. The state on the stage says **On the stage**.
+
+The pane uses CodeMirror 6. Caliper serves its packages from Caliper's own
+`node_modules` through an import map, so the project's Vite never loads them.
+The first open loads 355 KB with gzip; the browser then caches it. The
+pane has no type checking or completion from the project's types yet.
+
 ## How a part renders
 
 Each part renders in an `iframe` for one device. The `iframe` has the device's
@@ -354,6 +393,7 @@ CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --part src/ui/atoms/Button.atom.part.tsx
 ```
 
 `scripts/verify-css-loading.mjs` creates a temporary React project and starts
@@ -368,6 +408,13 @@ state-owned takes, composed CSS overrides, frame isolation, URL restoration,
 five container sizes, related renders, stale declarations, removed-state take
 recovery and retained preview errors. It makes no model
 calls and changes no supplied project files.
+
+`scripts/verify-code.mjs` checks the code pane against a running dev server.
+It types in a real file and checks that a take starts with the edit while the
+real file stays the same. It checks the take's frame, the diff and its line
+count, Revert, the state lenses, and the layout at four window sizes. It makes
+no model calls and discards every take it starts. Pick a part with two or more
+states to check the lenses.
 
 `scripts/verify-takes.mjs` checks the Takes panel against a real model: it
 starts takes from the chrome, waits for the agents, checks every take frame,
