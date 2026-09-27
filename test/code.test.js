@@ -1,0 +1,232 @@
+// @ts-check
+import { describe, expect, test } from "bun:test"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { gunzipSync } from "node:zlib"
+import { codeChange } from "../src/code/api.js"
+import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "../src/code/modules.js"
+import { manifest, withProject } from "./project-server.js"
+
+const CALIPER = fileURLToPath(new URL("../", import.meta.url))
+
+const files = {
+  "package.json": manifest(),
+  "src/index.ts": 'import "./app.css"\n',
+  "src/app.css": "body { margin: 0 }\n",
+  "src/ui/Chip.tsx": 'import "./Chip.css"\nimport { Dot } from "./Dot"\nexport function Chip() { return <span className="chip"><Dot /></span> }\n',
+  "src/ui/Chip.css": ".chip { color: blue }\n",
+  "src/ui/Dot.tsx": "export function Dot() { return <i /> }\n",
+  "src/ui/Chip.part.tsx": 'import { Chip } from "./Chip"\nexport default function Part() { return <Chip /> }\nexport const Empty = () => null\n',
+  "src/unused.css": ".unused {}\n",
+}
+
+/**
+ * @param {string} url
+ * @param {string} path
+ * @param {unknown} body
+ */
+function post(url, path, body) {
+  return fetch(new URL(path.replace(/^\//, ""), url), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+
+describe("the chrome's browser packages", () => {
+  test("every package the chrome imports resolves from Caliper's node_modules, once", () => {
+    const { packages, problems } = browserPackages(CALIPER, CHROME_PACKAGES)
+    expect(problems).toEqual([])
+    const names = packages.map(pkg => pkg.name)
+    for (const name of CHROME_PACKAGES) expect(names).toContain(name)
+    expect(new Set(names).size).toBe(names.length)
+    for (const pkg of packages) expect(existsSync(join(pkg.dir, pkg.entry))).toBe(true)
+    const map = importMap(packages, "/__caliper/modules")
+    const view = packages.find(pkg => pkg.name === "@codemirror/view")
+    expect(map.imports["@codemirror/view"]).toBe(`/__caliper/modules/@codemirror/view@${view?.version}/${view?.entry}`)
+  })
+
+  test("serves only JavaScript inside a known package, compressed when asked", () => {
+    const { packages } = browserPackages(CALIPER, ["@codemirror/state"])
+    const state = /** @type {import("../src/code/modules.js").BrowserPackage} */ (packages.find(pkg => pkg.name === "@codemirror/state"))
+    const path = `${state.name}@${state.version}/${state.entry}`
+    const cache = new Map()
+    const plain = serveModule(packages, path, false, cache)
+    const gzip = serveModule(packages, path, true, cache)
+    expect(plain?.encoding).toBeNull()
+    expect(gzip?.encoding).toBe("gzip")
+    expect(gunzipSync(/** @type {Buffer} */ (gzip?.body)).equals(/** @type {Buffer} */ (plain?.body))).toBe(true)
+    expect(serveModule(packages, `${state.name}@${state.version}/../../../package.json`, false, cache)).toBeNull()
+    expect(serveModule(packages, `${state.name}@${state.version}/package.json`, false, cache)).toBeNull()
+    expect(serveModule(packages, `${state.name}@0.0.0/${state.entry}`, false, cache)).toBeNull()
+  })
+
+  test("names two versions of one package, and a missing package", () => {
+    const root = mkdtempSync(join(tmpdir(), "caliper-packages-"))
+    try {
+      /** @param {string} dir @param {object} json */
+      const pkg = (dir, json) => {
+        mkdirSync(join(root, dir), { recursive: true })
+        writeFileSync(join(root, dir, "package.json"), JSON.stringify(json))
+        writeFileSync(join(root, dir, "index.js"), "export {}\n")
+      }
+      pkg("node_modules/a", { name: "a", version: "1.0.0", exports: { import: "./index.js" }, dependencies: { b: "2" } })
+      pkg("node_modules/a/node_modules/b", { name: "b", version: "2.0.0", exports: { import: "./index.js" } })
+      pkg("node_modules/b", { name: "b", version: "1.0.0", exports: { import: "./index.js" } })
+      pkg("node_modules/c", { name: "c", version: "1.0.0", main: "index.js", dependencies: { gone: "1" } })
+      const { problems } = browserPackages(root, ["a", "b", "c"])
+      expect(problems).toEqual([
+        "Caliper found two versions of b: 2.0.0 and 1.0.0. The code editor needs exactly one.",
+        "c 1.0.0 has no ES module entry Caliper can load in a browser.",
+      ])
+      expect(browserPackages(root, ["missing"]).problems[0]).toContain("cannot find the package missing")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("codeChange", () => {
+  const root = "/project"
+  test("names a real file, a take's copy, and nothing else", () => {
+    expect(codeChange(root, "/project/src/a.css")).toEqual({ file: "src/a.css", take: null })
+    expect(codeChange(root, "/project/.caliper/takes/3/src/a.css")).toEqual({ file: "src/a.css", take: "3" })
+    expect(codeChange(root, "/project/.caliper/takes/3.json")).toBeNull()
+    expect(codeChange(root, "/project/.caliper/.gitignore")).toBeNull()
+    expect(codeChange(root, "/project/node_modules/x/index.js")).toBeNull()
+    expect(codeChange(root, "/elsewhere/a.css")).toBeNull()
+  })
+})
+
+describe("the code API", () => {
+  test("the chrome page maps CodeMirror to Caliper's own copy, and the server sends it", async () => {
+    await withProject({ files }, async ({ get }) => {
+      const html = await (await get("/__caliper/")).text()
+      const map = JSON.parse(/** @type {string} */ (html.match(/<script type="importmap">(.*?)<\/script>/)?.[1]))
+      const url = map.imports["@codemirror/view"]
+      expect(url).toStartWith("/__caliper/modules/@codemirror/view@")
+      expect(html.indexOf("importmap")).toBeLessThan(html.indexOf("chrome.js"))
+      const response = await get(url)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("cache-control")).toContain("immutable")
+      expect(await response.text()).toContain("class EditorView")
+    })
+  })
+
+  test("serves every client module the chrome imports", async () => {
+    await withProject({ files }, async ({ get }) => {
+      const client = join(CALIPER, "src/client")
+      const imported = new Set(["chrome.js"])
+      for (const name of imported) {
+        const response = await get(`/__caliper/client/${name}`)
+        expect({ name, status: response.status }).toEqual({ name, status: 200 })
+        const source = readFileSync(join(client, name), "utf8")
+        for (const [, next] of source.matchAll(/(?:from|import\()\s*"\.\/([\w-]+\.js)"/g)) imported.add(/** @type {string} */ (next))
+      }
+      expect([...imported]).toContain("code-editor.js")
+    })
+  })
+
+  test("lists the files a part is made of, nearest first", async () => {
+    await withProject({ files }, async ({ get }) => {
+      const { files: listed } = await (await get("/__caliper/code/files?part=src/ui/Chip.part.tsx")).json()
+      expect(listed).toEqual([
+        { file: "src/ui/Chip.part.tsx", depth: 0, changed: false },
+        { file: "src/ui/Chip.tsx", depth: 1, changed: false },
+        { file: "src/ui/Chip.css", depth: 2, changed: false },
+        { file: "src/ui/Dot.tsx", depth: 2, changed: false },
+      ])
+      expect((await get("/__caliper/code/files?part=src/nope.part.tsx")).status).toBe(404)
+    })
+  })
+
+  test("a take's list follows the take's imports and shows changes the part does not reach", async () => {
+    await withProject({ files }, async ({ get, url }) => {
+      const started = await post(url, "/__caliper/takes/hand", {
+        part: "src/ui/Chip.part.tsx",
+        file: "src/ui/Chip.tsx",
+        content: 'import "./Chip.css"\nexport function Chip() { return <span className="chip" /> }\n',
+      })
+      expect(started.status).toBe(201)
+      const { take, view } = await started.json()
+      expect(view).toMatchObject({ take, files: ["src/ui/Chip.tsx"], run: { _tag: "Idle" }, log: [{ _tag: "Edit", file: "src/ui/Chip.tsx" }] })
+      await post(url, `/__caliper/takes/${take}/file`, { file: "src/unused.css", content: ".unused { color: red }\n" })
+      const { files: listed } = await (await get(`/__caliper/code/files?part=src/ui/Chip.part.tsx&take=${take}`)).json()
+      expect(listed).toEqual([
+        { file: "src/ui/Chip.part.tsx", depth: 0, changed: false },
+        { file: "src/ui/Chip.tsx", depth: 1, changed: true },
+        { file: "src/ui/Chip.css", depth: 2, changed: false },
+        { file: "src/unused.css", depth: null, changed: true },
+      ])
+    })
+  })
+
+  test("opens a file as the take sees it, with the real file to compare", async () => {
+    await withProject({ files }, async ({ get, url }) => {
+      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+      await post(url, `/__caliper/takes/${take}/file`, { file: "src/ui/New.css", content: ".new {}\n" })
+      expect(await (await get("/__caliper/code/file?file=src/ui/Chip.css")).json()).toEqual({ file: "src/ui/Chip.css", content: ".chip { color: blue }\n" })
+      expect(await (await get(`/__caliper/code/file?file=src/ui/Chip.css&take=${take}`)).json()).toEqual({
+        file: "src/ui/Chip.css", content: ".chip { color: red }\n", original: ".chip { color: blue }\n",
+      })
+      expect(await (await get(`/__caliper/code/file?file=src/ui/New.css&take=${take}`)).json()).toMatchObject({ original: null })
+      expect((await get("/__caliper/code/file?file=.env")).status).toBe(404)
+      expect((await get("/__caliper/code/file?file=../etc/passwd")).status).toBe(404)
+      expect((await get("/__caliper/code/file?file=src/ui/Chip.css&take=99")).status).toBe(404)
+    })
+  })
+
+  test("saving a take file back to the real content leaves the take with no changes", async () => {
+    await withProject({ files }, async ({ get, url, root }) => {
+      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+      const saved = await (await post(url, `/__caliper/takes/${take}/file`, { file: "src/ui/Chip.css", content: files["src/ui/Chip.css"] })).json()
+      expect(saved).toEqual({ take, files: [] })
+      expect(existsSync(join(root, ".caliper/takes", take, "src/ui/Chip.css"))).toBe(false)
+      expect(readFileSync(join(root, "src/ui/Chip.css"), "utf8")).toBe(files["src/ui/Chip.css"])
+      const snapshot = await (await get("/__caliper/takes.json")).json()
+      expect(snapshot.takes.find((/** @type {any} */ view) => view.take === take).files).toEqual([])
+    })
+  })
+
+  test("a hand edit needs the chrome's origin, a real part and a file", async () => {
+    await withProject({ files }, async ({ url }) => {
+      const denied = await fetch(new URL("__caliper/takes/hand", url), {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://evil.example" },
+        body: JSON.stringify({ part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: "x" }),
+      })
+      expect(denied.status).toBe(403)
+      expect((await post(url, "/__caliper/takes/hand", { part: "src/nope.part.tsx", file: "src/ui/Chip.css", content: "x" })).status).toBe(400)
+      expect((await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", content: "x" })).json()).error).toBe("Name the file to save.")
+      expect((await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/.env", content: "x" })).json()).error).toContain("environment file")
+    })
+  })
+
+  test("the event stream says when a real file or a take's copy changes on disk", async () => {
+    await withProject({ files }, async ({ get, url, write }) => {
+      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+      const response = await get("/__caliper/events")
+      const reader = /** @type {ReadableStreamDefaultReader<Uint8Array>} */ (response.body?.getReader())
+      const decoder = new TextDecoder()
+      let text = ""
+      /** @param {string} wanted */
+      const until = async wanted => {
+        const deadline = Date.now() + 5000
+        while (!text.includes(wanted)) {
+          if (Date.now() > deadline) throw new Error(`No ${wanted} in:\n${text}`)
+          const { value, done } = await reader.read()
+          if (done) throw new Error("The stream ended")
+          text += decoder.decode(value)
+        }
+      }
+      await until("event: takes")
+      write("src/ui/Chip.css", ".chip { color: green }\n")
+      await until(`event: code\ndata: ${JSON.stringify({ file: "src/ui/Chip.css", take: null })}`)
+      await post(url, `/__caliper/takes/${take}/file`, { file: "src/ui/Chip.css", content: ".chip { color: purple }\n" })
+      await until(`event: code\ndata: ${JSON.stringify({ file: "src/ui/Chip.css", take })}`)
+      await reader.cancel()
+    })
+  })
+})

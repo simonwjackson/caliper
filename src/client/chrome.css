@@ -30,6 +30,29 @@
   /* Room for captions and a small preview before its region must scroll. */
   --cal-stage-min: 12rem;
   --cal-navigation-min: 6rem;
+
+  /* The code pane. The editor reads these through CSS, so it changes with the chrome. */
+  --cal-code-bg: var(--cal-bg);
+  --cal-code-gutter: #5d626c;
+  --cal-code-active: rgb(255 255 255 / 0.035);
+  --cal-code-selection: rgb(122 162 255 / 0.28);
+  --cal-code-match: rgb(122 162 255 / 0.14);
+  --cal-code-find: rgb(240 184 90 / 0.35);
+  --cal-code-arrived: rgb(122 162 255 / 0.32);
+  --cal-code-added: rgb(127 209 139 / 0.1);
+  --cal-code-added-strong: rgb(127 209 139 / 0.28);
+  --cal-code-removed: rgb(255 122 122 / 0.09);
+  --cal-code-removed-strong: rgb(255 122 122 / 0.28);
+  --cal-code-keyword: #c69cff;
+  --cal-code-string: #a6d98f;
+  --cal-code-number: #f2b872;
+  --cal-code-comment: #6f7581;
+  --cal-code-type: #6fd2c8;
+  --cal-code-tag: #ff9d85;
+  --cal-code-attribute: #f0c674;
+  --cal-code-property: #9dbcff;
+  --cal-code-function: var(--cal-accent);
+  --cal-code-punctuation: #8f949e;
 }
 
 * {
@@ -118,6 +141,7 @@ pre {
   display: none;
 }
 
+.cal-code-toggle[aria-expanded="true"],
 .cal-takes-toggle[aria-expanded="true"] {
   background: var(--cal-accent);
   color: var(--cal-stage);
@@ -441,6 +465,7 @@ pre {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  container: cal-main / size;
 }
 
 .cal-bar {
@@ -628,6 +653,401 @@ pre {
 
 .cal-empty {
   color: var(--cal-muted);
+}
+
+/* ------------------------------------------------------------- work area */
+
+/*
+ * The stage and the code pane share the work area. The pane sits beside the
+ * stage when the main column is wide and not tall; otherwise it sits under
+ * it, where the width is. The divider sets the pane's share of that axis.
+ * Both thresholds are guesses, not measured on a real desk.
+ */
+.cal-work {
+  --cal-code-beside: 0;
+  --cal-code-share: 0.45;
+  --cal-code-min: 9rem;
+  flex: 1;
+  min-height: var(--cal-stage-min);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* Stacked, the stage and the pane each keep their minimum; below that, the main column scrolls. */
+.cal-work.cal-code-open {
+  min-height: calc(var(--cal-stage-min) + var(--cal-code-min));
+  grid-template-rows: minmax(var(--cal-stage-min), 1fr) auto minmax(var(--cal-code-min), calc(var(--cal-code-share) * 100%));
+}
+
+@container cal-main (width >= 56rem) and (aspect-ratio >= 11 / 10) {
+  .cal-work {
+    --cal-code-beside: 1;
+  }
+  .cal-work.cal-code-open {
+    min-height: var(--cal-stage-min);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(16rem, 1fr) auto minmax(22rem, calc(var(--cal-code-share) * 100%));
+  }
+  .cal-split {
+    width: 9px;
+    height: auto;
+    margin: 0 -4px;
+    cursor: col-resize;
+  }
+  .cal-split::before {
+    inset: 0 4px;
+  }
+}
+
+.cal-work > [hidden] {
+  display: none;
+}
+
+/* The divider draws one line but takes a 9 px band of pointer. */
+.cal-split {
+  position: relative;
+  z-index: 1;
+  height: 9px;
+  margin: -4px 0;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.cal-split::before {
+  content: "";
+  position: absolute;
+  inset: 4px 0;
+  background: var(--cal-line);
+  transition: background-color 120ms;
+}
+
+.cal-split:hover::before,
+.cal-split:focus-visible::before,
+.cal-split[data-dragging]::before {
+  background: var(--cal-accent);
+}
+
+.cal-split:focus-visible {
+  outline: none;
+}
+
+/* ------------------------------------------------------------- code pane */
+
+.cal-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--cal-code-bg);
+}
+
+.cal-code-head {
+  display: flex;
+  min-width: 0;
+  background: var(--cal-panel);
+  border-bottom: 1px solid var(--cal-line);
+}
+
+/* Tabs scroll sideways; the Files menu reaches every file at any width. */
+.cal-code-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.cal-code-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--cal-space-2);
+  flex: none;
+  min-height: 2.25rem;
+  margin-bottom: -1px;
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border: 0;
+  border-right: 1px solid var(--cal-line);
+  border-radius: 0;
+  background: none;
+  color: var(--cal-muted);
+  font: var(--cal-text-sm) / 1.3 var(--cal-mono);
+  white-space: nowrap;
+}
+
+.cal-code-tab:hover {
+  color: var(--cal-ink);
+  background: var(--cal-raised);
+}
+
+.cal-code-tab[aria-current="true"] {
+  color: var(--cal-ink);
+  background: var(--cal-code-bg);
+  box-shadow: inset 0 2px 0 var(--cal-accent);
+}
+
+.cal-code-files {
+  flex: none;
+  border: 0;
+  border-left: 1px solid var(--cal-line);
+  border-radius: 0;
+  background: none;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  white-space: nowrap;
+}
+
+.cal-code-files:hover:not(:disabled) {
+  color: var(--cal-ink);
+  background: var(--cal-raised);
+}
+
+.cal-code-files:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.cal-code-stat {
+  font: 0.75rem / 1 var(--cal-mono);
+  color: var(--cal-warn);
+}
+
+.cal-code-added {
+  color: var(--cal-good);
+}
+
+.cal-code-removed {
+  color: var(--cal-bad);
+}
+
+/* The path is a readout: its folders yield width before the mode and status do. */
+.cal-code-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-1) var(--cal-space-3);
+  min-height: 2.25rem;
+  padding: var(--cal-space-1) var(--cal-space-3);
+  border-bottom: 1px solid var(--cal-line);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-code-path {
+  display: flex;
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--cal-mono);
+  white-space: nowrap;
+}
+
+.cal-code-path {
+  overflow: hidden;
+}
+
+/* The folders give up their width first; the file name truncates only after them. */
+.cal-code-dir {
+  flex-shrink: 10000;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--cal-muted);
+}
+
+.cal-code-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-code-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-1) var(--cal-space-2);
+}
+
+.cal-code-mode:empty {
+  display: none;
+}
+
+.cal-code-chip {
+  padding: 0 var(--cal-space-2);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1.5rem;
+  white-space: nowrap;
+}
+
+.cal-code-chip-real {
+  border: 1px solid var(--cal-line);
+  color: var(--cal-muted);
+}
+
+.cal-code-chip-take {
+  background: rgb(122 162 255 / 0.16);
+  color: var(--cal-accent);
+}
+
+.cal-code-hint {
+  color: var(--cal-muted);
+}
+
+.cal-code-changes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cal-space-1);
+}
+
+.cal-code-step,
+.cal-code-action {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 var(--cal-space-2);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-code-status {
+  margin: 0 0 0 auto;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cal-muted);
+}
+
+.cal-code-status:empty {
+  display: none;
+}
+
+.cal-code-status-saved {
+  color: var(--cal-good);
+}
+
+.cal-code-status-failed {
+  color: var(--cal-bad);
+}
+
+.cal-code-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-code-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.cal-code-editor[hidden] {
+  display: none;
+}
+
+.cal-code-editor .cm-editor {
+  height: 100%;
+}
+
+.cal-code-message {
+  margin: 0;
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border-top: 1px solid var(--cal-line);
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-code-message[hidden] {
+  display: none;
+}
+
+.cal-code-message[data-kind="problem"] {
+  color: var(--cal-bad);
+}
+
+/* With no editor to show, the message takes the pane. */
+.cal-code-editor[hidden] + .cal-code-message {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  border-top: 0;
+  padding: var(--cal-space-4);
+  text-align: center;
+}
+
+/* The Files menu lives in the top layer, so no pane clips it. chrome.js places it. */
+.cal-code-menu {
+  inset: auto;
+  margin: 0;
+  padding: 0 0 var(--cal-space-2);
+  overflow: auto;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-panel);
+  color: var(--cal-ink);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+
+.cal-code-menu-filter {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  padding: var(--cal-space-2) var(--cal-space-3);
+  border: 0;
+  border-bottom: 1px solid var(--cal-line);
+  background: var(--cal-panel);
+}
+
+.cal-code-menu-group {
+  margin: var(--cal-space-3) var(--cal-space-3) var(--cal-space-1);
+  color: var(--cal-muted);
+  font: 500 var(--cal-text-sm) / 1.3 var(--cal-font);
+}
+
+.cal-code-menu-file {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cal-space-2);
+  width: 100%;
+  min-height: 2rem;
+  padding: var(--cal-space-1) var(--cal-space-3);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.cal-code-menu-file:hover,
+.cal-code-menu-file:focus-visible {
+  background: var(--cal-raised);
+}
+
+.cal-code-menu-file[aria-current="true"] {
+  box-shadow: inset 2px 0 0 var(--cal-accent);
+}
+
+.cal-code-menu-name {
+  flex: none;
+  font: var(--cal-text-sm) / 1.3 var(--cal-mono);
+}
+
+.cal-code-menu-dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+/* Text an agent or another editor wrote fades in, so you see where the file changed. */
+@keyframes cal-arrived {
+  from {
+    background-color: var(--cal-code-arrived);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 /* ----------------------------------------------------------- calibration */
@@ -910,6 +1330,17 @@ button:disabled {
 }
 
 .cal-log-tool code {
+  overflow-wrap: anywhere;
+}
+
+/* Your hand edits sit in the conversation, where the agent will hear of them. */
+.cal-log-edit {
+  color: var(--cal-muted);
+  padding-left: var(--cal-space-2);
+  border-left: 2px solid var(--cal-good);
+}
+
+.cal-log-edit code {
   overflow-wrap: anywhere;
 }
 

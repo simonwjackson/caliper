@@ -16,8 +16,9 @@ import { createIntegrationReview } from "../takes/integration.js"
  * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
  *   `direction` is the planner's way for this take to answer the prompt;
  *   `others` are the titles of the directions its sibling takes got.
- * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[] }} Live
+ * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string> }} Live
  *   `agent` is null until the first prompt creates it, and stays null when that fails.
+ *   `edited` holds the files you changed by hand since the agent's last turn.
  */
 
 /** A run stops after this many model turns, so a confused agent cannot spend without end. */
@@ -64,6 +65,50 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
     void send(take, prompt)
+  }
+
+  /**
+   * Start a take from a hand edit. Its first change is the file you typed in;
+   * no agent runs until you send it a prompt.
+   *
+   * @param {TakeAsk} ask
+   * @param {string} file root-relative
+   * @param {string} content
+   * @returns {string} the take number
+   */
+  const startByHand = (ask, file, content) => {
+    // A name from the start; the agent may rename the take once it works on it.
+    const take = store.create({ ...ask, name: `Hand edit of ${file.slice(file.lastIndexOf("/") + 1)}` })
+    try {
+      editByHand(take, file, content)
+    } catch (error) {
+      store.discard(take)
+      throw error
+    }
+    return take
+  }
+
+  /**
+   * Save your edit of one file in a take. Content equal to the real file
+   * removes the take's copy, so the take changes only what still differs.
+   * The agent hears about the edit with its next prompt.
+   *
+   * @param {string} take
+   * @param {string} file root-relative
+   * @param {string} content
+   * @returns {string[]} the files the take changes now
+   */
+  const editByHand = (take, file, content) => {
+    if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
+    const entry = live.get(take) ?? { agent: null, run: { _tag: "Idle" }, log: [], edited: new Set() }
+    if (entry.run._tag === "Running") throw new Error(`Take ${take}'s agent is working. Stop it before you edit by hand.`)
+    const inside = content === store.original(file) ? (store.reset(take, file), file) : store.write(take, file, content)
+    entry.edited.add(inside)
+    const last = entry.log.at(-1)
+    if (last?._tag !== "Edit" || last.file !== inside) entry.log.push({ _tag: "Edit", file: inside })
+    live.set(take, entry)
+    onChange()
+    return store.files(take)
   }
 
   /** @param {string} take */
@@ -118,17 +163,21 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   const send = async (take, prompt) => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     /** @type {Live} */
-    const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [] }
+    const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [], edited: new Set() }
     entry.run = { _tag: "Running" }
     entry.log.push({ _tag: "User", text: prompt })
     live.set(take, entry)
     onChange()
+    const edited = [...entry.edited]
+    entry.edited.clear()
     try {
       const render = renderFor(take, record)
       const first = entry.agent === null
       const agent = entry.agent ?? createAgent(take, record, render, entry)
       entry.agent = agent
-      const content = first ? await firstMessage(record, prompt, render, store, take) : prompt
+      const content = first
+        ? await firstMessage(record, `${handNote(edited, true)}${prompt}`, render, store, take)
+        : `${handNote(edited, false)}${prompt}`
       // Discarded while Caliper rendered the part for the first message.
       if (live.get(take) !== entry) return
       await (typeof content === "string"
@@ -140,6 +189,8 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
         : { _tag: "Idle" }
     } catch (error) {
       entry.run = { _tag: "Failed", reason: error instanceof Error ? error.message : String(error) }
+      // The agent never read the note, so the next prompt carries it again.
+      if (entry.agent === null || entry.agent.state.messages.length === 0) for (const file of edited) entry.edited.add(file)
     }
     onChange()
   }
@@ -199,7 +250,23 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     return files
   }
 
-  return { start, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, startByHand, editByHand, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
+}
+
+/**
+ * What the agent must know before it acts on a prompt: files you changed by
+ * hand, which its conversation has not seen.
+ *
+ * @param {readonly string[]} files
+ * @param {boolean} first whether this is the agent's first message in the take
+ */
+export function handNote(files, first) {
+  if (files.length === 0) return ""
+  const list = files.map(file => `"${file}"`).join(", ")
+  const them = files.length === 1 ? "it" : "them"
+  return first
+    ? `I already edited ${list} by hand in this take. Build on my edits; read ${them} before you change ${them}.\n\n`
+    : `I edited ${list} by hand since your last turn. Read ${them} again before you change ${them}.\n\n`
 }
 
 /**

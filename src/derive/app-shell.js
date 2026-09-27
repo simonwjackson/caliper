@@ -20,7 +20,7 @@ import ts from "typescript"
  */
 
 export const CSS_FILE = /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)$/
-const SCRIPT_FILE = /\.(m|c)?(t|j)sx?$/
+export const SCRIPT_FILE = /\.(m|c)?(t|j)sx?$/
 const WRAP_HINT = 'Set caliper({ wrap: "class-a class-b" }) in vite.config to name the class names of the app\'s outer element, or caliper({ wrap: false }) for none.'
 
 /**
@@ -116,7 +116,7 @@ function parse(file) {
  * @param {ts.SourceFile} source
  * @returns {StaticImport[]}
  */
-function staticImports(source) {
+export function staticImports(source) {
   /** @type {StaticImport[]} */
   const found = []
   for (const statement of source.statements) {

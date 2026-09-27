@@ -206,6 +206,8 @@ export type TakeLogEntry =
       /** The result in a few words, or the error. */
       readonly detail: string
     }
+  /** You changed a file of the take by hand, in the code pane. */
+  | { readonly _tag: "Edit"; readonly file: string }
 
 /** One way to answer a prompt. The planner proposes them; each take follows one. */
 export type Direction = {
@@ -249,6 +251,35 @@ export type TakeView = {
 export type TakesSnapshot = {
   readonly agent: AgentStatus
   readonly takes: readonly TakeView[]
+}
+
+/** One file the code pane lists for a part. */
+export type CodeFile = {
+  /** Root-relative. */
+  readonly file: string
+  /** 0 for the part file, 1 for what it imports, and so on. null: the take changes the file, but the part does not import it. */
+  readonly depth: number | null
+  /** Whether the take changes the file. Always false for the real files. */
+  readonly changed: boolean
+}
+
+/** A file as the code pane opens it. */
+export type CodeDocument = {
+  readonly file: string
+  /** The file as the take sees it, or the real file. */
+  readonly content: string
+  /**
+   * Only for a take: the real file, to compare with. null when the take adds
+   * the file. Absent for the real files.
+   */
+  readonly original?: string | null
+}
+
+/** What the event stream sends as `code`: a project file, or a take's copy of one, changed on disk. */
+export type CodeChange = {
+  readonly file: string
+  /** The take whose copy changed, or null for the real file. */
+  readonly take: string | null
 }
 
 export type CaliperOptions = {

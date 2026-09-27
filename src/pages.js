@@ -9,9 +9,13 @@ export const FRAME_WATCHDOG_MS = 10_000
  * Caliper's own page. It loads no project code and no Vite client, so a save
  * in the project reloads only the device frame, never this page.
  *
- * @param {{ clientUrl: string }} input
+ * The import map names the browser packages the chrome loads from Caliper's
+ * own node_modules, such as CodeMirror. It must come before any module script.
+ *
+ * @param {{ clientUrl: string, importMap: { imports: Record<string, string> } }} input
  */
-export function chromePage({ clientUrl }) {
+export function chromePage({ clientUrl, importMap }) {
+  const map = JSON.stringify(importMap).replaceAll("<", "\\u003c")
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -20,6 +24,7 @@ export function chromePage({ clientUrl }) {
     <title>Caliper</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="${clientUrl}/chrome.css" />
+    <script type="importmap">${map}</script>
     <script type="module" src="${clientUrl}/chrome.js"></script>
   </head>
   <body>

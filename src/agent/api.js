@@ -27,6 +27,8 @@ import { Type } from "typebox"
  */
 
 const MAX_BODY = 64 * 1024
+/** A hand edit carries a whole file. */
+const MAX_FILE_BODY = 4 * 1024 * 1024
 const MAX_PROMPT = 8_000
 /** The most takes one prompt starts. The chrome offers the same. */
 const MAX_TAKES = 4
@@ -183,7 +185,14 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return true
     }
     try {
-      const body = await readJson(request)
+      const body = await readJson(request, path === "/takes/hand" || path.endsWith("/file") ? MAX_FILE_BODY : MAX_BODY)
+      if (path === "/takes/hand") {
+        const target = await validTarget(body)
+        const { file, content } = validFile(body)
+        const take = agents.startByHand(target, file, content)
+        json(response, 201, { take, view: agents.views().find(view => view.take === take) })
+        return true
+      }
       if (path === "/takes") {
         const ask = await validAsk(body)
         json(response, 201, { take: agents.start({ ...ask, ...validDirection(body) }) })
@@ -213,6 +222,9 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         validateProposedContext(take)
         const files = agents.apply(take, body.revision, body.behaviorReviewed)
         json(response, 200, { take, files })
+      } else if (action === "file") {
+        const { file, content } = validFile(body)
+        json(response, 200, { take, files: agents.editByHand(take, file, content) })
       } else if (action === "prompt") {
         validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
         agents.follow(take, validPrompt(body))
@@ -237,8 +249,18 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
 
   /** @param {unknown} body */
   const validAsk = async body => {
-    const { part, state, device, context } = /** @type {Record<string, unknown>} */ (body ?? {})
     const prompt = validPrompt(body)
+    return { ...(await validTarget(body)), prompt }
+  }
+
+  /**
+   * The part, state and device a take is about, and the composed scenario it
+   * is viewed in, when there is one.
+   *
+   * @param {unknown} body
+   */
+  const validTarget = async body => {
+    const { part, state, device, context } = /** @type {Record<string, unknown>} */ (body ?? {})
     const parts = (await project()).parts
     const known = parts.find(candidate => candidate.file === part)
     if (known === undefined) throw new Error(`"${part}" is not a part.`)
@@ -246,9 +268,9 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     if (!known.states.some(candidate => candidate.export === stateName)) throw new Error(`${known.file} has no state "${stateName}".`)
     const deviceId = typeof device === "string" ? device : DEVICES[0]?.id ?? ""
     if (!DEVICES.some(candidate => candidate.id === deviceId)) throw new Error(`Caliper has no device "${deviceId}".`)
-    const ask = { part: known.file, state: stateName, device: deviceId, prompt, ...(context === undefined ? {} : { context: readContext(context) }) }
-    validateTakeContext(parts, ask)
-    return ask
+    const target = { part: known.file, state: stateName, device: deviceId, ...(context === undefined ? {} : { context: readContext(context) }) }
+    validateTakeContext(parts, target)
+    return target
   }
 
   return { handle, snapshot }
@@ -356,6 +378,18 @@ function validDirection(body) {
   return { direction: { title, brief }, others: siblings }
 }
 
+/**
+ * A hand edit: one root-relative file and its whole new content.
+ *
+ * @param {unknown} body
+ */
+function validFile(body) {
+  const { file, content } = /** @type {Record<string, unknown>} */ (body ?? {})
+  if (typeof file !== "string" || file.trim() === "") throw new Error("Name the file to save.")
+  if (typeof content !== "string") throw new Error("Send the file's content as a string.")
+  return { file, content }
+}
+
 /** @param {unknown} body */
 function validPrompt(body) {
   const prompt = /** @type {Record<string, unknown>} */ (body ?? {}).prompt
@@ -366,15 +400,16 @@ function validPrompt(body) {
 
 /**
  * @param {IncomingMessage} request
+ * @param {number} limit the largest body, in bytes
  * @returns {Promise<unknown>}
  */
-async function readJson(request) {
+async function readJson(request, limit) {
   let size = 0
   /** @type {Buffer[]} */
   const chunks = []
   for await (const chunk of request) {
     size += chunk.length
-    if (size > MAX_BODY) throw new Error("The request body is too large.")
+    if (size > limit) throw new Error("The request body is too large.")
     chunks.push(chunk)
   }
   const text = Buffer.concat(chunks).toString("utf8")

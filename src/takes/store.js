@@ -170,7 +170,8 @@ export function createTakeStore(root) {
   /** @param {string} file @returns {string | null} */
   const original = file => {
     const path = join(root, fence(file))
-    return existsSync(path) ? readFileSync(path, "utf8") : null
+    // A folder is not a file the code pane can open.
+    return existsSync(path) && !lstatSync(path).isDirectory() ? readFileSync(path, "utf8") : null
   }
 
   /** Remove an edited copy, so the take uses the original again. @param {string} take @param {string} file */

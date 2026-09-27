@@ -8,6 +8,8 @@ import { loadEnv } from "vite"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { createTakesApi } from "./agent/api.js"
+import { codeChange, createCodeApi } from "./code/api.js"
+import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code/modules.js"
 import { listeningOrigin } from "./server-origin.js"
 import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
@@ -28,12 +30,17 @@ import { takeParts } from "./takes/parts.js"
 export const CALIPER_PATH = "/__caliper"
 
 const CLIENT_DIR = fileURLToPath(new URL("./client/", import.meta.url))
+/** Caliper's package folder, where the chrome's browser packages resolve from. */
+const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url))
 const CLIENT_FILES = new Map([
   ["chrome.js", "text/javascript"],
   ["integration-review.js", "text/javascript"],
   ["chrome.css", "text/css"],
+  ["code-pane.js", "text/javascript"],
+  ["code-editor.js", "text/javascript"],
   ["device-frame.js", "text/javascript"],
   ["scenarios.js", "text/javascript"],
+  ["dom.js", "text/javascript"],
   ["frame.js", "text/javascript"],
   ["frame.css", "text/css"],
 ])
@@ -219,6 +226,25 @@ function createSession(server, root, options, env, overlay) {
   const base = server.config.base.replace(/\/$/, "")
   const store = createTakeStore(root)
 
+  // The code pane follows every file on disk: the real files and the takes' copies.
+  /** @param {string} file */
+  const codeChanged = file => {
+    const change = codeChange(root, file)
+    if (closed || change === null) return
+    const data = JSON.stringify(change)
+    for (const stream of streams) stream.write(`event: code\ndata: ${data}\n\n`)
+  }
+  server.watcher.on("change", codeChanged)
+  server.watcher.on("add", codeChanged)
+  server.watcher.on("unlink", codeChanged)
+
+  const modules = browserPackages(PACKAGE_DIR, CHROME_PACKAGES)
+  for (const problem of modules.problems) server.config.logger.warn(`Caliper: ${problem}`)
+  /** @type {Map<string, import("./code/modules.js").ServedModule>} */
+  const moduleCache = new Map()
+  const modulesUrl = `${base}${CALIPER_PATH}/modules`
+  const chromeHtml = chromePage({ clientUrl: `${base}${CALIPER_PATH}/client`, importMap: importMap(modules.packages, modulesUrl) })
+
   const agent = resolveAgent({ option: options.agent, env, home: homedir() })
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let takesTimer
@@ -232,6 +258,7 @@ function createSession(server, root, options, env, overlay) {
     }, TAKES_DELAY_MS)
   }
   server.httpServer?.once("close", () => { void close() })
+  const code = createCodeApi({ store, project: async () => (await load()).project, resolve })
   const takes = createTakesApi({
     store,
     status: agent.status,
@@ -257,8 +284,22 @@ function createSession(server, root, options, env, overlay) {
   const handle = async (url, request, response) => {
     const path = url.pathname.slice(CALIPER_PATH.length)
     if (await takes.handle(path, request, response)) return undefined
+    if (await code.handle(path, url, response)) return undefined
+    if (path.startsWith("/modules/")) {
+      const gzip = /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))
+      const served = serveModule(modules.packages, path.slice("/modules/".length), gzip, moduleCache)
+      if (served === null) return send(response, 404, "text/plain", `Caliper has no browser module ${path.slice("/modules/".length)}.`)
+      response.writeHead(200, {
+        "content-type": `${served.type}; charset=utf-8`,
+        // The version is in the path, so the file at this URL never changes.
+        "cache-control": "public, max-age=31536000, immutable",
+        ...(served.encoding === null ? {} : { "content-encoding": served.encoding }),
+        vary: "accept-encoding",
+      })
+      return response.end(served.body)
+    }
     if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
-    if (path === "/") return send(response, 200, "text/html", chromePage({ clientUrl: `${base}${CALIPER_PATH}/client` }))
+    if (path === "/") return send(response, 200, "text/html", chromeHtml)
     if (path === "/project.json") return send(response, 200, "application/json", (await load()).json)
     if (path === "/events") return openStream(response, (await load()).json)
     if (path === "/frame") {

@@ -1,5 +1,7 @@
 // @ts-check
+import { createCodePane } from "./code-pane.js"
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
+import { h } from "./dom.js"
 import { createIntegrationPanel } from "./integration-review.js"
 import { contextsFor, sameState, stateExists, subjectsOf } from "./scenarios.js"
 
@@ -42,6 +44,14 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
 const STORAGE_DEVICE = "caliper:device"
 const STORAGE_TAKES_OPEN = "caliper:takes-open"
+const STORAGE_CODE_OPEN = "caliper:code-open"
+const STORAGE_CODE_SHARE = "caliper:code-share"
+/** The share of the work area the code pane takes, beside or under the stage. */
+const DEFAULT_CODE_SHARE = 0.45
+const MIN_CODE_SHARE = 0.2
+const MAX_CODE_SHARE = 0.8
+/** One arrow key press moves the divider this much. */
+const CODE_SHARE_STEP = 0.05
 /** Room the caption under the frame needs, in CSS px. */
 const CAPTION_RESERVE = 44
 /** Matches `.cal-stage` padding in chrome.css. */
@@ -97,6 +107,14 @@ const state = {
   plan: { _tag: "None" },
   /** Whether the Takes panel is open. null: not chosen yet, so it follows the agent. @type {boolean | null} */
   takesOpen: localStorage.getItem(STORAGE_TAKES_OPEN) === null ? null : localStorage.getItem(STORAGE_TAKES_OPEN) === "true",
+  /** Whether the code pane is open. */
+  codeOpen: localStorage.getItem(STORAGE_CODE_OPEN) === "true",
+  codeShare: clampShare(Number(localStorage.getItem(STORAGE_CODE_SHARE)) || DEFAULT_CODE_SHARE),
+}
+
+/** @param {number} share */
+function clampShare(share) {
+  return Math.min(MAX_CODE_SHARE, Math.max(MIN_CODE_SHARE, share))
 }
 
 /**
@@ -109,24 +127,6 @@ function reportKey(take, partState, part) {
 }
 
 // ---------------------------------------------------------------- DOM helpers
-
-/**
- * @template {keyof HTMLElementTagNameMap} K
- * @param {K} tag
- * @param {Record<string, string | boolean | ((event: Event) => void)>} [props]
- * @param {Array<Node | string | null | false>} children
- * @returns {HTMLElementTagNameMap[K]}
- */
-function h(tag, props = {}, ...children) {
-  const element = document.createElement(tag)
-  for (const [key, value] of Object.entries(props)) {
-    if (typeof value === "function") element.addEventListener(key.slice(2).toLowerCase(), value)
-    else if (value === true) element.setAttribute(key, "")
-    else if (value !== false) element.setAttribute(key, value)
-  }
-  for (const child of children) if (child !== null && child !== false) element.append(child)
-  return element
-}
 
 /** @param {string} selector */
 function $(selector) {
@@ -165,7 +165,9 @@ app.append(
           h("span", { class: "cal-part-file" })),
         h("div", { class: "cal-devices", role: "radiogroup", "aria-label": "Device" }),
         h("button", { class: "cal-calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate"),
+        h("button", { class: "cal-code-toggle", type: "button", "aria-controls": "cal-code", onClick: () => setCodeOpen(!state.codeOpen) }, "Code"),
         h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => setTakesOpen(!takesOpen()) }, "Takes")),
+      h("div", { class: "cal-work" },
       h("div", { class: "cal-stage" },
         h("figure", { class: "cal-device" },
           h("div", { class: "cal-screen" },
@@ -193,6 +195,17 @@ app.append(
             h("div", { class: "cal-calibration-actions" },
               h("button", { type: "button", onClick: () => resetCalibration() }, "Reset"),
               h("button", { type: "button", class: "cal-primary", onClick: () => setCalibrating(false) }, "Done"))))),
+      h("div", {
+        class: "cal-split",
+        role: "separator",
+        tabindex: "0",
+        "aria-controls": "cal-code",
+        "aria-label": "Resize the code pane",
+        "aria-valuemin": String(MIN_CODE_SHARE * 100),
+        "aria-valuemax": String(MAX_CODE_SHARE * 100),
+        title: "Drag to resize. Double-click to reset.",
+      }),
+      h("section", { class: "cal-code", id: "cal-code", "aria-label": "Code" })),
       h("section", { class: "cal-problems", "aria-live": "polite" })),
     h("aside", { class: "cal-takes", id: "cal-takes", "aria-label": "Takes" },
       h("header", { class: "cal-takes-head" },
@@ -239,6 +252,20 @@ app.append(
 
 const frame = /** @type {HTMLIFrameElement} */ ($(".cal-frame"))
 const stage = $(".cal-stage")
+const work = $(".cal-work")
+const split = $(".cal-split")
+const code = createCodePane($(".cal-code"), {
+  // A lens in the part file selects its state, as the state's row in the list does.
+  selectState: exportName => { if (state.part) selectPartState(state.part, exportName) },
+  forked: view => {
+    // The event stream brings the new take soon; show it now, so the stage and the pane move together.
+    if (state.takes && !state.takes.takes.some(take => take.take === view.take)) {
+      state.takes = { ...state.takes, takes: [...state.takes.takes, view] }
+    }
+    selectTake(view.take)
+  },
+  stopTake: take => void postTakes(`/takes/${take}/stop`),
+})
 
 // -------------------------------------------------------------------- actions
 
@@ -376,6 +403,66 @@ function showChanged() {
   renderStage()
   renderProblems()
   renderTakes()
+  syncCode()
+}
+
+/**
+ * What the code pane shows: the files of the editing subject, the part you
+ * change, even when the stage previews it inside a page (decision 18). In the
+ * takes view it is the selected take; everywhere else, the real files.
+ *
+ * @returns {import("./code-pane.js").Subject | null}
+ */
+function codeSubject() {
+  const part = currentPart()
+  if (!part) return null
+  const shown = effectiveShown()
+  return {
+    part,
+    take: shown._tag === "Takes" ? currentTake() : null,
+    state: subjectRef()?.state ?? null,
+    device: state.device.id,
+    context: state.context,
+  }
+}
+
+function syncCode() {
+  code.show(codeSubject())
+}
+
+/** @param {boolean} open */
+function setCodeOpen(open) {
+  state.codeOpen = open
+  localStorage.setItem(STORAGE_CODE_OPEN, String(open))
+  renderCode()
+}
+
+function renderCode() {
+  work.classList.toggle("cal-code-open", state.codeOpen)
+  $(".cal-code").hidden = !state.codeOpen
+  split.hidden = !state.codeOpen
+  $(".cal-code-toggle").setAttribute("aria-expanded", String(state.codeOpen))
+  renderCodeShare()
+  syncCode()
+  code.setOpen(state.codeOpen)
+}
+
+function renderCodeShare() {
+  work.style.setProperty("--cal-code-share", String(state.codeShare))
+  split.setAttribute("aria-valuenow", String(Math.round(state.codeShare * 100)))
+  split.setAttribute("aria-orientation", codeBeside() ? "vertical" : "horizontal")
+}
+
+/** Whether the code pane sits beside the stage, not under it. chrome.css decides from the work area's shape. */
+function codeBeside() {
+  return getComputedStyle(work).getPropertyValue("--cal-code-beside").trim() === "1"
+}
+
+/** @param {number} share @param {boolean} [keep] store it for the next visit */
+function setCodeShare(share, keep = true) {
+  state.codeShare = clampShare(share)
+  if (keep) localStorage.setItem(STORAGE_CODE_SHARE, String(state.codeShare))
+  renderCodeShare()
 }
 
 /** @param {Device} device */
@@ -385,6 +472,7 @@ function selectDevice(device) {
   saveLocation()
   renderBar()
   renderStage()
+  syncCode()
 }
 
 /** @param {number} pxPerMm */
@@ -953,6 +1041,7 @@ function takesArrived(snapshot) {
     renderStage()
   }
   renderTakes()
+  syncCode()
 }
 
 /** @param {string} take */
@@ -1077,6 +1166,8 @@ async function followTake() {
   const take = currentTake()
   const prompt = promptBox().value.trim()
   if (!take || !prompt || state.sending) return
+  // The agent reads the take's files: save what you typed first.
+  await code.flush()
   if (await postTakes(`/takes/${take.take}/prompt`, { prompt })) {
     promptBox().value = ""
     renderComposer()
@@ -1085,6 +1176,7 @@ async function followTake() {
 
 /** @param {TakeView} take */
 async function acceptTake(take) {
+  await code.flush()
   const files = take.files.join("\n")
   if (!confirm(`Replace the real files with ${takeName(take)} (take ${take.take})?\n\n${files}`)) return
   await postTakes(`/takes/${take.take}/accept`)
@@ -1210,6 +1302,7 @@ function renderLog() {
     ...entries.map(entry => {
       if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)
       if (entry._tag === "Assistant") return h("div", { class: "cal-log-assistant" }, entry.text)
+      if (entry._tag === "Edit") return h("div", { class: "cal-log-edit" }, "You edited ", h("code", {}, entry.file))
       return h("div", { class: "cal-log-tool", "data-outcome": entry.outcome, title: entry.detail },
         h("span", { class: "cal-log-tool-name" }, entry.name), " ", h("code", {}, entry.subject),
         entry.detail && entry.outcome !== "Running" ? h("span", { class: "cal-log-tool-detail" }, entry.detail) : null)
@@ -1350,11 +1443,15 @@ function connect() {
     renderFrame()
     renderStage()
     renderTakes()
+    syncCode()
     // The frame reloads itself when a part changes. A change to the global CSS
     // list or the wrapper changes the frame page, so reload it here.
     if (before && setupKey(before) !== setupKey(project)) {
       for (const iframe of stage.querySelectorAll("iframe[src]")) /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
     }
+  })
+  events.addEventListener("code", message => {
+    code.diskChanged(JSON.parse(/** @type {MessageEvent<string>} */ (message).data))
   })
   events.addEventListener("takes", message => {
     /** @type {TakesSnapshot} */
@@ -1378,10 +1475,44 @@ window.addEventListener("message", event => {
   renderProblems()
 })
 
-new ResizeObserver(() => renderStage()).observe(stage)
+// The divider between the stage and the code pane. Pointer capture keeps the
+// drag going over the device frames, whose iframes would take the events.
+split.addEventListener("pointerdown", event => {
+  split.setPointerCapture(event.pointerId)
+  split.dataset.dragging = "true"
+})
+split.addEventListener("pointermove", event => {
+  if (!split.hasPointerCapture(event.pointerId)) return
+  const box = work.getBoundingClientRect()
+  setCodeShare(codeBeside() ? (box.right - event.clientX) / box.width : (box.bottom - event.clientY) / box.height, false)
+})
+split.addEventListener("pointerup", event => {
+  split.releasePointerCapture(event.pointerId)
+  delete split.dataset.dragging
+  setCodeShare(state.codeShare)
+})
+split.addEventListener("dblclick", () => setCodeShare(DEFAULT_CODE_SHARE))
+split.addEventListener("keydown", event => {
+  // The arrow that points at the code pane shrinks it; the other grows it.
+  /** @type {Record<string, number>} */
+  const grow = codeBeside() ? { ArrowLeft: 1, ArrowRight: -1 } : { ArrowUp: 1, ArrowDown: -1 }
+  const step = grow[event.key]
+  if (step !== undefined) setCodeShare(state.codeShare + step * CODE_SHARE_STEP)
+  else if (event.key === "Home") setCodeShare(MIN_CODE_SHARE)
+  else if (event.key === "End") setCodeShare(MAX_CODE_SHARE)
+  else if (event.key === "Enter") setCodeShare(DEFAULT_CODE_SHARE)
+  else return
+  event.preventDefault()
+})
+
+new ResizeObserver(() => {
+  renderStage()
+  renderCodeShare()
+}).observe(stage)
 renderParts()
 renderBar()
 renderCalibration()
 renderStage()
 renderTakes()
+renderCode()
 connect()

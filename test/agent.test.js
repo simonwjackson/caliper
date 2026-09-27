@@ -349,7 +349,7 @@ describe("a take's agent", () => {
       agents.follow(take, "Two")
       const view = await settled(take)
       expect(seen.messages.filter((/** @type {any} */ message) => message.role === "user")).toHaveLength(2)
-      expect(view.log.map(entry => entry._tag === "Tool" ? entry.name : `${entry._tag}: ${entry.text.slice(0, 5)}`)).toEqual([
+      expect(view.log.map(entry => entry._tag === "Tool" ? entry.name : entry._tag === "Edit" ? `Edit: ${entry.file}` : `${entry._tag}: ${entry.text.slice(0, 5)}`)).toEqual([
         "User: One", "Assistant: First", "User: Two", "Assistant: Secon",
       ])
     })
@@ -372,6 +372,90 @@ describe("a take's agent", () => {
       agents.discard(second)
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("red")
       expect(agents.views()).toEqual([])
+    })
+  })
+})
+
+describe("hand edits", () => {
+  test("a hand edit starts an idle take that holds the edit, and the real file does not change", async () => {
+    await inFolder(projectFiles, async root => {
+      const { agents } = setup(root)
+      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      const view = agents.views().find(candidate => candidate.take === take)
+      expect(view).toMatchObject({ run: { _tag: "Idle" }, files: ["src/chip.css"], log: [{ _tag: "Edit", file: "src/chip.css" }] })
+      expect(readFileSync(join(root, ".caliper/takes", take, "src/chip.css"), "utf8")).toContain("teal")
+      expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("blue")
+    })
+  })
+
+  test("editing a file back to the real content removes the take's copy", async () => {
+    await inFolder(projectFiles, async root => {
+      const { agents } = setup(root)
+      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      expect(agents.editByHand(take, "src/chip.css", projectFiles["src/chip.css"])).toEqual([])
+      // One entry per run of edits to the same file.
+      expect(agents.views()[0]?.log).toEqual([{ _tag: "Edit", file: "src/chip.css" }])
+    })
+  })
+
+  test("refuses a hand edit outside the project, and starts no take", async () => {
+    await inFolder(projectFiles, async root => {
+      const { agents } = setup(root)
+      expect(() => agents.startByHand(ask, "../outside.css", "x")).toThrow("outside the project")
+      expect(agents.views()).toEqual([])
+    })
+  })
+
+  test("the agent's first message says which files you already edited", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      /** @type {any} */
+      let seen = null
+      faux.setResponses([context => {
+        seen = context
+        return fauxAssistantMessage([fauxText("ok")])
+      }])
+      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      agents.follow(take, "Now make it bigger")
+      await settled(take)
+      const user = seen.messages.find((/** @type {any} */ message) => message.role === "user")
+      expect(user.content[0].text).toStartWith('I already edited "src/chip.css" by hand in this take.')
+      expect(user.content[0].text).toContain("Now make it bigger")
+    })
+  })
+
+  test("a follow-up prompt says which files you edited since the agent's last turn, once", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      faux.setResponses([fauxAssistantMessage([fauxText("First.")])])
+      const take = agents.start({ ...ask, prompt: "One" })
+      await settled(take)
+      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
+      /** @type {string[]} */
+      const prompts = []
+      const answer = (/** @type {any} */ context) => {
+        prompts.push(context.messages.at(-1).content.at(0)?.text ?? context.messages.at(-1).content)
+        return fauxAssistantMessage([fauxText("ok")])
+      }
+      faux.setResponses([answer, answer])
+      agents.follow(take, "Two")
+      await settled(take)
+      agents.follow(take, "Three")
+      await settled(take)
+      expect(prompts).toEqual([
+        'I edited "src/chip.css" by hand since your last turn. Read it again before you change it.\n\nTwo',
+        "Three",
+      ])
+    })
+  })
+
+  test("refuses a hand edit while the take's agent works", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      faux.setResponses([fauxAssistantMessage([fauxText("Done.")])])
+      const take = agents.start({ ...ask, prompt: "Go" })
+      expect(() => agents.editByHand(take, "src/chip.css", "x")).toThrow("agent is working")
+      await settled(take)
     })
   })
 })
