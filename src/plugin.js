@@ -60,6 +60,7 @@ export function caliper(options = {}) {
   const overlay = takeOverlay(() => root, () => cacheDir)
   /** @type {Record<string, string | undefined>} */
   let env = { ...process.env }
+  let closeSession = async () => {}
 
   return {
     name: "caliper",
@@ -122,8 +123,13 @@ export function caliper(options = {}) {
       ].join("\n")
     },
 
+    closeBundle() {
+      return closeSession()
+    },
+
     configureServer(server) {
       const session = createSession(server, root, options, env, overlay)
+      closeSession = session.close
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? "/", "http://caliper.local")
         if (url.pathname !== CALIPER_PATH && !url.pathname.startsWith(`${CALIPER_PATH}/`)) return next()
@@ -184,12 +190,16 @@ function createSession(server, root, options, env, overlay) {
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(async () => {
       if (closed) return
-      const before = current ? (await current).json : null
-      if (closed) return
-      current = null
-      const after = (await load()).json
-      if (after === before) return
-      for (const stream of streams) stream.write(`event: project\ndata: ${after}\n\n`)
+      try {
+        const before = current ? (await current).json : null
+        if (closed) return
+        current = null
+        const after = (await load()).json
+        if (closed || after === before) return
+        for (const stream of streams) stream.write(`event: project\ndata: ${after}\n\n`)
+      } catch (error) {
+        if (!closed) server.config.logger.error(`Caliper could not refresh the project: ${error instanceof Error ? error.message : String(error)}`)
+      }
     }, REFRESH_DELAY_MS)
   }
 
@@ -221,13 +231,7 @@ function createSession(server, root, options, env, overlay) {
       for (const stream of streams) stream.write(`event: takes\ndata: ${data}\n\n`)
     }, TAKES_DELAY_MS)
   }
-  server.httpServer?.once("close", () => {
-    closed = true
-    clearTimeout(refreshTimer)
-    clearTimeout(takesTimer)
-    for (const stream of streams) stream.end()
-    streams.clear()
-  })
+  server.httpServer?.once("close", () => { void close() })
   const takes = createTakesApi({
     store,
     status: agent.status,
@@ -331,7 +335,18 @@ function createSession(server, root, options, env, overlay) {
     response.on("close", () => streams.delete(response))
   }
 
-  return { handle }
+  const close = async () => {
+    closed = true
+    clearTimeout(refreshTimer)
+    clearTimeout(takesTimer)
+    for (const stream of streams) stream.end()
+    streams.clear()
+    // Vite awaits closeBundle before a test or caller removes the project root.
+    // Await a derivation already in flight as well as cancelling queued work.
+    await current?.catch(() => {})
+  }
+
+  return { handle, close }
 }
 
 /**

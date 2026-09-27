@@ -22,6 +22,17 @@ describe("the plugin", () => {
   test("runs only under the dev server", () => {
     expect(caliper().apply).toBe("serve")
   })
+
+  test("closing Vite cancels a pending source refresh before the project is removed", async () => {
+    await withProject({ files }, async ({ project, write }) => {
+      await project()
+      write("src/Chip.part.tsx", `${files["src/Chip.part.tsx"]}\nexport function Added() { return null }`)
+      // Let the watcher enqueue its 80ms refresh, then close and remove the root.
+      await new Promise(resolve => setTimeout(resolve, 30))
+    })
+    // A leaked refresh rejects after the root is gone and fails this test.
+    await new Promise(resolve => setTimeout(resolve, 160))
+  })
 })
 
 describe("the chrome page", () => {
