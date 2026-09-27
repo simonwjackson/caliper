@@ -25,3 +25,46 @@ and record the change here.
 | 15 | The agent that makes takes runs **inside the Vite dev server**, on `@earendil-works/pi-agent-core` (the loop) and `@earendil-works/pi-ai` (model calls). One agent per take, many at once, in one process. `caliper({ agent: { model, baseUrl, reasoning, api, apiKeyEnv } })` configures it in `vite.config`; `reasoning` goes to the model on every request. The key comes only from an environment variable (default `CALIPER_AGENT_API_KEY`, from the shell or `.env` files), never from `vite.config`. `~/.pi/agent/cliproxyapi.json` is an optional fallback for the base URL and key, and its key goes only to its own base URL. The agent has five tools: `read_file`, `list_files`, `edit_file`, `write_file` and `render`. Writes land only in its take; `render` returns the verdict and the PNGs to the model. The chrome drives takes through `POST /__caliper/takes` and hears about them on the event stream. The key never reaches the browser. | You want the main interaction inside Caliper, through your CLIProxyAPI. Running pi as a subprocess (legacy's way) needs the `pi` binary and pi set up for every user, loads your whole agent setup per take, and gives the agent `bash` and `edit` everywhere, so it needed an extension to fence it. The pi SDK in-process pulls in pi's terminal UI and probably its stored settings. The engine packages need neither: another user needs only an OpenAI-compatible endpoint and a key. Costs: `pi-ai` is pre-1.0 (pinned at 0.87.1) and pulls the Anthropic, OpenAI, Google and AWS SDKs; no pi skills, `AGENTS.md`, saved sessions or failover; a take's conversation ends when Vite stops. Verified on Pico through the proxy with `claude-opus-5-5`: a take takes 26 to 31 s. |
 | 16 | Several takes from one prompt start from a **plan**. One planner call (`POST /__caliper/takes/plan`) sees the prompt, the part's source and how it renders, and proposes up to N directions through a `propose_directions` tool call, or fewer with a reason. You edit the directions in the Takes panel, then one agent per direction starts in parallel. Each agent's first message carries its direction and the titles of its siblings'. One take still starts at once, without a plan. | Three agents given the same prompt and context made nearly the same take: same files read, same sample art, same choices. One agent making every take in turn would force variety, but runs the takes one after another and grows one context with every screenshot. The plan keeps one agent per take folder, so the write fence is unchanged, and keeps the takes parallel. Verified on Pico's Home with "I need to see more variation on the games": planned in 10 s into realistic data, edge-case data and a cart component change; the three takes came out clearly different. Cost: one extra model call per multi-take prompt, and a review step. |
 | 17 | Caliper injects only side-effect stylesheet imports made directly by the app entry, in source order. The selected part loads its component styles through Vite. The app import walk still discovers the wrapper and reports unresolved imports, but does not turn nested styles into globals. `caliper({ css: [...] })` replaces the injected list with explicit root-relative stylesheet paths; `[]` injects none. Setup identifies the convention and override. | After Pico moved CSS imports into components, the old walk still injected all 53 stylesheets into each part. That hid missing imports and kept unrelated styles in each frame. Entry-only injection exposes the real dependencies without interpreting CSS selectors. Cost: projects with global styles in an App or bootstrap module must move those imports or set `css`; wrapper styles must be global too. Plain global CSS import chains retain the take-flattening step. Component CSS import chains in takes fail rather than silently losing styles; use JS/TS imports there. This change does not implement Reach analysis or add support for unverified CSS preprocessors. |
+
+## 18. Product-owned working scenarios
+
+Caliper's goal is AI speed while maintaining, as nearly as possible, a
+hermetically sealed, fully composable and browsable collection of page states.
+This foundation extends decisions 5, 11, 12 and 13. It keeps product-owned part
+files, explicit data, the take overlay, and the named-export state convention.
+
+A scenario belongs to the product. It supplies explicit local data, initial
+state, and action behavior without requiring a live backend. The seal surrounds
+its inputs and dependencies. The components inside retain their real composition
+and behavior. Product wiring supplies local implementations through explicit
+inputs or dependencies, not request interception or global fetch replacement.
+
+A page state shows that real composition under a scenario. Every declared page
+state must be reachable in Caliper and reproducible from its declared inputs.
+Actions must produce the state changes the scenario declares. Fixture data alone
+does not prove interaction behavior, and a no-op callback does not verify an action.
+
+Caliper selects and renders product scenarios. It must not substitute unrelated
+standalone child fixtures and call the result a valid composed page state.
+A child's render function does not specify which parent inputs or repeated child
+instance to change. The product owns those relationships. For example, an empty
+library can make a page remove its shelf entirely. Replacing only the shelf
+bypasses that page behavior.
+
+Keep the component an agent edits separate from the composed scenario where its
+change is judged. A take belongs to a state for review, but its implementation
+edits can affect other states. Verify shared edits across relevant scenarios.
+Accepting a take still copies its edited files over the real files, as decision
+12 specifies. Review ownership does not make those changes state-local.
+
+The cost is explicit scenario authoring and maintenance of fixtures and coverage.
+AI can help author both. Passing declared scenarios does not prove every
+possible combination works. Fully browsable means every declared state is
+reachable and reproducible, not that all theoretical combinations are enumerated.
+
+### Implementation status
+
+This is the agreed direction, not a claim that Caliper enforces it today.
+Separate editing and viewing contexts, state-level take navigation, and composed
+scenario selection remain unimplemented. No new scenario API or automatic
+child-to-parent state mapping is established by this decision.
