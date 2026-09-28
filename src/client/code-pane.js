@@ -4,11 +4,10 @@ import { h } from "./dom.js"
 /**
  * The code pane: the files behind what the stage shows, in a code editor.
  *
- * The pane follows the stage. For the real part it shows the real files; for
- * a take it shows the take's files against the real ones. It never writes a
- * real file: typing in a real file starts a new take with your edit, and the
- * stage then compares that take with the original. Accepting a take is still
- * the only way a real file changes (decision 12).
+ * The pane follows the stage. For the real part it shows the real files, and
+ * edits save to them, as in any editor; the frames reload through Vite. For a
+ * take it shows the take's files against the real ones, and edits save to the
+ * take (decision 21).
  *
  * CodeMirror loads the first time the pane opens, so a chrome that never
  * opens it never loads it.
@@ -21,21 +20,19 @@ import { h } from "./dom.js"
  * @typedef {import("./code-editor.js").Mode} Mode
  * @typedef {typeof import("./code-editor.js")} EditorModule
  * @typedef {ReturnType<EditorModule["createEditor"]>} Editor
- * @typedef {{ part: Part, take: TakeView | null, state: string | null, device: string, context: import("../types").StateRef | null }} Subject
+ * @typedef {{ part: Part, take: TakeView | null, state: string | null }} Subject
  *   The part you edit, as the real files or as one take. `state` is null
- *   when the stage shows every state. `context` is the composed scenario the
- *   stage previews the part in, if any; a take started here records it.
+ *   when the stage shows every state.
  * @typedef {{
  *   selectState: (exportName: string) => void,
- *   forked: (take: TakeView) => void,
  *   stopTake: (take: string) => void,
  * }} PaneHooks
- *   `forked`: your edit of a real file started this take; show it.
- * @typedef {{ file: string, take: string | null, saved: string, local: string, original: string | null | undefined, inflight: Promise<void> | null }} Doc
+ * @typedef {{ file: string, take: string | null, saved: string, local: string, sending: string | null, original: string | null | undefined, inflight: Promise<void> | null }} Doc
  *   One open file. `saved` is the file on disk as the pane last knew it,
- *   `local` the text in the editor. `original` is the real file a take is
- *   compared with, null when the take adds the file, undefined for a real file.
- * @typedef {{ _tag: "Idle" } | { _tag: "Edited" } | { _tag: "Saving" } | { _tag: "Saved" } | { _tag: "Failed", reason: string } | { _tag: "Forking" }} SaveState
+ *   `local` the text in the editor, `sending` the text of a save on its way.
+ *   `original` is the real file a take is compared with, null when the take
+ *   adds the file, undefined for a real file.
+ * @typedef {{ _tag: "Idle" } | { _tag: "Edited" } | { _tag: "Saving" } | { _tag: "Saved" } | { _tag: "Failed", reason: string }} SaveState
  * @typedef {{ _tag: "Closed" } | { _tag: "Loading" } | { _tag: "Ready", editor: Editor, module: EditorModule } | { _tag: "Failed", reason: string }} Load
  */
 
@@ -73,8 +70,6 @@ export function createCodePane(host, hooks) {
   let changes = 0
   /** @type {string | null} */
   let notice = null
-  /** A hand edit just started this take; keep its file open when the stage moves to it. @type {string | null} */
-  let forkedTo = null
   /** Each subject or file change starts a new generation; replies for an older one are dropped. */
   let generation = 0
   /** The file last open in each part. @type {Map<string, string>} */
@@ -84,6 +79,8 @@ export function createCodePane(host, hooks) {
    * when you pick a file, and starts again with the next subject.
    */
   let following = true
+  /** A file asked for by `reveal` before the pane could open it. @type {string | null} */
+  let requested = null
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let saveTimer
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -116,7 +113,7 @@ export function createCodePane(host, hooks) {
     menu,
   )
   window.addEventListener("beforeunload", event => {
-    if (current?.take && (current.local !== current.saved || current.inflight)) event.preventDefault()
+    if (current && (current.local !== current.saved || current.inflight)) event.preventDefault()
   })
 
   // ------------------------------------------------------------- following
@@ -140,8 +137,8 @@ export function createCodePane(host, hooks) {
       return render()
     }
     if (before === null || listKey(before) !== listKey(next)) {
-      const carried = forkedTo !== null && next.take?.take === forkedTo && before?.part.file === next.part.file
-      forkedTo = null
+      // Leaving a take for the real files of the same part keeps the file open.
+      const carried = before?.part.file === next.part.file && next.take === null
       void flush()
       return void openSubject(carried ? file : null)
     }
@@ -202,14 +199,17 @@ export function createCodePane(host, hooks) {
     if (!target) return render()
     const run = ++generation
     notice = null
-    following = true
     render()
     try {
       const list = await fetchFiles(target)
       if (run !== generation) return
       files = list
       void refreshStats(target)
-      await openFile(chooseFile(target, list, keep))
+      const wanted = requested !== null && list.some(entry => entry.file === requested) ? requested : null
+      requested = null
+      // A file you asked for stays open while an agent works; otherwise follow the agent.
+      following = wanted === null
+      await openFile(chooseFile(target, list, wanted ?? keep))
     } catch (error) {
       if (run === generation) {
         notice = reason(error)
@@ -237,12 +237,12 @@ export function createCodePane(host, hooks) {
       // Text you typed that did not save stays; the file on disk does not replace it.
       const dirty = known !== undefined && known.local !== known.saved
       /** @type {Doc} */
-      const doc = known ?? { file: next, take: target.take?.take ?? null, saved: fresh.content, local: fresh.content, original: fresh.original, inflight: null }
+      const doc = known ?? { file: next, take: target.take?.take ?? null, saved: fresh.content, local: fresh.content, sending: null, original: fresh.original, inflight: null }
       doc.saved = fresh.content
       if (!dirty) doc.local = fresh.content
       doc.original = fresh.original
       docs.set(key, doc)
-      // The same doc again, for example after a hand edit started its take, keeps its save status.
+      // The same doc again, for example when the take it belongs to changes, keeps its save status.
       if (doc !== current) save = dirty ? { _tag: "Edited" } : { _tag: "Idle" }
       current = doc
       editor.open({ key, file: next, content: doc.local, mode: modeFor(doc), lenses: lensesFor(next) })
@@ -262,7 +262,6 @@ export function createCodePane(host, hooks) {
     const doc = current
     if (!target || !doc) return
     doc.local = content
-    if (doc.take === null) return void fork(target, doc)
     save = { _tag: "Edited" }
     scheduleSave()
     renderStatus()
@@ -273,19 +272,23 @@ export function createCodePane(host, hooks) {
     saveTimer = setTimeout(() => void flush(), SAVE_DELAY_MS)
   }
 
-  /** Save the open take file now. Resolves when the file on disk has your text. */
+  /**
+   * Save the open file now: a real file to the project, a take's file to the
+   * take. Resolves when the file on disk has your text.
+   */
   const flush = async () => {
     clearTimeout(saveTimer)
     const doc = current
-    if (!doc || doc.take === null) return
+    if (!doc) return
     if (doc.inflight) await doc.inflight
     if (doc.local === doc.saved) return
     const content = doc.local
     save = { _tag: "Saving" }
     renderStatus()
+    doc.sending = content
     doc.inflight = (async () => {
       try {
-        await postJson(`takes/${doc.take}/file`, { file: doc.file, content })
+        await postJson(doc.take === null ? "code/file" : `takes/${doc.take}/file`, { file: doc.file, content })
         doc.saved = content
         save = doc.local === doc.saved ? { _tag: "Saved" } : { _tag: "Edited" }
         if (load._tag === "Ready" && doc.original !== undefined) stats.set(doc.file, load.module.lineChanges(doc.original, content))
@@ -293,56 +296,13 @@ export function createCodePane(host, hooks) {
         save = { _tag: "Failed", reason: reason(error) }
       } finally {
         doc.inflight = null
+        doc.sending = null
         render()
       }
     })()
     await doc.inflight
     // Text typed while the file saved goes out after the next pause.
     if (/** @type {SaveState} */ (save)._tag === "Edited") scheduleSave()
-  }
-
-  /**
-   * Your first edit of a real file starts a take that holds it. You keep
-   * typing while the take starts; the text and its undo history move to the
-   * take, so undo can take the file back to the real one.
-   *
-   * @param {Subject} target
-   * @param {Doc} doc the real file
-   */
-  const fork = async (target, doc) => {
-    if (save._tag === "Forking" || load._tag !== "Ready") return
-    const editor = load.editor
-    save = { _tag: "Forking" }
-    render()
-    const sent = doc.local
-    const real = doc.saved
-    try {
-      /** @type {{ view: TakeView }} */
-      const { view } = await postJson("takes/hand", {
-        part: target.part.file,
-        state: target.state ?? "default",
-        device: target.device,
-        ...(target.context ? { context: target.context } : {}),
-        file: doc.file,
-        content: sent,
-      })
-      const key = docKey(view, doc.file)
-      /** @type {Doc} */
-      const moved = { file: doc.file, take: view.take, saved: sent, local: doc.local, original: real, inflight: null }
-      docs.delete(docKey(null, doc.file))
-      docs.set(key, moved)
-      current = moved
-      editor.rekey(key)
-      save = moved.local === moved.saved ? { _tag: "Saved" } : { _tag: "Edited" }
-      forkedTo = view.take
-      hooks.forked(view)
-      if (save._tag === "Edited") scheduleSave()
-    } catch (error) {
-      doc.local = real
-      editor.replaceFromDisk(real, false)
-      save = { _tag: "Failed", reason: `No take started: ${reason(error)}` }
-    }
-    render()
   }
 
   // ------------------------------------------------------------ disk changes
@@ -377,7 +337,9 @@ export function createCodePane(host, hooks) {
       doc.original = fresh.original
       editor.setMode(modeFor(doc))
     }
-    if (fresh.content === doc.saved || fresh.content === doc.local) {
+    // Your own save arriving back from disk, or text the editor already shows.
+    if (fresh.content === doc.saved || fresh.content === doc.sending) return render()
+    if (fresh.content === doc.local) {
       doc.saved = fresh.content
       return render()
     }
@@ -519,10 +481,7 @@ export function createCodePane(host, hooks) {
     const target = subject
     if (!target || file === null || load._tag !== "Ready") return mode.replaceChildren()
     const take = target.take
-    if (save._tag === "Forking") return mode.replaceChildren(chip("Starting a take…", "take"))
-    if (!take || current?.take === null) {
-      return mode.replaceChildren(chip("Real file", "real"), h("span", { class: "cal-code-hint" }, "Typing starts a take"))
-    }
+    if (!take || current?.take === null) return mode.replaceChildren(chip("Real file", "real"))
     if (take.run._tag === "Running") {
       return mode.replaceChildren(
         chip(`Take ${take.take}`, "take"),
@@ -546,7 +505,7 @@ export function createCodePane(host, hooks) {
     status.className = `cal-code-status cal-code-status-${save._tag.toLowerCase()}`
     status.textContent = save._tag === "Edited" ? "Edited"
       : save._tag === "Saving" ? "Saving…"
-      : save._tag === "Saved" ? "Saved to the take"
+      : save._tag === "Saved" ? (current?.take ? "Saved to the take" : "Saved")
       : save._tag === "Failed" ? `Not saved: ${save.reason}`
       : ""
     status.title = save._tag === "Failed" ? save.reason : ""
@@ -630,11 +589,26 @@ export function createCodePane(host, hooks) {
       list)
   }
 
+  /**
+   * Open one file of the subject, for example from the alternate review.
+   * Call it before the pane opens; the pane opens the file when it is ready.
+   *
+   * @param {string} target root-relative
+   */
+  const reveal = target => {
+    const ready = isOpen && load._tag === "Ready" && !stale
+    if (ready && files.some(entry => entry.file === target)) return pick(target)
+    requested = target
+    // The list may not have the file yet: read it again.
+    if (ready) void openSubject(file)
+  }
+
   return {
     show,
     setOpen,
     diskChanged,
-    /** Save the open take file before an action that reads it, such as a prompt or Accept. */
+    reveal,
+    /** Save the open file before an action that reads it, such as a prompt or Accept. */
     flush,
   }
 }

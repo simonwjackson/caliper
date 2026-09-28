@@ -284,7 +284,7 @@ function createSession(server, root, options, env, overlay) {
   const handle = async (url, request, response) => {
     const path = url.pathname.slice(CALIPER_PATH.length)
     if (await takes.handle(path, request, response)) return undefined
-    if (await code.handle(path, url, response)) return undefined
+    if (await code.handle(path, url, request, response)) return undefined
     if (path.startsWith("/modules/")) {
       const gzip = /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))
       const served = serveModule(modules.packages, path.slice("/modules/".length), gzip, moduleCache)

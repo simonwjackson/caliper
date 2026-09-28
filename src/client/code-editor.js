@@ -217,27 +217,64 @@ export function createEditor(parent, hooks) {
     replaceFromDisk,
     /** @param {readonly Lens[]} lenses */
     setLenses: lenses => view.dispatch({ effects: setLenses.of(lenses) }),
-    /**
-     * Keep the open file's history under a new key, when its edits move to a
-     * new take.
-     *
-     * @param {string} next
-     */
-    rekey: next => {
-      key = next
-    },
-    content: () => view.state.doc.toString(),
     /** @param {string} exportName */
     revealState: exportName => {
       const line = stateLine(view.state.doc, exportName)
       if (line === null) return
       const at = view.state.doc.line(line).from
-      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) })
+      // Centre the line by scrolling only down or up. scrollIntoView measures
+      // the state's lens widget, which is as wide as the longest line, and
+      // scrolls the editor sideways to show it.
+      view.requestMeasure({
+        read: editor => {
+          const block = editor.lineBlockAt(at)
+          return block.top + block.height / 2 + editor.documentPadding.top
+        },
+        write: (middle, editor) => {
+          editor.scrollDOM.scrollTop = Math.max(0, middle - editor.scrollDOM.clientHeight / 2)
+        },
+      })
     },
     nextChange: () => goToNextChunk(view),
     previousChange: () => goToPreviousChunk(view),
     focus: () => view.focus(),
   }
+}
+
+/**
+ * A read-only diff of one file, for review: the lines a change removes sit
+ * above the lines it adds, long unchanged runs fold away, and the colours are
+ * the code pane's. A new file shows every line as added.
+ *
+ * @param {HTMLElement} parent
+ * @param {{ path: string, before: string | null, after: string }} change
+ * @returns {{ destroy: () => void }}
+ */
+export function createDiffView(parent, { path, before, after }) {
+  const view = new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: after,
+      extensions: [
+        lineNumbers(),
+        highlightSpecialChars(),
+        syntaxHighlighting(caliperHighlight, { fallback: true }),
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+        caliperTheme,
+        languageFor(path),
+        unifiedMergeView({
+          original: before ?? "",
+          gutter: true,
+          highlightChanges: true,
+          syntaxHighlightDeletions: true,
+          mergeControls: false,
+          collapseUnchanged: { margin: 3, minSize: 6 },
+        }),
+      ],
+    }),
+  })
+  return { destroy: () => view.destroy() }
 }
 
 /**
@@ -543,7 +580,11 @@ const caliperTheme = EditorView.theme({
   },
   ".cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-deletedText": { background: "var(--cal-code-removed-strong)" },
   ".cm-deletedLine": { color: "var(--cal-muted)" },
-  ".cm-deletedChunk .cm-chunkButtons": { position: "absolute", insetInlineEnd: "var(--cal-space-2)", top: "1px", zIndex: "1", lineHeight: "1" },
+  // The change's row is as wide as the longest line. Revert floats right and
+  // sticks to the visible edge, so it stays in reach on a wide file.
+  ".cm-deletedChunk .cm-chunkButtons": { position: "sticky", float: "right", insetInlineEnd: "var(--cal-space-2)", marginTop: "1px", zIndex: "1", lineHeight: "1" },
+  // A change that only adds lines removes nothing: no red row, only Revert beside the first added line.
+  ".cm-deletedChunk:not(:has(.cm-deletedLine))": { backgroundColor: "transparent", padding: "0", height: "0" },
   "&.cm-cal-watching .cm-chunkButtons": { display: "none" },
   ".cm-changedLineGutter": { background: "var(--cal-good) !important" },
   ".cm-deletedLineGutter": { background: "var(--cal-bad) !important" },

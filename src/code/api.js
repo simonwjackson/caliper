@@ -1,9 +1,12 @@
 // @ts-check
-import { isAbsolute, relative, sep } from "node:path"
-import { isTakeId, TAKES_DIR } from "../takes/store.js"
+import { existsSync, lstatSync, writeFileSync } from "node:fs"
+import { isAbsolute, join, relative, sep } from "node:path"
+import { json, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
+import { fenceProjectPath, isTakeId, TAKES_DIR } from "../takes/store.js"
 import { codeFiles, partFiles } from "./part-files.js"
 
 /**
+ * @typedef {import("node:http").IncomingMessage} IncomingMessage
  * @typedef {import("node:http").ServerResponse} ServerResponse
  * @typedef {import("../types").Project} Project
  * @typedef {import("../types").Resolve} Resolve
@@ -13,11 +16,13 @@ import { codeFiles, partFiles } from "./part-files.js"
  */
 
 /**
- * What the code pane reads, under `/__caliper/code`. Reads only: the pane
- * writes through the takes API, because every edit it makes lands in a take.
+ * What the code pane reads and saves, under `/__caliper/code`. The pane saves
+ * a take's file through the takes API; it saves a real file here, as any
+ * editor would.
  *
- *   GET /code/files?part=<file>[&take=<n>]   the files a part is made of
- *   GET /code/file?file=<file>[&take=<n>]    one file, and the real file to compare with
+ *   GET  /code/files?part=<file>[&take=<n>]   the files a part is made of
+ *   GET  /code/file?file=<file>[&take=<n>]    one file, and the real file to compare with
+ *   POST /code/file { file, content }         save a real file
  *
  * @param {{ store: TakeStore, project: () => Promise<Project>, resolve: Resolve }} input
  */
@@ -35,13 +40,42 @@ export function createCodeApi({ store, project, resolve }) {
   }
 
   /**
+   * Save a real project file. Only a file that exists, inside the project,
+   * and outside node_modules, .git, .caliper and environment files.
+   *
+   * @param {IncomingMessage} request
+   * @param {ServerResponse} response
+   */
+  const save = async (request, response) => {
+    const refusal = refuse(request)
+    if (refusal !== null) return json(response, 403, { error: refusal })
+    try {
+      const { file, content } = validFile(await readJson(request, MAX_FILE_BODY))
+      const fenced = fenceProjectPath(store.root, file)
+      if (fenced._tag === "Outside") throw new Error(fenced.reason)
+      const target = join(store.root, fenced.file)
+      if (!existsSync(target) || lstatSync(target).isDirectory()) throw new Error(`"${fenced.file}" is not a file. The code pane saves only files that exist.`)
+      writeFileSync(target, content)
+      json(response, 200, { file: fenced.file })
+    } catch (error) {
+      json(response, 400, { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  /**
    * @param {string} path below `/__caliper`
    * @param {URL} url
+   * @param {IncomingMessage} request
    * @param {ServerResponse} response
    * @returns {Promise<boolean>} false when the path is not the API's
    */
-  const handle = async (path, url, response) => {
+  const handle = async (path, url, request, response) => {
     if (path !== "/code/files" && path !== "/code/file") return false
+    if (request.method === "POST") {
+      if (path === "/code/file") await save(request, response)
+      else json(response, 405, { error: "Use GET." })
+      return true
+    }
     const take = url.searchParams.get("take") ?? ""
     if (take !== "" && (!isTakeId(take) || store.record(take) === null)) {
       json(response, 404, { error: `Take ${take} does not exist. It may have been accepted or discarded.` })
@@ -96,14 +130,4 @@ export function codeChange(root, absolute) {
   }
   if (segments[0] === takes[0]) return null
   return { file: segments.join("/"), take: null }
-}
-
-/**
- * @param {ServerResponse} response
- * @param {number} status
- * @param {unknown} body
- */
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" })
-  response.end(JSON.stringify(body))
 }

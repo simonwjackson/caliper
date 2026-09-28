@@ -68,27 +68,6 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   }
 
   /**
-   * Start a take from a hand edit. Its first change is the file you typed in;
-   * no agent runs until you send it a prompt.
-   *
-   * @param {TakeAsk} ask
-   * @param {string} file root-relative
-   * @param {string} content
-   * @returns {string} the take number
-   */
-  const startByHand = (ask, file, content) => {
-    // A name from the start; the agent may rename the take once it works on it.
-    const take = store.create({ ...ask, name: `Hand edit of ${file.slice(file.lastIndexOf("/") + 1)}` })
-    try {
-      editByHand(take, file, content)
-    } catch (error) {
-      store.discard(take)
-      throw error
-    }
-    return take
-  }
-
-  /**
    * Save your edit of one file in a take. Content equal to the real file
    * removes the take's copy, so the take changes only what still differs.
    * The agent hears about the edit with its next prompt.
@@ -250,7 +229,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     return files
   }
 
-  return { start, startByHand, editByHand, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, editByHand, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**

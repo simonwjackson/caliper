@@ -261,7 +261,10 @@ separate component that shares unchanged behavior. It must preserve existing
 callers and add a product-owned preview state for the alternate.
 
 The proposal explains the choice, shared behavior, preserved defaults, and caller
-usage. **Review changes** shows the exact before and after files. The comparison
+usage. **Review changes** shows each changed file as a diff against the real
+file, in the code pane's editor, with the lines it adds and removes. Removed
+lines show above the lines that replace them, and long unchanged runs fold away.
+**Open in Code** opens that file of the proposal in the code pane. The comparison
 frame shows the new alternate state, even before that state exists in production.
 
 **Check original and alternate** renders every existing state on both devices
@@ -300,12 +303,15 @@ files it changes first, with the lines each one adds and removes. It also lists
 files it changes that this part does not import, because they change other
 parts.
 
-Caliper never writes a real file from the pane. When you type in a real file,
-Caliper starts a take named "Hand edit of <file>" that holds your edit. The
-stage then shows the original next to the take. Your next edits save to the
-take after a short pause, or at once with Ctrl+S. Undo can take the file back
-to the real text. The take then changes nothing, and you can discard it.
-Replace is still the only way a real file changes.
+Edit a real file as in any editor. The pane saves it to the project after a
+short pause in typing, or at once with Ctrl+S, and Vite reloads the frames.
+There is no review step: undo in the pane, or Git, takes a change back. The
+pane saves only files that exist in the project, and never `node_modules`,
+`.git`, `.caliper` or environment files. If another editor changes the file
+while you type, the pane keeps your text and saves it over the file.
+
+Select a take to edit its files instead. Those edits save to the take, and the
+real files do not change until you choose Replace.
 
 In a take, the pane shows the take's file against the real file. Removed
 lines show above the lines that replace them, and long runs of unchanged lines
@@ -393,7 +399,7 @@ CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
-CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --part src/ui/atoms/Button.atom.part.tsx
+CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 ```
 
 `scripts/verify-css-loading.mjs` creates a temporary React project and starts
@@ -410,11 +416,13 @@ recovery and retained preview errors. It makes no model
 calls and changes no supplied project files.
 
 `scripts/verify-code.mjs` checks the code pane against a running dev server.
-It types in a real file and checks that a take starts with the edit while the
-real file stays the same. It checks the take's frame, the diff and its line
-count, Revert, the state lenses, and the layout at four window sizes. It makes
-no model calls and discards every take it starts. Pick a part with two or more
-states to check the lenses.
+It types in a real file and checks that the file on disk changes, no take
+starts and the frame renders. Then it undoes the edit and checks that the file
+is back. It starts a take in the project at `--root`, and checks the take's
+frame, the diff and its line count, Revert, the state lenses, and the layout at
+four window sizes. It makes no model calls. It writes the real file back and
+discards every take it starts, even when a step fails. Pick a part with two or
+more states to check the lenses.
 
 `scripts/verify-takes.mjs` checks the Takes panel against a real model: it
 starts takes from the chrome, waits for the agents, checks every take frame,

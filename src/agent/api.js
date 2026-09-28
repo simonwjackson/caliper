@@ -9,6 +9,7 @@ import { DEVICES } from "../client/device-frame.js"
 import { contextsFor, relatedStates, sameState, stateExists } from "../client/scenarios.js"
 import { planRenders } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
+import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
 import { isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
 import { planDirections } from "./planner.js"
@@ -26,9 +27,6 @@ import { Type } from "typebox"
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
  */
 
-const MAX_BODY = 64 * 1024
-/** A hand edit carries a whole file. */
-const MAX_FILE_BODY = 4 * 1024 * 1024
 const MAX_PROMPT = 8_000
 /** The most takes one prompt starts. The chrome offers the same. */
 const MAX_TAKES = 4
@@ -185,14 +183,8 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return true
     }
     try {
-      const body = await readJson(request, path === "/takes/hand" || path.endsWith("/file") ? MAX_FILE_BODY : MAX_BODY)
-      if (path === "/takes/hand") {
-        const target = await validTarget(body)
-        const { file, content } = validFile(body)
-        const take = agents.startByHand(target, file, content)
-        json(response, 201, { take, view: agents.views().find(view => view.take === take) })
-        return true
-      }
+      // A save to a take carries a whole file.
+      const body = await readJson(request, path.endsWith("/file") ? MAX_FILE_BODY : MAX_BODY)
       if (path === "/takes") {
         const ask = await validAsk(body)
         json(response, 201, { take: agents.start({ ...ask, ...validDirection(body) }) })
@@ -342,25 +334,6 @@ export function planTakeRenders(project, ask, request, take, integration = false
 }
 
 /**
- * Only the chrome may change takes. A write needs a POST with a JSON body,
- * which a page on another site cannot send without a CORS preflight, and an
- * Origin, when the browser sends one, of the dev server itself.
- *
- * @param {IncomingMessage} request
- * @returns {string | null}
- */
-function refuse(request) {
-  if (request.method !== "POST") return "Use POST."
-  if (!(request.headers["content-type"] ?? "").startsWith("application/json")) return "Send a JSON body."
-  const origin = request.headers.origin
-  if (origin !== undefined && origin !== "null") {
-    const host = request.headers.host
-    if (host === undefined || new URL(origin).host !== host) return "Only Caliper's own page can change takes."
-  }
-  return null
-}
-
-/**
  * The direction a new take follows, and the titles its siblings follow, when
  * the chrome started it from a plan.
  *
@@ -378,18 +351,6 @@ function validDirection(body) {
   return { direction: { title, brief }, others: siblings }
 }
 
-/**
- * A hand edit: one root-relative file and its whole new content.
- *
- * @param {unknown} body
- */
-function validFile(body) {
-  const { file, content } = /** @type {Record<string, unknown>} */ (body ?? {})
-  if (typeof file !== "string" || file.trim() === "") throw new Error("Name the file to save.")
-  if (typeof content !== "string") throw new Error("Send the file's content as a string.")
-  return { file, content }
-}
-
 /** @param {unknown} body */
 function validPrompt(body) {
   const prompt = /** @type {Record<string, unknown>} */ (body ?? {}).prompt
@@ -398,35 +359,3 @@ function validPrompt(body) {
   return prompt.trim()
 }
 
-/**
- * @param {IncomingMessage} request
- * @param {number} limit the largest body, in bytes
- * @returns {Promise<unknown>}
- */
-async function readJson(request, limit) {
-  let size = 0
-  /** @type {Buffer[]} */
-  const chunks = []
-  for await (const chunk of request) {
-    size += chunk.length
-    if (size > limit) throw new Error("The request body is too large.")
-    chunks.push(chunk)
-  }
-  const text = Buffer.concat(chunks).toString("utf8")
-  if (text.trim() === "") return {}
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error("The request body is not JSON.")
-  }
-}
-
-/**
- * @param {ServerResponse} response
- * @param {number} status
- * @param {unknown} body
- */
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" })
-  response.end(JSON.stringify(body))
-}

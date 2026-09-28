@@ -376,11 +376,13 @@ describe("a take's agent", () => {
   })
 })
 
-describe("hand edits", () => {
-  test("a hand edit starts an idle take that holds the edit, and the real file does not change", async () => {
+describe("hand edits in a take", () => {
+  test("a hand edit saves to the take, and the real file does not change", async () => {
     await inFolder(projectFiles, async root => {
-      const { agents } = setup(root)
-      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      const { agents, store } = setup(root)
+      // A take with no agent yet: after a server restart, its conversation is gone.
+      const take = store.create(ask)
+      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
       const view = agents.views().find(candidate => candidate.take === take)
       expect(view).toMatchObject({ run: { _tag: "Idle" }, files: ["src/chip.css"], log: [{ _tag: "Edit", file: "src/chip.css" }] })
       expect(readFileSync(join(root, ".caliper/takes", take, "src/chip.css"), "utf8")).toContain("teal")
@@ -390,32 +392,35 @@ describe("hand edits", () => {
 
   test("editing a file back to the real content removes the take's copy", async () => {
     await inFolder(projectFiles, async root => {
-      const { agents } = setup(root)
-      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      const { agents, store } = setup(root)
+      const take = store.create(ask)
+      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
       expect(agents.editByHand(take, "src/chip.css", projectFiles["src/chip.css"])).toEqual([])
       // One entry per run of edits to the same file.
       expect(agents.views()[0]?.log).toEqual([{ _tag: "Edit", file: "src/chip.css" }])
     })
   })
 
-  test("refuses a hand edit outside the project, and starts no take", async () => {
+  test("refuses a hand edit outside the project", async () => {
     await inFolder(projectFiles, async root => {
-      const { agents } = setup(root)
-      expect(() => agents.startByHand(ask, "../outside.css", "x")).toThrow("outside the project")
-      expect(agents.views()).toEqual([])
+      const { agents, store } = setup(root)
+      const take = store.create(ask)
+      expect(() => agents.editByHand(take, "../outside.css", "x")).toThrow("outside the project")
+      expect(agents.views()[0]?.files).toEqual([])
     })
   })
 
   test("the agent's first message says which files you already edited", async () => {
     await inFolder(projectFiles, async root => {
-      const { faux, agents, settled } = setup(root)
+      const { faux, agents, settled, store } = setup(root)
       /** @type {any} */
       let seen = null
       faux.setResponses([context => {
         seen = context
         return fauxAssistantMessage([fauxText("ok")])
       }])
-      const take = agents.startByHand(ask, "src/chip.css", ".chip { color: teal }\n")
+      const take = store.create(ask)
+      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
       agents.follow(take, "Now make it bigger")
       await settled(take)
       const user = seen.messages.find((/** @type {any} */ message) => message.role === "user")

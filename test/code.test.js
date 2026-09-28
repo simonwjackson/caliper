@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
 import { codeChange } from "../src/code/api.js"
 import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "../src/code/modules.js"
+import { createTakeStore } from "../src/takes/store.js"
 import { manifest, withProject } from "./project-server.js"
 
 const CALIPER = fileURLToPath(new URL("../", import.meta.url))
@@ -33,6 +34,21 @@ function post(url, path, body) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   })
+}
+
+/**
+ * A take of the Chip part with one file edited by hand, as the code pane saves it.
+ *
+ * @param {string} root
+ * @param {string} url
+ * @param {string} file
+ * @param {string} content
+ */
+async function takeWith(root, url, file, content) {
+  const take = createTakeStore(root).create({ part: "src/ui/Chip.part.tsx", state: "default", device: "rg353m" })
+  const saved = await post(url, `/__caliper/takes/${take}/file`, { file, content })
+  expect(saved.status).toBe(200)
+  return take
 }
 
 describe("the chrome's browser packages", () => {
@@ -143,15 +159,10 @@ describe("the code API", () => {
   })
 
   test("a take's list follows the take's imports and shows changes the part does not reach", async () => {
-    await withProject({ files }, async ({ get, url }) => {
-      const started = await post(url, "/__caliper/takes/hand", {
-        part: "src/ui/Chip.part.tsx",
-        file: "src/ui/Chip.tsx",
-        content: 'import "./Chip.css"\nexport function Chip() { return <span className="chip" /> }\n',
-      })
-      expect(started.status).toBe(201)
-      const { take, view } = await started.json()
-      expect(view).toMatchObject({ take, files: ["src/ui/Chip.tsx"], run: { _tag: "Idle" }, log: [{ _tag: "Edit", file: "src/ui/Chip.tsx" }] })
+    await withProject({ files }, async ({ get, url, root }) => {
+      const take = await takeWith(root, url, "src/ui/Chip.tsx", 'import "./Chip.css"\nexport function Chip() { return <span className="chip" /> }\n')
+      const snapshot = await (await get("/__caliper/takes.json")).json()
+      expect(snapshot.takes.find((/** @type {any} */ view) => view.take === take)).toMatchObject({ files: ["src/ui/Chip.tsx"], run: { _tag: "Idle" }, log: [{ _tag: "Edit", file: "src/ui/Chip.tsx" }] })
       await post(url, `/__caliper/takes/${take}/file`, { file: "src/unused.css", content: ".unused { color: red }\n" })
       const { files: listed } = await (await get(`/__caliper/code/files?part=src/ui/Chip.part.tsx&take=${take}`)).json()
       expect(listed).toEqual([
@@ -164,8 +175,8 @@ describe("the code API", () => {
   })
 
   test("opens a file as the take sees it, with the real file to compare", async () => {
-    await withProject({ files }, async ({ get, url }) => {
-      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+    await withProject({ files }, async ({ get, url, root }) => {
+      const take = await takeWith(root, url, "src/ui/Chip.css", ".chip { color: red }\n")
       await post(url, `/__caliper/takes/${take}/file`, { file: "src/ui/New.css", content: ".new {}\n" })
       expect(await (await get("/__caliper/code/file?file=src/ui/Chip.css")).json()).toEqual({ file: "src/ui/Chip.css", content: ".chip { color: blue }\n" })
       expect(await (await get(`/__caliper/code/file?file=src/ui/Chip.css&take=${take}`)).json()).toEqual({
@@ -180,7 +191,7 @@ describe("the code API", () => {
 
   test("saving a take file back to the real content leaves the take with no changes", async () => {
     await withProject({ files }, async ({ get, url, root }) => {
-      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+      const take = await takeWith(root, url, "src/ui/Chip.css", ".chip { color: red }\n")
       const saved = await (await post(url, `/__caliper/takes/${take}/file`, { file: "src/ui/Chip.css", content: files["src/ui/Chip.css"] })).json()
       expect(saved).toEqual({ take, files: [] })
       expect(existsSync(join(root, ".caliper/takes", take, "src/ui/Chip.css"))).toBe(false)
@@ -190,23 +201,49 @@ describe("the code API", () => {
     })
   })
 
-  test("a hand edit needs the chrome's origin, a real part and a file", async () => {
-    await withProject({ files }, async ({ url }) => {
-      const denied = await fetch(new URL("__caliper/takes/hand", url), {
+  test("saves a real file, as any editor would, and makes no take", async () => {
+    await withProject({ files }, async ({ get, url, root }) => {
+      const saved = await post(url, "/__caliper/code/file", { file: "src/ui/Chip.css", content: ".chip { color: teal }\n" })
+      expect(await saved.json()).toEqual({ file: "src/ui/Chip.css" })
+      expect(readFileSync(join(root, "src/ui/Chip.css"), "utf8")).toBe(".chip { color: teal }\n")
+      expect((await (await get("/__caliper/takes.json")).json()).takes).toEqual([])
+    })
+  })
+
+  test("a real save needs the chrome's origin, and only overwrites a project file that exists", async () => {
+    await withProject({ files, git: true }, async ({ url, root }) => {
+      writeFileSync(join(root, ".env"), "SECRET=1\n")
+      const denied = await fetch(new URL("__caliper/code/file", url), {
         method: "POST",
         headers: { "content-type": "application/json", origin: "https://evil.example" },
-        body: JSON.stringify({ part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: "x" }),
+        body: JSON.stringify({ file: "src/ui/Chip.css", content: "x" }),
       })
       expect(denied.status).toBe(403)
-      expect((await post(url, "/__caliper/takes/hand", { part: "src/nope.part.tsx", file: "src/ui/Chip.css", content: "x" })).status).toBe(400)
-      expect((await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", content: "x" })).json()).error).toBe("Name the file to save.")
-      expect((await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/.env", content: "x" })).json()).error).toContain("environment file")
+      /** @param {object} body */
+      const error = async body => (await (await post(url, "/__caliper/code/file", body)).json()).error
+      expect(await error({ content: "x" })).toBe("Name the file to save.")
+      expect(await error({ file: ".env", content: "x" })).toContain("environment file")
+      expect(await error({ file: "../outside.css", content: "x" })).toContain("outside the project")
+      expect(await error({ file: "node_modules/x.js", content: "x" })).toContain("node_modules")
+      expect(await error({ file: "src/ui/New.css", content: "x" })).toContain("saves only files that exist")
+      expect(await error({ file: "src/ui", content: "x" })).toContain("saves only files that exist")
+      expect(readFileSync(join(root, ".env"), "utf8")).toBe("SECRET=1\n")
+      expect(readFileSync(join(root, "src/ui/Chip.css"), "utf8")).toBe(files["src/ui/Chip.css"])
+      expect(existsSync(join(root, "src/ui/New.css"))).toBe(false)
+    })
+  })
+
+  test("a take save needs a file inside the project", async () => {
+    await withProject({ files }, async ({ url, root }) => {
+      const take = await takeWith(root, url, "src/ui/Chip.css", ".chip { color: red }\n")
+      expect((await (await post(url, `/__caliper/takes/${take}/file`, { content: "x" })).json()).error).toBe("Name the file to save.")
+      expect((await (await post(url, `/__caliper/takes/${take}/file`, { file: "src/.env", content: "x" })).json()).error).toContain("environment file")
     })
   })
 
   test("the event stream says when a real file or a take's copy changes on disk", async () => {
-    await withProject({ files }, async ({ get, url, write }) => {
-      const { take } = await (await post(url, "/__caliper/takes/hand", { part: "src/ui/Chip.part.tsx", file: "src/ui/Chip.css", content: ".chip { color: red }\n" })).json()
+    await withProject({ files }, async ({ get, url, write, root }) => {
+      const take = await takeWith(root, url, "src/ui/Chip.css", ".chip { color: red }\n")
       const response = await get("/__caliper/events")
       const reader = /** @type {ReadableStreamDefaultReader<Uint8Array>} */ (response.body?.getReader())
       const decoder = new TextDecoder()

@@ -1268,6 +1268,59 @@ pre {
 .cal-integration label { line-height: 1.5; }
 .cal-integration [role="alert"] { color: var(--cal-bad); }
 
+/* One changed file: a header row, then its diff in the code pane's editor. */
+.cal-review-file {
+  min-width: 0;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  overflow: hidden;
+}
+
+/* The path is a readout and truncates; the kind, the counts and Open stay whole. */
+.cal-review-file > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cal-space-1) var(--cal-space-2);
+  min-height: 2.25rem;
+  padding: var(--cal-space-1) var(--cal-space-2);
+  background: var(--cal-panel);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: normal;
+}
+
+.cal-review-file[open] > summary {
+  border-bottom: 1px solid var(--cal-line);
+}
+
+.cal-review-kind {
+  color: var(--cal-muted);
+}
+
+.cal-review-path {
+  display: flex;
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cal-review-open {
+  min-height: 1.75rem;
+  padding: 0 var(--cal-space-2);
+  font-size: var(--cal-text-sm);
+}
+
+/* A long file scrolls inside its diff, so the review keeps its actions in reach. */
+.cal-review-diff .cm-editor {
+  height: auto;
+  max-height: 28rem;
+}
+
+.cal-review-diff .cm-scroller {
+  overflow: auto;
+}
+
 .cal-take-actions button {
   min-height: 2rem;
   font-size: var(--cal-text-sm);

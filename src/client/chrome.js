@@ -5,7 +5,13 @@ import { h } from "./dom.js"
 import { createIntegrationPanel } from "./integration-review.js"
 import { contextsFor, sameState, stateExists, subjectsOf } from "./scenarios.js"
 
-const integrationPanel = createIntegrationPanel()
+const integrationPanel = createIntegrationPanel({
+  // The review shows the proposal take, which is the code pane's subject too.
+  openFile: file => {
+    code.reveal(file)
+    if (!state.codeOpen) setCodeOpen(true)
+  },
+})
 /** @param {TakeView} take */
 const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take}`
 
@@ -257,13 +263,6 @@ const split = $(".cal-split")
 const code = createCodePane($(".cal-code"), {
   // A lens in the part file selects its state, as the state's row in the list does.
   selectState: exportName => { if (state.part) selectPartState(state.part, exportName) },
-  forked: view => {
-    // The event stream brings the new take soon; show it now, so the stage and the pane move together.
-    if (state.takes && !state.takes.takes.some(take => take.take === view.take)) {
-      state.takes = { ...state.takes, takes: [...state.takes.takes, view] }
-    }
-    selectTake(view.take)
-  },
   stopTake: take => void postTakes(`/takes/${take}/stop`),
 })
 
@@ -421,8 +420,6 @@ function codeSubject() {
     part,
     take: shown._tag === "Takes" ? currentTake() : null,
     state: subjectRef()?.state ?? null,
-    device: state.device.id,
-    context: state.context,
   }
 }
 
@@ -472,7 +469,6 @@ function selectDevice(device) {
   saveLocation()
   renderBar()
   renderStage()
-  syncCode()
 }
 
 /** @param {number} pxPerMm */

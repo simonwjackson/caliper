@@ -5,27 +5,33 @@
  * It needs no model: every step is a hand edit.
  *
  *   CHROMIUM=/path/to/chromium node scripts/verify-code.mjs \
- *     --url http://127.0.0.1:5173 --part src/ui/atoms/Button.atom.part.tsx [--out /tmp/caliper-code]
+ *     --url http://127.0.0.1:5173 --root /path/to/project \
+ *     --part src/ui/atoms/Button.atom.part.tsx [--out /tmp/caliper-code]
  *
- * It opens the pane, types in a real file, and checks that a take starts with
- * the edit while the real file stays the same. It checks the diff, reverts
- * the change, follows a state lens to the stage, and takes screenshots at
- * four window sizes. It discards the take at the end.
+ * It types in a real file and checks that the file on disk changes and the
+ * frame renders it, then undoes the edit and checks the file is back. It
+ * starts a take in the project's take folder, edits it in the pane, checks the
+ * diff and Revert, follows a state lens to the stage, and takes screenshots at
+ * four window sizes. It writes the real file back and discards its takes, even
+ * when a step fails.
  */
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { parseArgs } from "node:util"
 import { chromium } from "playwright-core"
+import { createTakeStore } from "../src/takes/store.js"
 
 const { values: args } = parseArgs({
   options: {
     url: { type: "string" },
+    root: { type: "string" },
     part: { type: "string" },
     out: { type: "string", default: "/tmp/caliper-code" },
   },
 })
-if (!args.url || !args.part) throw new Error("Pass --url and --part.")
+if (!args.url || !args.part || !args.root) throw new Error("Pass --url, --root and --part.")
+const store = createTakeStore(resolve(args.root))
 const executablePath = process.env.CHROMIUM
 if (!executablePath) throw new Error("Set CHROMIUM to a Chromium executable.")
 const out = /** @type {string} */ (args.out)
@@ -37,6 +43,18 @@ const MARK = "/* caliper verify */"
 
 /** @param {string} path */
 const api = async path => (await fetch(new URL(path, base))).json()
+/** @param {string} path @param {object} body */
+const post = (path, body) => fetch(new URL(path, base), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+/** @param {() => Promise<boolean>} check @param {string} what */
+const until = async (check, what) => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (await check()) return
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error(`Timed out: ${what}`)
+}
+/** The real file this run edits, and its content before, to write back. @type {{ file: string, content: string } | null} */
+let restore = null
 
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 /** @type {string[]} */
@@ -70,31 +88,43 @@ try {
   console.log(`editor ready in ${editorMs} ms, opened ${opened}`)
   assert.equal(await page.locator(".cal-code-chip-real").textContent(), "Real file")
   const real = await api(`code/file?file=${encodeURIComponent(opened)}`)
+  restore = { file: opened, content: real.content }
+  /** Read the real file on disk. */
+  const onDisk = async () => /** @type {string} */ ((await api(`code/file?file=${encodeURIComponent(opened)}`)).content)
 
-  // 2. Typing in the real file starts a take with the edit.
+  // 2. Typing in a real file saves it, as any editor does, and starts no take.
   await page.locator(".cal-code .cm-content").click()
   // Insert a line after line 2: a change inside the file, not at its end.
   await page.keyboard.press("Control+Home")
   await page.keyboard.press("ArrowDown")
   await page.keyboard.press("End")
   await page.keyboard.type(`\n${MARK}`)
-  await page.locator(".cal-code-chip-take").waitFor({ timeout: 10_000 })
-  await page.getByText("Saved to the take").waitFor({ timeout: 10_000 })
-  const hash = new URLSearchParams(new URL(page.url()).hash.slice(1))
-  take = hash.get("take")
-  assert.ok(take, "the URL names the new take")
-  assert.ok(hash.get("state")?.startsWith("takes:"), "the stage compares the take with the original")
-  const after = await api(`code/file?file=${encodeURIComponent(opened)}`)
-  assert.equal(after.content, real.content, "the real file did not change")
-  const copy = await api(`code/file?file=${encodeURIComponent(opened)}&take=${take}`)
-  assert.ok(copy.content.includes(`\n${MARK}\n`), "the take holds the edit")
-  assert.equal(copy.original, real.content)
-  await page.locator(".cal-grid .cal-cell").nth(1).waitFor()
-  assert.equal(await page.locator(".cal-grid .cal-cell").count(), 2, "original and take side by side")
-  // The take's frame loads the edited file and renders.
-  await page.locator(`.cal-grid .cal-cell[data-key='take-${take}'][data-frame-state='Rendered']`).waitFor({ timeout: 15_000 })
+  await page.locator(".cal-code-status", { hasText: /^Saved$/ }).waitFor({ timeout: 10_000 })
+  assert.ok((await onDisk()).includes(`\n${MARK}\n`), "the real file has the edit")
+  assert.equal(await page.locator(".cal-code-chip-real").textContent(), "Real file", "no take started")
+  assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("take"), null)
+  assert.deepEqual((await api("takes.json")).takes.map((/** @type {any} */ view) => view.take).filter((/** @type {string} */ id) => !before.has(id)), [])
+  // Vite reloads the frame with the saved file, and it renders.
+  await page.locator(".cal-stage [data-frame-state='Rendered']").first().waitFor({ timeout: 15_000 })
 
-  // 3. The diff shows one change, and the tab counts its lines.
+  // 3. Undo takes the edit back, and the save puts the file back as it was.
+  await page.keyboard.press("Control+z")
+  await until(async () => (await onDisk()) === real.content, "undo saves the real file back")
+  await page.locator(".cal-code-status", { hasText: /^Saved$/ }).waitFor()
+  restore = null
+
+  // 4. A take's file shows against the real file, and edits save to the take.
+  take = store.create({ part, state: "default", device: "rg353m" })
+  const edited = real.content.replace(/\n/, `\n${MARK}\n`)
+  // The same save the pane makes; it tells every open chrome about the take.
+  assert.equal((await post(`takes/${take}/file`, { file: opened, content: edited })).status, 200)
+  await page.goto(`${base}#part=${encodeURIComponent(part)}&state=takes%3Adefault&device=rg353m&take=${take}`)
+  await page.reload()
+  await page.locator(".cal-code-chip-take").waitFor({ timeout: 10_000 })
+  await page.locator(`.cal-grid .cal-cell[data-key='take-${take}'][data-frame-state='Rendered']`).waitFor({ timeout: 15_000 })
+  assert.equal(await onDisk(), real.content, "a take never changes the real file")
+
+  // 5. The diff shows one change, and the tab counts its lines.
   await page.locator(".cal-code .cm-changedLine").first().waitFor()
   await page.getByText("1 change", { exact: true }).waitFor()
   const stat = await page.locator(".cal-code-tab[aria-current='true'] .cal-code-stat").textContent()
@@ -103,17 +133,12 @@ try {
   await page.locator(".cal-log-edit").first().waitFor()
   await page.screenshot({ path: join(out, "take-1800x1000.png") })
 
-  // 4. Revert puts the real lines back; the take then changes nothing.
+  // 6. Revert puts the real lines back; the take then changes nothing.
   await page.locator(".cal-code .cm-cal-revert").first().dispatchEvent("mousedown")
   await page.getByText("Same as the real file").waitFor({ timeout: 10_000 })
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const snapshot = await api("takes.json")
-    if (snapshot.takes.find((/** @type {any} */ view) => view.take === take)?.files.length === 0) break
-    if (attempt === 49) throw new Error("The reverted take still changes files")
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
+  await until(async () => (await api("takes.json")).takes.find((/** @type {any} */ view) => view.take === take)?.files.length === 0, "the reverted take changes no file")
 
-  // 5. A lens in the part file shows its state on the stage.
+  // 7. A lens in the part file shows its state on the stage.
   const project = await api("project.json")
   const states = project.parts.find((/** @type {any} */ candidate) => candidate.file === part)?.states ?? []
   if (states.length > 1) {
@@ -128,7 +153,7 @@ try {
     console.log("skipped lenses: the part has one state")
   }
 
-  // 6. The pane and the stage share the room at every size.
+  // 8. The pane and the stage share the room at every size.
   for (const [width, height] of [[1800, 1000], [1280, 900], [900, 1000], [700, 1100]]) {
     await page.setViewportSize({ width, height })
     await page.waitForTimeout(300)
@@ -154,11 +179,16 @@ try {
   await page.screenshot({ path: join(out, "failure.png") }).catch(() => {})
   failures.push(`screenshot of the failure: ${join(out, "failure.png")}`)
 } finally {
+  // Close the chrome first, so the pane cannot save again after the restore.
+  await browser.close()
+  if (restore !== null) {
+    const restored = await post("code/file", restore)
+    if (!restored.ok) failures.push(`could not write ${restore.file} back: ${(await restored.json()).error}`)
+  }
   for (const view of (await api("takes.json")).takes) {
     if (before.has(view.take)) continue
-    await fetch(new URL(`takes/${view.take}/discard`, base), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+    await post(`takes/${view.take}/discard`, {})
   }
-  await browser.close()
 }
 
 if (failures.length > 0) {
