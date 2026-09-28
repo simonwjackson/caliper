@@ -3,60 +3,71 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caliper: three visual directions</title>
+<title>Caliper: Darkroom, every state</title>
 <link rel="stylesheet" href="assets/fonts.css">
 <style>
   :root { color-scheme: light dark; }
-  body { margin: 0; font: 15px/1.5 "Plex Sans", system-ui, sans-serif; padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 72rem; margin-inline: auto; }
+  body { margin: 0; font: 15px/1.5 "Public Sans", system-ui, sans-serif; padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 80rem; margin-inline: auto; }
   h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
-  h2 { font-size: 1.2rem; margin: 2.5rem 0 .25rem; }
-  p { max-width: 62ch; margin: .25rem 0 .75rem; }
-  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; align-items: start; }
+  h2 { font-size: 1.15rem; margin: 2.5rem 0 .2rem; display: flex; gap: .8rem; align-items: baseline; }
+  h2 a { font-size: 13px; font-weight: 400; }
+  p { max-width: 64ch; margin: .25rem 0 .75rem; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+  .row.phones { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 44rem; margin-top: .6rem; }
   figure { margin: 0; }
   figure img { width: 100%; height: auto; display: block; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
-  figcaption { font-size: 13px; opacity: .7; margin-top: .3rem; }
-  .live { font-size: 13px; }
-  .live a { margin-right: 1rem; }
-  .phone { max-width: 14rem; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; font-size: 14px; max-width: 62ch; }
+  figcaption { font-size: 12px; opacity: .7; margin-top: .3rem; }
+  nav { font-size: 13px; display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: .5rem 0 1rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; font-size: 14px; max-width: 64ch; }
   dt { opacity: .7; }
+  @media (width < 40rem) { .row { grid-template-columns: 1fr; } .row.phones { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
-<h1>Caliper: three visual directions</h1>
-<p>Each direction shows the same screen: Game Detail, Default state, with Takes open. Desk at 1600 × 1000 and folded phone at 416 × 640, light and dark. Open the live page on this phone to see the direction at its real size; it follows the system colour scheme.</p>
+<h1>Caliper: Darkroom, every state</h1>
+<p>The room is dark and the device is the only lit thing in it. Tools on a rail at the left. Panels are opaque cards with one hard edge and no blur. Safelight amber marks only the current tool, the live knob and a running take. In light mode the room becomes a lightbox. Each state below is the same page with <code>?state=</code>; open it on this phone to see it at real size in your system's colour scheme.</p>
+<dl><dt>Type</dt><dd>Public Sans, tabular numerals, no mono except code and CSS names</dd><dt>Dark</dt><dd>room #121316, card #1C1D21, ink #ECECEE, amber #F5A93D</dd><dt>Light</dt><dd>room #DDDEE2, card #F7F7F9, ink #17181C, amber #C7740A</dd></dl>
+<nav>
+  <a href="#takes">Takes</a><a href="#empty">First run</a><a href="#knobs">Knobs</a><a href="#code">Code</a><a href="#grid">All states</a><a href="#compare">Compare</a><a href="#checks">Checks</a><a href="#calibrate">Calibrate</a><a href="#error">Error</a><a href="#parts">Parts drawer</a>
+</nav>
 
-<h2>A. Bench</h2>
-<p>The instrument on a workbench. A millimetre rule along the top and left of the stage carries the identity, and the device lies on the mat at true size. Flat paper panels, one accent (tape yellow) for what is selected, measurements in mono and nothing else.</p>
-<dl><dt>Type</dt><dd>IBM Plex Sans, Plex Mono for readouts</dd><dt>Light</dt><dd>mat #E7E4DC, paper #F7F5EF, ink #1F1D19, tape #E9BB0A</dd><dt>Dark</dt><dd>mat #1B1C18, paper #24251F, ink #ECE8DD, tape #F2C627</dd></dl>
-<p class="live"><a href="a-bench.html">Open live</a></p>
-<div class="row">
-  <figure><img src="out/a-bench-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
-  <figure><img src="out/a-bench-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
-  <figure class="phone"><img src="out/a-bench-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
-  <figure class="phone"><img src="out/a-bench-phone-dark.png" alt=""><figcaption>Phone, dark</figcaption></figure>
-</div>
+<template id="section">
+  <section>
+    <h2><span class="title"></span><a class="live">Open live</a></h2>
+    <p class="what"></p>
+    <div class="row"><figure><img class="d1"><figcaption>Desk, dark</figcaption></figure><figure><img class="d2"><figcaption>Desk, light</figcaption></figure></div>
+    <div class="row phones"><figure><img class="p1"><figcaption>Phone, dark</figcaption></figure><figure><img class="p2"><figcaption>Phone, light</figcaption></figure></div>
+  </section>
+</template>
 
-<h2>B. Darkroom</h2>
-<p>What legacy's Photoshop look promised, without the glass. The room is dark and the device is the only lit thing. A tool rail on the left, panels that float as opaque cards with one hard edge, and safelight amber for the current tool and a running take. Light mode turns the room into a lightbox.</p>
-<dl><dt>Type</dt><dd>Public Sans, tabular numerals, no mono</dd><dt>Dark</dt><dd>room #121316, card #1C1D21, ink #ECECEE, amber #F5A93D</dd><dt>Light</dt><dd>room #DDDEE2, card #F7F7F9, ink #17181C, amber #C7740A</dd></dl>
-<p class="live"><a href="b-darkroom.html">Open live</a></p>
-<div class="row">
-  <figure><img src="out/b-darkroom-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
-  <figure><img src="out/b-darkroom-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
-  <figure class="phone"><img src="out/b-darkroom-phone-dark.png" alt=""><figcaption>Phone, dark. The ODIN 2 PORTAL cannot fit at true size, so the caption says so.</figcaption></figure>
-  <figure class="phone"><img src="out/b-darkroom-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
-</div>
-
-<h2>C. Tiles</h2>
-<p>The chrome is a tiling window manager, because that is the desk it lives on. Every region is a tile with a title bar; the focused tile has a two-pixel border in the one accent; a status bar at the bottom names the workspaces and carries the readouts. On a phone each workspace is one full tile. No radius, no shadow.</p>
-<dl><dt>Type</dt><dd>Fira Sans, JetBrains Mono for title bars and readouts</dd><dt>Dark</dt><dd>bg #0F1216, tile #161A20, ink #E3E7EC, focus #58C4AE</dd><dt>Light</dt><dd>bg #D9DEE5, tile #F2F4F7, ink #171B21, focus #0E7C6F</dd></dl>
-<p class="live"><a href="c-tiles.html">Open live</a></p>
-<div class="row">
-  <figure><img src="out/c-tiles-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
-  <figure><img src="out/c-tiles-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
-  <figure class="phone"><img src="out/c-tiles-phone-dark.png" alt=""><figcaption>Phone, dark</figcaption></figure>
-  <figure class="phone"><img src="out/c-tiles-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
-</div>
+<script>
+const states = [
+  ["takes", "Takes open", "Three takes of Game Detail: one passed its checks, one failed, one still rendering with the amber ring. The composer sits at the bottom of the panel. On the phone the ODIN 2 PORTAL cannot fit at true size, so the caption says so."],
+  ["empty", "First run, no takes yet", "The Takes panel invites the first prompt and says what will happen, including that nothing touches the real files until you accept. The planner toggle is on by default."],
+  ["knobs", "Knobs", "Knobs share the Takes region (decision 27). Four groups from the CSS itself: registered properties, @container thresholds, plain properties the part reads, and a literal that could become a token. The live knob has the amber ring; a released one says where it wrote. Skipped outputs say why."],
+  ["code", "Code pane with a take diff", "Code sits under the stage in the free room, so the frame stays visible while you read the diff. Tabs carry +/− per file; added and removed lines are tinted, not coloured, so the syntax colours still read."],
+  ["grid", "All states side by side", "Every state of the part on one device, each at true size. The current state keeps the amber ring; a state with a failed check says so on its label. On the desk the grid wraps to the free room; on the phone it scrolls above the sheet."],
+  ["compare", "Compare a take", "Real files beside take 1, both at true size, take on the right with the amber ring. The verdict pill carries what changed and the accept and discard actions, so you decide where you are looking."],
+  ["checks", "Checks window", "A modal over the room. One summary ring, then one card per state and device with its five automatic checks, the accepted image and each authored check. A failed render shows its reason inline. Not run is never a pass."],
+  ["calibrate", "Calibrate", "The room dims the panels and shows the credit card outline at the current px/mm, with the scale slider under it. Done returns the frame."],
+  ["error", "A part that throws", "The frame carries its own failure at device size, in the error red, with the stack. The readable copy sits under the frame. The parts list moves the amber dot to the broken state and the Checks tool turns red. Nothing is blank."],
+  ["parts", "Parts drawer (phone only)", "On the phone the parts panel is a drawer from the left over the room. The dock's Parts tab opens it; tapping the scrim closes it."],
+];
+const tpl = document.getElementById("section");
+for (const [id, title, what] of states) {
+  const s = tpl.content.cloneNode(true);
+  s.querySelector("section").id = id;
+  s.querySelector(".title").textContent = title;
+  s.querySelector(".live").href = `b-darkroom.html?state=${id}`;
+  s.querySelector(".what").textContent = what;
+  const desk = id !== "parts";
+  s.querySelector(".d1").src = `out/b-${desk ? id : "takes"}-desk-dark.png`;
+  s.querySelector(".d2").src = `out/b-${desk ? id : "takes"}-desk-light.png`;
+  if (!desk) s.querySelector(".row:not(.phones)").remove();
+  s.querySelector(".p1").src = `out/b-${id}-phone-dark.png`;
+  s.querySelector(".p2").src = `out/b-${id}-phone-light.png`;
+  document.body.appendChild(s);
+}
+</script>
 </body>
 </html>

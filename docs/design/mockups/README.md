@@ -1,55 +1,92 @@
-# Visual direction mockups
+# Visual direction: Darkroom
 
-Three directions for Caliper's chrome, 2026-09-28. Each is one HTML page with
-its own CSS, rendered at desk (1600 × 1000) and folded phone (416 × 640) in
-light and dark. `index.html` is the gallery.
+The chosen direction for Caliper's chrome, 2026-09-28. Two other directions
+(Bench, Tiles) were shown and dropped the same day; they are in this folder's
+history at `9804fd3` if the reason ever needs revisiting.
 
-| Page | Direction | Type | The one bold thing |
-|---|---|---|---|
-| `a-bench.html` | Bench: the instrument on a workbench | IBM Plex Sans, Plex Mono for readouts | A millimetre rule along the stage, with the device's true width marked on it |
-| `b-darkroom.html` | Darkroom: legacy's Photoshop promise without the glass | Public Sans | The device is the only lit thing; tools on a rail, panels float as opaque cards |
-| `c-tiles.html` | Tiles: a tiling window manager | Fira Sans, JetBrains Mono for titles and readouts | Tiles with title bars, a focus border, and a workspace bar that becomes the phone's navigation |
+`b-darkroom.html` is one page. `?state=` picks the state; `b.css` is the one
+stylesheet. `index.html` is the gallery, and `out/` holds every render at desk
+(1600 × 1000) and folded phone (416 × 640), light and dark.
+
+| State | Shows |
+|---|---|
+| `takes` | Editing view, three takes, one running |
+| `empty` | First run: no takes, the invitation |
+| `knobs` | Knobs panel in the Takes region, four groups, one live |
+| `code` | Code pane under the stage with a take diff |
+| `grid` | All five states of the part side by side at true size |
+| `compare` | Real files beside a take, with the verdict pill |
+| `checks` | Checks window over the room |
+| `calibrate` | Credit-card outline and the scale slider |
+| `error` | A part that throws: the frame carries the failure |
+| `parts` | Phone only: the parts drawer |
+
+## The direction in one paragraph
+
+The room is dark and the device is the only lit thing in it. Tools live on a
+rail at the left, like a tool column. Panels are opaque cards that float over
+the room with one hard edge and no blur. One accent, safelight amber, marks
+only what is current: the pressed tool, the live knob, the running take, the
+selected state. Everything else is grey ink on a grey card. In light mode the
+room becomes a lightbox and the amber darkens to keep contrast. Type is Public
+Sans with tabular numerals; mono appears only for code and CSS names.
 
 ## Run
 
 ```sh
 docs/design/mockups/serve.mjs          # http://[::]:5312/, any host, all interfaces
 docs/design/mockups/render.mjs         # writes out/*.png through the dev shell's Chromium
-docs/design/mockups/probe.mjs a-bench 416 640   # prints each region's box, for layout debugging
+docs/design/mockups/render.mjs knobs   # one state
+docs/design/mockups/probe.mjs b-darkroom 416 640   # prints each region's box
 ```
 
-Both scripts run through `nix develop`. The pages load fonts from
-`assets/fonts/` (copied from nixpkgs: ibm-plex, public-sans, fira,
-jetbrains-mono), never from a CDN.
+Both scripts run through `nix develop`. The page loads Public Sans from
+`assets/fonts/` (copied from nixpkgs), never from a CDN.
 
 ## What is real and what is staged
 
 - The screen in the frame is a crop of a real render of Pico's Game Detail
   part on the RG353M, from `/tmp/caliper-verify/layout-1600x1000-open.png`
-  (2026-09-27). It is 279 px wide, which is 72 mm at the 3.875 px/mm the
-  mockups assume.
-- The three takes are staged. Their thumbnails are the same screen, tinted
-  with CSS filters, to stand in for real alternates.
-- The part list, state names, counts, model line and Setup line match what
-  the chrome shows today for Pico.
-- On the phone, A and C show the RG353M at true size (it fits in 416 px).
-  B shows the ODIN 2 PORTAL, which does not fit, so the caption carries the
-  scaled warning that decision 8 requires.
+  (2026-09-27). It is 279 px wide, which is 72 mm at 3.875 px/mm.
+- The other four states in the grid, the three takes and the compare frame are
+  the same screen re-tinted with CSS filters.
+- The knobs are real Pico declarations: `--pico-pixel-rows`, `--pico-pixel-min`,
+  `--pico-bg`, `--pico-accent` (registered), the two `@container` thresholds in
+  `PicoGameFacts.css:27` and `PicoLaunchStage.css:118`, and the plain roles.
+  The skipped outputs (`--pico-px`, `--pico-cycle`) are the ones decision 26
+  skips. The literal (`gap: 6px`) is invented.
+- The code diff is invented but shaped like Pico's CSS. The check names,
+  statuses and notes match `src/client/checks-panel.js`. The error text
+  matches the shape `src/client/frame.js` produces.
+- On the phone, the single-frame states show the ODIN 2 PORTAL, which cannot
+  fit at true size, so the caption carries the scaled warning decision 8
+  requires. Grid, compare and error show the RG353M at true size.
 
-## Rules each direction keeps
+## Rules the direction keeps
 
-- Decision 6 and 8: one frame at true size; a scaled frame says so.
-- Decision 10: plain HTML and CSS. Each page's CSS could become chrome CSS.
-- Decision 22: layout is a function of the container. Each page has one
-  `@container` rule at 44 rem that reflows to the phone form. Every control
-  stays reachable: Parts, Preview, Takes, Code, Knobs, Checks and Calibrate
-  are all one tap away at both sizes.
+- Decision 6 and 8: one frame at true size; a scaled frame says so; a part
+  that throws shows its error in the frame and in readable copy.
+- Decision 10: plain HTML and CSS. `b.css` could become the chrome's CSS.
+- Decision 22: layout is a function of the container. One `@container`
+  rule at 44 rem reflows every state to the phone form. Every control stays
+  reachable: Parts, Preview, Takes, Code, Knobs, Checks and Calibrate are one
+  tap away at both sizes.
+- Decision 27: Knobs share the Takes region and the rail switches them.
 - `b774276`: the page does not scroll; each region scrolls inside itself.
 
-## Costs, per direction
+## Costs
 
-| Direction | What it makes harder |
-|---|---|
-| Bench | The rule needs the calibrated px/mm and must redraw on calibrate and on scale. A scaled frame needs a scaled rule, or the rule must hide and say why. Light mode is the default; the dark mat is the weaker of the two. |
-| Darkroom | Floating panels over the stage steal stage width; on a narrow desk the panels must dock, which is a third layout state `planLayout` does not have today. Amber on dark passes contrast; amber on light needed a much darker tone, so the accent is not one colour across schemes. |
-| Tiles | The mono title bars and status bar hold readouts only, so they cost height on the phone. Zero radius and hard borders are a commitment: this direction cannot be softened later without becoming direction B. Workspace numbers assume the user will learn them. |
+- Floating panels steal room width. Between the two panels the desk has about
+  860 px of free room at 1600 wide, so the grid wraps to two columns of
+  RG353M frames and the ODIN 2 PORTAL (604 px) fits with little margin. A
+  narrower desk needs the panels to dock, which is a third layout form
+  `planLayout` does not have today.
+- Amber is not one colour: `#F5A93D` on dark, `#C7740A` on light. Both pass
+  contrast against their cards; the swap is a rule the chrome must carry.
+- The rail hides tool names. It relies on icons plus tooltips, and on the
+  phone the dock shows the names, so the desk is the only place a name is
+  missing.
+- The sheet on the phone takes 40 % of the height by default and 52 % for the
+  first-run copy. The frame above it scrolls, which is allowed, but the
+  scaled ODIN 2 PORTAL warning is the first thing to go under the sheet on a
+  short phone.

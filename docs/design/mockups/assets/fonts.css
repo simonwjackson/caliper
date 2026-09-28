@@ -1,11 +1,2 @@
-/* Local webfonts for the mockups. Served beside the pages, never from a CDN. */
-@font-face { font-family: "Plex Sans"; src: url("fonts/IBMPlexSans-Regular.otf"); font-weight: 400; font-display: block; }
-@font-face { font-family: "Plex Sans"; src: url("fonts/IBMPlexSans-Medium.otf"); font-weight: 500; font-display: block; }
-@font-face { font-family: "Plex Sans"; src: url("fonts/IBMPlexSans-SemiBold.otf"); font-weight: 600; font-display: block; }
-@font-face { font-family: "Plex Mono"; src: url("fonts/IBMPlexMono-Regular.otf"); font-weight: 400; font-display: block; }
-@font-face { font-family: "Plex Mono"; src: url("fonts/IBMPlexMono-Medium.otf"); font-weight: 500; font-display: block; }
+/* Local webfont for the mockups. Served beside the pages, never from a CDN. */
 @font-face { font-family: "Public Sans"; src: url("fonts/PublicSans.ttf"); font-weight: 100 900; font-display: block; }
-@font-face { font-family: "Fira Sans"; src: url("fonts/FiraSans-Regular.otf"); font-weight: 400; font-display: block; }
-@font-face { font-family: "Fira Sans"; src: url("fonts/FiraSans-Medium.otf"); font-weight: 500; font-display: block; }
-@font-face { font-family: "Fira Sans"; src: url("fonts/FiraSans-SemiBold.otf"); font-weight: 600; font-display: block; }
-@font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono.woff2"); font-weight: 100 800; font-display: block; }
