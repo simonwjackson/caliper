@@ -109,6 +109,36 @@ The review uses GitHub's separation of description, changed files, and final
 action. It does not copy its full pull-request workflow. Reference inspected:
 https://mobbin.com/screens/e9bad011-d5c5-4e8d-b56f-4fba2ffde691.
 
+## Automatic check reports
+
+The user chose reporting rather than a mandatory replacement gate. Phase 1
+adds opt-in automatic checks to `caliper-render --check` and the take agent's
+`render` tool with `checks: true`. Ordinary Replace and the existing reviewed
+alternate gate keep their behavior. No new scenario or authored-check export
+is introduced.
+
+Reports distinguish detected failures, human review, inconclusive evidence,
+checks not run, and passes. Empty content and spill need review because Caliper
+cannot infer whether they are intentional. An unavailable axe audit or unstable
+image must not look like a pass. Axe scans the product host for WCAG A/AA rules;
+it cannot establish interaction correctness or full-page accessibility.
+
+Each check run retains two fresh renders in a unique directory. Visual baselines
+are explicit local records, approved from saved images after review rather than
+from a new unreviewed render. Approval verifies those images still match the
+report. Take images cannot become product baselines. Baseline approval records
+visual intent, not permission to accept files, and never suppresses other checks.
+The baseline directory belongs to one consumer project. Environment changes are
+inconclusive until reviewed again.
+
+This reuses the render engine but does not weaken or replace the alternate
+preservation check. That check requires unchanged originals and a valid new
+alternate. A general report permits intentional visual changes and reports their
+need for review. Costs are two renders plus axe per check run, exact-image
+sensitivity to fonts and animation, manual image comparison, and stored images
+that need manual cleanup. Sources are not frozen during a report. These results
+cover only listed states, not all consumers, hermeticity or product behavior.
+
 ## Implementation choices
 
 | # | Decision | Why |

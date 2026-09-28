@@ -10,7 +10,7 @@ import { Type } from "typebox"
  * @typedef {import("@earendil-works/pi-agent-core").AgentTool<any>} AgentTool
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
  * @typedef {import("../render/render.js").RenderResult} RenderResult
- * @typedef {(request: { state: string, devices: string[], part?: string, related?: boolean }) => Promise<RenderResult[]>} RenderTake
+ * @typedef {(request: { state: string, devices: string[], part?: string, related?: boolean, checks?: boolean }) => Promise<RenderResult[]>} RenderTake
  *   Renders the chosen preview by default. `part` selects the subject or a declared related
  *   scenario, or an integration's alternate part. `related` checks every subject state and
  *   declared context; `state` is ignored.
@@ -110,6 +110,7 @@ export function takeTools({ store, take, render, defaults }) {
       "Render the selected preview scenario as this take changes it, in a headless browser at each device's CSS viewport. Returns a JSON verdict per part, state and device, and screenshots.",
       "Use related:true to check all states of the editing subject and their declared composed scenarios. This checks declared coverage only, not every possible consumer or interaction.",
       '`frame` is "Rendered", "Empty" or "Failed". `problems` are load and render errors with stacks. `console` holds browser errors. `spill` is null when the part fits the screen; otherwise it names the elements past the edge.',
+      "Use checks:true before reporting completion: it renders twice and reports accessibility, determinism, and accepted-baseline comparisons as well. Failed means a detected problem; Review needs judgement; Inconclusive and NotRun are not passes. Reports never authorize acceptance or change baselines.",
       "Render after each change, and read the verdict before you look at the picture.",
     ].join(" "),
     parameters: Type.Object({
@@ -117,15 +118,17 @@ export function takeTools({ store, take, render, defaults }) {
       state: Type.Optional(Type.String({ description: `A state export, or "*" for every related state of this part (every state when preparing an integration). Default: "${defaults.state}" in the selected preview, or "default" when part changes.` })),
       device: Type.Optional(Type.String({ description: `A device id, or "*" for every device. Default: "${defaults.device}"` })),
       related: Type.Optional(Type.Boolean({ description: "Check every subject state and its declared composed contexts. Ignores state; omit part." })),
+      checks: Type.Optional(Type.Boolean({ description: "Run automatic reporting checks, including two renders and axe. Slower; does not block Replace or approve images." })),
     }),
     executionMode: "sequential",
     execute: async (_id, params) => {
-      const { state, device, part, related } = /** @type {{ state?: string, device?: string, part?: string, related?: boolean }} */ (params)
+      const { state, device, part, related, checks } = /** @type {{ state?: string, device?: string, part?: string, related?: boolean, checks?: boolean }} */ (params)
       const results = await render({
         state: state ?? (part !== undefined && part !== defaults.part ? "default" : defaults.state),
         devices: [device ?? defaults.device],
         ...(part === undefined ? {} : { part }),
         ...(related === undefined ? {} : { related }),
+        ...(checks === undefined ? {} : { checks }),
       })
       const verdicts = results.map(({ png: _png, ...result }) => result)
       const images = results.slice(0, IMAGE_LIMIT).map(result => ({

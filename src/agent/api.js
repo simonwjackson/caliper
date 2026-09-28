@@ -9,6 +9,7 @@ import { DEVICES } from "../client/device-frame.js"
 import { contextsFor, relatedStates, sameState, stateExists } from "../client/scenarios.js"
 import { planRenders } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
+import { checkJobs } from "../render/checks.js"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
 import { isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
@@ -99,7 +100,9 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
       const url = serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
-      return renderJobs({ url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium })
+      const input = { url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium }
+      if (request.checks) return (await checkJobs({ ...input, project: original.name, baselines: join(store.root, ".caliper", "baselines") })).results
+      return renderJobs(input)
     },
     onChange,
   })

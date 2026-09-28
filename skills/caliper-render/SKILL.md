@@ -30,6 +30,29 @@ for each state and device, and writes a PNG for each. Run `caliper-render --help
 The loop is done when every result is `Rendered`, `console` is empty, you can explain each `spill`, and
 the PNGs show what the task asked for.
 
+## Automatic reports before completion
+
+Run the same request with `--check` before reporting completion. Add
+`--baselines <project>/.caliper/baselines` to compare accepted images. Use
+`--part '*' --state '*' --device '*'` when a change needs all declared states.
+The in-process take agent uses `render` with `checks: true`; `related: true`
+checks the subject states and declared parent scenarios, not all consumers.
+
+Read each check's status and detail. `Failed` names a detected problem.
+`Review` means inspect empty content, spill, incomplete accessibility checks,
+and changed or missing baselines. `Inconclusive` and `NotRun` are not passes.
+With `--check`, exit 0 only means the report was written. It does not mean all
+checks passed. Reports never block Replace.
+
+Inspect both PNG sets in the saved run folder. Do not approve images merely to
+remove a finding. When the user explicitly asks to approve reviewed product
+images, use `--approve <report.json> --baselines <directory>`. This approves saved
+evidence, never fresh unseen renders. Takes cannot become baselines; check the
+real files after acceptance. Approval leaves other findings visible.
+
+State the checked parts, states and devices, unresolved findings, and report
+path. Do not claim that image matches prove interactions or all consumers safe.
+
 ## Rules
 
 - Make a new state to show a case, for example `export const NoResults = () => <List items={[]} />` in the

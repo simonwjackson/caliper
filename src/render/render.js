@@ -1,9 +1,11 @@
 // @ts-check
 import { mkdirSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { chromium } from "playwright-core"
 import { DEVICES } from "../client/device-frame.js"
 import { FRAME_WATCHDOG_MS } from "../pages.js"
+import { auditAccessibility, axeVersion } from "./accessibility.js"
 
 /**
  * @typedef {import("./plan.js").RenderJob} RenderJob
@@ -12,12 +14,17 @@ import { FRAME_WATCHDOG_MS } from "../pages.js"
  *   part: string,
  *   state: string,
  *   device: string,
+ *   take?: string,
  *   viewport: { width: number, height: number },
  *   frame: "Rendered" | "Empty" | "Failed",
  *   png: string,
  *   problems: Problem[],
  *   console: string[],
  *   spill: Spill | null,
+ *   accessibility?: import("./check-contract.js").Accessibility,
+ *   environment?: string,
+ *   checks?: import("./check-contract.js").CheckResult[],
+ *   checkReport?: string,
  * }} RenderResult
  *   `frame` is the frame's own verdict. `problems` are what the frame shows.
  *   `console` holds browser errors the frame did not catch, for example a
@@ -47,11 +54,11 @@ const CONCURRENCY = 4
  * CSS viewport and a device pixel ratio of 1. Loads the same frame page that
  * the chrome shows, from the project's running Vite server.
  *
- * @param {{ url: string, jobs: readonly RenderJob[], out: string, executablePath: string }} input
+ * @param {{ url: string, jobs: readonly RenderJob[], out: string, executablePath: string, audit?: boolean }} input
  *   `url` is the dev server's origin. `out` is the folder for the PNG files.
  * @returns {Promise<RenderResult[]>} in job order
  */
-export async function renderJobs({ url, jobs, out, executablePath }) {
+export async function renderJobs({ url, jobs, out, executablePath, audit = false }) {
   mkdirSync(out, { recursive: true })
   const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
   try {
@@ -61,7 +68,7 @@ export async function renderJobs({ url, jobs, out, executablePath }) {
     const worker = async () => {
       while (next < jobs.length) {
         const index = next++
-        results[index] = await renderOne(browser, url, /** @type {RenderJob} */ (jobs[index]), out)
+        results[index] = await renderOne(browser, url, /** @type {RenderJob} */ (jobs[index]), out, audit)
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker))
@@ -76,9 +83,10 @@ export async function renderJobs({ url, jobs, out, executablePath }) {
  * @param {string} url
  * @param {RenderJob} job
  * @param {string} out
+ * @param {boolean} audit
  * @returns {Promise<RenderResult>}
  */
-async function renderOne(browser, url, job, out) {
+async function renderOne(browser, url, job, out, audit) {
   const device = DEVICES.find(candidate => candidate.id === job.device)
   if (device === undefined) throw new Error(`Unknown device ${job.device}`)
   const viewport = { width: device.cssWidth, height: device.cssHeight }
@@ -160,6 +168,7 @@ async function renderOne(browser, url, job, out) {
     }, { tolerance: SPILL_TOLERANCE, limit: SPILL_ELEMENTS })
     const png = join(out, `${slug(job.part)}${job.take === undefined ? "" : `.take-${job.take}`}.${job.state}.${job.device}.png`)
     await page.screenshot({ path: png })
+    const accessibility = audit ? await auditAccessibility(page) : undefined
 
     return {
       ...job,
@@ -169,6 +178,10 @@ async function renderOne(browser, url, job, out) {
       problems: report.problems,
       console: consoleErrors,
       spill: report.spill,
+      ...(accessibility === undefined ? {} : {
+        accessibility,
+        environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:1`,
+      }),
     }
   } finally {
     await context.close()
@@ -176,10 +189,10 @@ async function renderOne(browser, url, job, out) {
 }
 
 /**
- * "src/ui/atoms/PicoButton.atom.part.tsx" becomes "src-ui-atoms-PicoButton.atom".
+ * Keep names readable; the hash distinguishes paths such as a/b and a-b.
  *
  * @param {string} file
  */
 function slug(file) {
-  return file.replace(/\.part\.tsx$/, "").replaceAll("/", "-")
+  return `${file.replace(/\.part\.tsx$/, "").replaceAll("/", "-")}.${createHash("sha256").update(file).digest("hex").slice(0, 12)}`
 }

@@ -378,6 +378,79 @@ status is 0 when every frame rendered.
 verdict, look at the PNGs, change the code, render again. Copy or link it into
 the agent's skills folder.
 
+## Report automatic checks
+
+Phase 1 reports problems through the CLI and the agent's render tool. It does
+not block **Replace**, change alternate acceptance, or add chrome status badges.
+It does not run authored interaction tests.
+
+```sh
+CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
+  --part '*' --state '*' --device '*' --check \
+  --baselines /path/to/project/.caliper/baselines --out /tmp/caliper-checks
+```
+
+Each run writes a unique folder with `report.json` and two sets of PNGs. The JSON
+on stdout includes the report path, raw first-render results, and checks. Each
+check reports one of these statuses:
+
+| Status | Meaning |
+|---|---|
+| `Passed` | This check found no problem in these samples. |
+| `Failed` | A render problem, browser error, or axe violation was observed. |
+| `Review` | Human judgement is needed, such as empty content, spill, an incomplete axe check, or a changed or missing image baseline. |
+| `Inconclusive` | The check cannot establish a result, such as differing repeat images, an unavailable audit, or an incompatible or damaged baseline. |
+| `NotRun` | No baseline directory was supplied. |
+
+With `--check`, exit 0 means the report was written, **not that it passed**.
+Setup and browser failures exit 2. Without `--check`, the existing render exit
+policy stays unchanged. `--part '*'` selects every discovered part; `--state '*'`
+selects every declared state of those parts. A selected state is not evidence
+about unselected states or undeclared consumers.
+
+The checks compare two fresh renders and scan the product host with axe's WCAG
+A/AA rules through WCAG 2.2. Document title and language belong to Caliper's
+frame and are excluded. Keyboard behavior, full-page semantics, and interactions
+still need product tests and manual review. Scrollable content can cause spill.
+Caliper reports it for review instead of guessing that scrolling is a defect.
+Empty states also need review instead of an unconditional failure.
+
+### Approve reviewed images
+
+Open both PNGs for every state in the saved report. If they show the intended
+product states, record those exact images as baselines:
+
+```sh
+caliper-render --approve /tmp/caliper-checks/check-XXXXXX/report.json \
+  --baselines /path/to/project/.caliper/baselines
+```
+
+Approval reads saved evidence; it does not rerender. It rejects unstable or
+broken samples, changed image files, and take images. To establish a baseline
+for an accepted take, run checks on the real files after acceptance and review
+that new report. Approval records visual intent only. It does not hide other
+findings, including accessibility problems and spill, or authorize acceptance.
+
+Use a separate baseline directory for each project. Baselines identify the
+project name, part, state and device, and record the browser/platform/check
+version. An environment change is inconclusive until new images are reviewed.
+Records update atomically one at a time, not as a crash-safe multi-state
+transaction. Keep the directory in version control elsewhere if the team needs
+shared baselines; `.caliper/` is ignored. No automatic pruning removes old images.
+
+The take agent can request `render` with `checks: true`, optionally with
+`related: true` and `device: "*"`. It receives findings and screenshots, and
+compares against `<project>/.caliper/baselines`. It cannot approve baselines.
+Normal renders remain single-pass for quick iteration.
+
+Costs: checks render twice and run axe, so they take longer than normal renders.
+Image comparisons are exact PNG-byte comparisons, not perceptual diffs. Fonts,
+animation and changing data can prevent a match. Both snapshots stay available
+for manual comparison; this phase does not produce a highlighted difference
+image. The run does not freeze source files or prove hermeticity. Do not edit
+the project during checks. A match proves only the observations listed in the
+report, not that all behavior is safe.
+
 ## Limits
 
 - Caliper shows size and viewport truthfully. It cannot show pixel density,
@@ -406,6 +479,7 @@ CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 ```
 
@@ -421,6 +495,12 @@ state-owned takes, composed CSS overrides, frame isolation, URL restoration,
 five container sizes, related renders, stale declarations, removed-state take
 recovery and retained preview errors. It makes no model
 calls and changes no supplied project files.
+
+`scripts/verify-checks.mjs` uses a temporary React consumer to check the public
+CLI, both device sizes, render errors, browser errors, empty states, spill,
+accessibility failures, unstable images, saved-baseline approval, take comparison,
+and the agent tool's findings. It also proves that reports do not block Replace.
+It makes no model calls or changes to the supplied project.
 
 `scripts/verify-code.mjs` checks the code pane against a running dev server.
 It types in a real file and checks that the file on disk changes, no take

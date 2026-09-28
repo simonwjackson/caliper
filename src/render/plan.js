@@ -21,6 +21,17 @@ export const EVERY = "*"
  * @returns {RenderPlan}
  */
 export function planRenders(project, request) {
+  if (request.part === EVERY) {
+    if (!project.parts.length) return { _tag: "Invalid", reason: "No parts discovered. There are no states to render." }
+    /** @type {RenderJob[]} */
+    const jobs = []
+    for (const part of project.parts) {
+      const plan = planRenders(project, { ...request, part: part.file })
+      if (plan._tag === "Invalid") return plan
+      jobs.push(...plan.jobs)
+    }
+    return { _tag: "Planned", jobs }
+  }
   const part = project.parts.find(candidate => candidate.file === request.part)
   if (part === undefined) {
     const needle = request.part.toLowerCase()
@@ -37,7 +48,7 @@ export function planRenders(project, request) {
   }
 
   const deviceIds = request.devices ?? [DEVICES[0]?.id ?? ""]
-  const devices = deviceIds.includes(EVERY) ? DEVICES.map(device => device.id) : deviceIds
+  const devices = deviceIds.includes(EVERY) ? DEVICES.map(device => device.id) : [...new Set(deviceIds)]
   const unknown = devices.find(id => !DEVICES.some(device => device.id === id))
   if (unknown !== undefined) {
     const names = DEVICES.map(device => device.id).join(", ")

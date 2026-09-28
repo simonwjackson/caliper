@@ -33,6 +33,17 @@ describe("planRenders", () => {
     ])
   })
 
+  test("selects all declared states across all parts without duplicate devices", () => {
+    const plan = planRenders(project, { part: "*", state: "*", devices: ["rg353m", "rg353m"] })
+    expect(plan._tag === "Planned" && plan.jobs).toEqual([
+      { part: "src/Button.atom.part.tsx", state: "default", device: "rg353m" },
+      { part: "src/Button.atom.part.tsx", state: "Busy", device: "rg353m" },
+      { part: "src/pages/Home.page.part.tsx", state: "default", device: "rg353m" },
+    ])
+    expect(planRenders({ ...project, parts: [] }, { part: "*" })._tag).toBe("Invalid")
+    expect(planRenders(project, { part: "*", state: "Busy" })._tag).toBe("Invalid")
+  })
+
   test("accepts a list of devices by id", () => {
     const plan = planRenders(project, { part: "src/pages/Home.page.part.tsx", devices: ["odin2portal"] })
     expect(plan._tag === "Planned" && plan.jobs.map(job => job.device)).toEqual(["odin2portal"])
