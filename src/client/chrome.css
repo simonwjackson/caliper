@@ -111,6 +111,10 @@ pre {
  *   data-takes  column: at the right. below: under the stage. tab: fills the work area.
  *   data-code   beside or below the stage, or tab.
  *   data-tabs   one of preview, code and takes fills the work area (data-view).
+ *               The knobs view keeps the preview, with the knobs under it.
+ *
+ * The Takes and Knobs panels share the region data-takes places; chrome.js
+ * shows one of them at a time.
  *
  * The sizes below mirror layout.js; change them together.
  */
@@ -138,7 +142,8 @@ pre {
   grid-area: side;
 }
 
-.cal-takes {
+.cal-takes,
+.cal-knobs {
   grid-area: takes;
 }
 
@@ -180,13 +185,29 @@ pre {
   visibility: hidden;
 }
 
-/* Outrank the panel rules below. A visible panel with no named grid area
- * creates implicit tracks and collapses the preview. */
-.cal > .cal-takes[hidden] {
-  display: none;
+/* Tabs: knobs are judged by the frame as you drag, so the knobs view keeps
+ * the preview and puts the knobs under it. The stage keeps the larger share. */
+.cal[data-tabs][data-view="knobs"] {
+  grid-template-rows: auto minmax(0, 1fr) minmax(min(10rem, 45%), 45%);
+  grid-template-areas: "bar" "main" "takes";
 }
 
-.cal[data-takes="below"] > .cal-takes {
+.cal[data-tabs][data-nav="docked"][data-view="knobs"] {
+  grid-template-areas: "bar bar" "side main" "side takes";
+}
+
+/* Outrank the panel rules below. A visible panel with no named grid area
+ * creates implicit tracks and collapses the preview. Takes and Knobs share
+ * one region, so a hidden panel must lose to every placement rule,
+ * including the grid the Takes panel uses under the stage. */
+.cal > .cal-takes[hidden],
+.cal > .cal-knobs[hidden] {
+  display: none !important;
+}
+
+.cal[data-takes="below"] > .cal-takes,
+.cal[data-takes="below"] > .cal-knobs,
+.cal[data-tabs][data-view="knobs"] > .cal-knobs {
   border-left: 0;
   border-top: 1px solid var(--cal-line);
 }
@@ -251,6 +272,7 @@ pre {
 .cal-nav-toggle[aria-expanded="true"],
 .cal-code-toggle[aria-expanded="true"],
 .cal-takes-toggle[aria-expanded="true"],
+.cal-knobs-toggle[aria-expanded="true"],
 .cal-preview-tab[aria-pressed="true"] {
   background: var(--cal-accent);
   color: var(--cal-stage);
@@ -1786,4 +1808,281 @@ button:disabled {
 
 .cal-cell-label[aria-current="true"] {
   color: var(--cal-accent);
+}
+
+/* ----------------------------------------------------------------- knobs */
+
+/* One row per knob: the label on the left, the value on the right, and the
+ * declaration it edits under them. The label is also the scrub handle. */
+.cal-knobs {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--cal-panel);
+  border-left: 1px solid var(--cal-line);
+}
+
+.cal-knobs-head {
+  flex-shrink: 0;
+  padding: var(--cal-space-3) var(--cal-space-3) var(--cal-space-2);
+}
+
+.cal-knobs-head h2 {
+  margin: 0;
+  font-size: var(--cal-text-md);
+}
+
+.cal-knobs-target {
+  margin: var(--cal-space-1) 0 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-knobs-body {
+  padding: 0 var(--cal-space-3) var(--cal-space-3);
+}
+
+.cal-knobs-note {
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knobs-note pre {
+  margin: var(--cal-space-2) 0 0;
+  padding: var(--cal-space-2);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+  color: var(--cal-ink);
+  overflow: auto;
+}
+
+.cal-knobs-problem,
+.cal-knob-problem {
+  margin: var(--cal-space-1) 0;
+  color: var(--cal-warn);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knob-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cal-knob {
+  padding: var(--cal-space-2) 0;
+  border-bottom: 1px solid var(--cal-line);
+}
+
+.cal-knob-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cal-space-1) var(--cal-space-2);
+  min-height: 2rem;
+}
+
+.cal-knob-label {
+  flex: 1 1 6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A drag sideways on the label changes the value, as in design tools. */
+.cal-knob-scrub {
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+  text-decoration: underline dotted var(--cal-muted);
+  text-underline-offset: 0.25em;
+}
+
+.cal-knob-scrub:hover,
+.cal-knob-scrub:active {
+  color: var(--cal-accent);
+  text-decoration-color: var(--cal-accent);
+}
+
+.cal-knob-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cal-space-1);
+  margin-left: auto;
+}
+
+.cal-knob-number,
+.cal-knob-text,
+.cal-knob-select {
+  min-height: 2rem;
+  padding: 0 var(--cal-space-2);
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-knob-number {
+  width: 6.5rem;
+  text-align: right;
+}
+
+.cal-knob-text {
+  width: 8.5rem;
+  font-family: var(--cal-mono);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knob-unit {
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knob-range {
+  display: block;
+  width: 100%;
+  margin: var(--cal-space-1) 0 0;
+  accent-color: var(--cal-accent);
+}
+
+.cal-knob-color {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: none;
+  cursor: pointer;
+}
+
+.cal-knob-swatch {
+  display: inline-block;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+}
+
+.cal-knob-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cal-space-2);
+  min-height: 2rem;
+  margin-left: auto;
+}
+
+.cal-knob-token[aria-expanded="true"] {
+  border-color: var(--cal-accent);
+}
+
+/* The sibling tokens a reference picks among. Colours are swatches; each
+ * keeps a 2rem target, and its name is its title. */
+.cal-knob-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cal-space-1);
+  margin: var(--cal-space-2) 0 0;
+}
+
+.cal-knob-palette-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2rem, 1fr));
+}
+
+.cal-knob-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cal-space-1);
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: var(--cal-space-1) var(--cal-space-2);
+  font-family: var(--cal-mono);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knob-palette-colors .cal-knob-choice {
+  padding: 0;
+  aspect-ratio: 1;
+}
+
+.cal-knob-palette-colors .cal-knob-swatch {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--cal-radius) - 1px);
+}
+
+.cal-knob-palette-colors .cal-knob-choice-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.cal-knob-choice[aria-checked="true"] {
+  border-color: var(--cal-accent);
+  box-shadow: 0 0 0 1px var(--cal-accent);
+}
+
+.cal-knob-site,
+.cal-knob-note,
+.cal-knob-status {
+  margin: var(--cal-space-1) 0 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-knob-file {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cal-accent);
+  font-family: var(--cal-mono);
+  font-size: inherit;
+}
+
+.cal-knob-file:hover {
+  text-decoration: underline;
+}
+
+.cal-knob-status:empty {
+  display: none;
+}
+
+.cal-knob[data-status="Saved"] .cal-knob-status {
+  color: var(--cal-good);
+}
+
+.cal-knob[data-status="Conflict"] .cal-knob-status,
+.cal-knob[data-status="Failed"] .cal-knob-status {
+  color: var(--cal-bad);
+}
+
+.cal-knobs-skipped {
+  margin-top: var(--cal-space-3);
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-knobs-skipped > summary {
+  cursor: pointer;
+}
+
+.cal-knobs-skipped ul {
+  margin: var(--cal-space-1) 0 0;
+  padding-left: var(--cal-space-3);
+}
+
+.cal-knobs-skipped li {
+  margin: var(--cal-space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+.cal-knob-where {
+  font-family: var(--cal-mono);
 }

@@ -42,6 +42,9 @@ const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url))
 const CLIENT_FILES = new Map([
   ["chrome.js", "text/javascript"],
   ["integration-review.js", "text/javascript"],
+  ["knobs-panel.js", "text/javascript"],
+  ["knob-cssom.js", "text/javascript"],
+  ["knob-values.js", "text/javascript"],
   ["checks-panel.js", "text/javascript"],
   ["checks-view.js", "text/javascript"],
   ["checks.css", "text/css"],

@@ -3,7 +3,7 @@ import { existsSync, lstatSync, writeFileSync } from "node:fs"
 import { isAbsolute, join, relative, sep } from "node:path"
 import { Check, Errors } from "typebox/value"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse } from "../http.js"
-import { takeOf } from "../takes/overlay.js"
+import { blankImports, takeOf } from "../takes/overlay.js"
 import { fenceProjectPath } from "../takes/store.js"
 import { editSource, valueProblem, versionOf } from "./edit.js"
 import { locateDeclarations } from "./locate.js"
@@ -58,7 +58,12 @@ export function createKnobsApi({ store, writeTake, options }) {
       if (inside._tag === "Outside") return { _tag: "Refused", reason: inside.reason }
       if (!current.has(inside.file)) current.set(inside.file, readVariant(store, body.take, inside.file))
       const text = current.get(inside.file)
-      if (text !== result.source) {
+      // A take's frame loads a flattened global stylesheet with its @imports
+      // blanked to comments of the same length, so offsets still match.
+      const served = text !== null && text !== undefined && body.take !== null && text !== result.source
+        ? blankImports(store.root, join(store.root, inside.file), text, body.take)
+        : text
+      if (text === null || text === undefined || served !== result.source) {
         return { _tag: "Refused", reason: `${inside.file} changed after the frame loaded it. Caliper waits for the frame to reload.` }
       }
       return {
@@ -66,6 +71,7 @@ export function createKnobsApi({ store, writeTake, options }) {
         file: inside.file,
         start: result.start,
         end: result.end,
+        line: text.slice(0, result.start).split("\n").length,
         value: result.value,
         version: versionOf(text),
         hints: result.hints.hints,

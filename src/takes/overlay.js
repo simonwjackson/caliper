@@ -121,6 +121,29 @@ function localImports(root, file, code) {
 }
 
 /**
+ * A flattened global stylesheet as a take's frame loads it: each local
+ * `@import` becomes a comment of the same length, with its line breaks, so
+ * every other offset, line and column stays the file's own. A knob maps a
+ * rule back to the file through them (decision 23).
+ *
+ * @param {string} root
+ * @param {string} file absolute path of the real file
+ * @param {string} code the take's text of it
+ * @param {string} take
+ */
+export function blankImports(root, file, code, take) {
+  let out = code
+  for (const entry of localImports(root, file, code).found) {
+    const statement = entry.statement.trimStart()
+    const lead = entry.statement.slice(0, entry.statement.length - statement.length)
+    const note = ` take ${take}: loaded on its own `
+    const inner = [...statement.slice(2, -2)].map((char, index) => (char === "\n" ? "\n" : note[index] ?? " ")).join("")
+    out = out.replace(entry.statement, `${lead}/*${inner}*/`)
+  }
+  return out
+}
+
+/**
  * The global stylesheets as a take sees them. Each local `@import` is expanded
  * in cascade order, imports first and then the file itself, so each file
  * becomes its own module that can carry the take tag.
@@ -243,11 +266,7 @@ export function takeOverlay(getRoot, getCacheDir = () => join(getRoot(), "node_m
         return code
       }
       // Global imports are loaded as separate tagged modules by the frame.
-      let out = code
-      for (const entry of localImports(root, file, code).found) {
-        out = out.replace(entry.statement, `/* take ${take}: loaded on its own: ${entry.statement.trim()} */`)
-      }
-      return out
+      return blankImports(root, file, code, take)
     },
 
     /**

@@ -351,6 +351,8 @@ export type KnobSource =
     /** The value's start and end in the file, without the spaces around it. */
     readonly start: number
     readonly end: number
+    /** 1-based, of `start`. */
+    readonly line: number
     readonly value: string
     readonly version: string
     /** From the doc comment directly above the declaration, or above its `@property` rule. */

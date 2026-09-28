@@ -5,6 +5,7 @@ import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from ".
 import { h } from "./dom.js"
 import { fitBar, planLayout } from "./layout.js"
 import { createIntegrationPanel } from "./integration-review.js"
+import { createKnobsPanel } from "./knobs-panel.js"
 import { contextsFor, sameState, stateExists, subjectsOf } from "./scenarios.js"
 
 const integrationPanel = createIntegrationPanel({
@@ -47,8 +48,11 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
  *   one direction per take, and you edit them before the takes start.
  * @typedef {{ key: string, label: string, title: string, src: string, select: () => void, status?: string }} Cell
  *   One labelled frame in the grid.
- * @typedef {"preview" | "code" | "takes"} View
- *   With tabs, the one pane the work area shows.
+ * @typedef {"preview" | "code" | "takes" | "knobs"} View
+ *   With tabs, the one pane the work area shows. Knobs show under the
+ *   preview, because a knob is judged by what the frame shows as you drag.
+ * @typedef {"takes" | "knobs"} Side
+ *   Takes and Knobs share the one region layout.js places for the Takes panel.
  */
 
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
@@ -57,6 +61,8 @@ const STORAGE_TAKES_OPEN = "caliper:takes-open"
 const STORAGE_CODE_OPEN = "caliper:code-open"
 const STORAGE_CODE_SHARE = "caliper:code-share"
 const STORAGE_VIEW = "caliper:view"
+const STORAGE_KNOBS_OPEN = "caliper:knobs-open"
+const STORAGE_SIDE = "caliper:side"
 /** Bar groups move into the More menu in this order: the rarest action first. */
 const BAR_OVERFLOW = ["calibrate", "devices", "checks"]
 /** The narrowest the bar's title gets while it shares a row with the controls. */
@@ -131,11 +137,15 @@ const state = {
   navOpen: false,
   /** With tabs, the pane that fills the work area. @type {View} */
   view: viewFrom(localStorage.getItem(STORAGE_VIEW)),
+  /** Whether the Knobs panel is open. */
+  knobsOpen: localStorage.getItem(STORAGE_KNOBS_OPEN) === "true",
+  /** Which panel the shared region shows. @type {Side} */
+  side: localStorage.getItem(STORAGE_SIDE) === "knobs" ? /** @type {Side} */ ("knobs") : /** @type {Side} */ ("takes"),
 }
 
 /** @param {string | null} value @returns {View} */
 function viewFrom(value) {
-  return value === "code" || value === "takes" ? value : "preview"
+  return value === "code" || value === "takes" || value === "knobs" ? value : "preview"
 }
 
 /** @param {number} share */
@@ -185,7 +195,8 @@ app.append(
         h("div", { class: "cal-views", "data-group": "views", role: "group", "aria-label": "Panes" },
           h("button", { class: "cal-preview-tab", type: "button", onClick: () => setView("preview") }, "Preview"),
           h("button", { class: "cal-code-toggle", type: "button", "aria-controls": "cal-code", onClick: () => toggleCode() }, "Code"),
-          h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => toggleTakes() }, "Takes")),
+          h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => toggleTakes() }, "Takes"),
+          h("button", { class: "cal-knobs-toggle", type: "button", "aria-controls": "cal-knobs", onClick: () => toggleKnobs() }, "Knobs")),
         h("button", {
           class: "cal-more",
           type: "button",
@@ -307,7 +318,8 @@ app.append(
             }, ...Array.from({ length: MAX_PARALLEL }, (_, index) => h("option", { value: String(index + 1) }, String(index + 1))))),
           h("button", { type: "button", class: "cal-follow", onClick: () => void followTake() }),
           h("button", { type: "button", class: "cal-plan-back", onClick: () => closePlan() }, "Back"),
-          h("button", { type: "submit", class: "cal-primary cal-start" }, "New take"))))))
+          h("button", { type: "submit", class: "cal-primary cal-start" }, "New take")))),
+    h("aside", { class: "cal-knobs", id: "cal-knobs", "aria-label": "Knobs" })))
 
 const frame = /** @type {HTMLIFrameElement} */ ($(".cal-frame"))
 const stage = $(".cal-stage")
@@ -317,6 +329,20 @@ const code = createCodePane($(".cal-code"), {
   // A lens in the part file selects its state, as the state's row in the list does.
   selectState: exportName => { if (state.part) selectPartState(state.part, exportName) },
   stopTake: take => void postTakes(`/takes/${take}/stop`),
+})
+
+const knobs = createKnobsPanel($(".cal-knobs"), {
+  frames: () => /** @type {HTMLIFrameElement[]} */ ([...stage.querySelectorAll("iframe.cal-frame")]),
+  // The code pane's subject: the selected take in the takes view, else the real files.
+  variant: () => {
+    const subject = codeSubject()
+    if (!subject) return null
+    return subject.take ? { take: subject.take.take, label: `${takeName(subject.take)} · its own copies` } : { take: null, label: "Real files" }
+  },
+  openFile: file => {
+    code.reveal(file)
+    if (!state.codeOpen) setCodeOpen(true)
+  },
 })
 
 const checks = createChecksPanel({
@@ -477,6 +503,7 @@ function showChanged() {
   renderProblems()
   renderTakes()
   syncCode()
+  knobs.refresh()
 }
 
 /**
@@ -536,12 +563,53 @@ function toggleCode() {
   setCodeOpen(false)
 }
 
-/** The bar's Takes button, as the Code button. */
+/**
+ * The bar's Takes button, as the Code button. Takes and Knobs share one
+ * region: the button of the panel it does not show switches it.
+ */
 function toggleTakes() {
-  if (!state.layout.tabs) return setTakesOpen(!takesOpen())
+  if (!state.layout.tabs) {
+    if (state.side !== "takes") return showSide("takes")
+    return setTakesOpen(!takesOpen())
+  }
   if (state.view !== "takes") return setView("takes")
   setView("preview")
   setTakesOpen(false)
+}
+
+/** The bar's Knobs button, as the Takes button. */
+function toggleKnobs() {
+  if (!state.layout.tabs) {
+    if (state.side !== "knobs") return showSide("knobs")
+    return setKnobsOpen(!state.knobsOpen)
+  }
+  if (state.view !== "knobs") return setView("knobs")
+  setView("preview")
+  setKnobsOpen(false)
+}
+
+/** Show one panel in the shared region, open. @param {Side} side */
+function showSide(side) {
+  state.side = side
+  localStorage.setItem(STORAGE_SIDE, side)
+  if (side === "takes") {
+    if (!takesOpen()) return setTakesOpen(true)
+  } else if (!state.knobsOpen) return setKnobsOpen(true)
+  applyLayout()
+  renderStage()
+}
+
+/** @param {boolean} open */
+function setKnobsOpen(open) {
+  state.knobsOpen = open
+  localStorage.setItem(STORAGE_KNOBS_OPEN, String(open))
+  applyLayout()
+  renderStage()
+}
+
+/** Whether the shared region is open: the panel it shows is. */
+function sideOpen() {
+  return state.side === "knobs" ? state.knobsOpen : takesOpen()
 }
 
 /**
@@ -562,8 +630,17 @@ function setView(view) {
     state.takesOpen = true
     localStorage.setItem(STORAGE_TAKES_OPEN, "true")
   }
+  if (view === "takes" || view === "knobs") {
+    state.side = view
+    localStorage.setItem(STORAGE_SIDE, view)
+  }
+  if (view === "knobs" && !state.knobsOpen) {
+    state.knobsOpen = true
+    localStorage.setItem(STORAGE_KNOBS_OPEN, "true")
+  }
   applyLayout()
   syncCode()
+  renderStage()
 }
 
 /** @param {boolean} open */
@@ -584,8 +661,11 @@ function setNavOpen(open) {
 /** Which panes show now. With tabs, only the chosen one fills the work area. */
 function shownPanes() {
   const plan = state.layout
-  if (plan.tabs) return { preview: state.view === "preview", code: state.view === "code", takes: state.view === "takes" }
-  return { preview: true, code: plan.code !== "closed", takes: plan.takes !== "closed" }
+  if (plan.tabs) {
+    return { preview: state.view === "preview" || state.view === "knobs", code: state.view === "code", takes: state.view === "takes", knobs: state.view === "knobs" }
+  }
+  const side = plan.takes !== "closed"
+  return { preview: true, code: plan.code !== "closed", takes: side && state.side === "takes", knobs: side && state.side === "knobs" }
 }
 
 /** The code pane's open state, as last told to the pane. */
@@ -599,7 +679,7 @@ function applyLayout() {
   const root = /** @type {HTMLElement} */ (app)
   const cal = $(".cal")
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  const plan = planLayout(root.clientWidth / rem, root.clientHeight / rem, { code: state.codeOpen, takes: takesOpen() })
+  const plan = planLayout(root.clientWidth / rem, root.clientHeight / rem, { code: state.codeOpen, takes: sideOpen() })
   state.layout = plan
   if (plan.nav !== "drawer") state.navOpen = false
   cal.dataset.nav = plan.nav
@@ -612,12 +692,15 @@ function applyLayout() {
 
   const shown = shownPanes()
   $(".cal-takes").hidden = !shown.takes
+  $(".cal-knobs").hidden = !shown.knobs
   $(".cal-code").hidden = !shown.code
   split.hidden = plan.tabs || !shown.code
   $(".cal-nav-toggle").setAttribute("aria-expanded", String(plan.nav === "drawer" && state.navOpen))
   $(".cal-preview-tab").setAttribute("aria-pressed", String(shown.preview))
   $(".cal-code-toggle").setAttribute("aria-expanded", String(shown.code))
   $(".cal-takes-toggle").setAttribute("aria-expanded", String(shown.takes))
+  $(".cal-knobs-toggle").setAttribute("aria-expanded", String(shown.knobs))
+  knobs.setOpen(shown.knobs)
   if (codeShownBefore !== shown.code) {
     codeShownBefore = shown.code
     code.setOpen(shown.code)
@@ -1729,6 +1812,7 @@ window.addEventListener("message", event => {
   const take = event.data.take ?? null
   state.reports.set(reportKey(take, event.data.partState, event.data.part), { part: event.data.part, partState: event.data.partState, take, state: event.data.state, problems: event.data.problems })
   renderProblems()
+  knobs.frameChanged()
 })
 
 // The divider between the stage and the code pane. Pointer capture keeps the

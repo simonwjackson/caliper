@@ -113,7 +113,7 @@ describe("locating a knob's declaration", () => {
       expect(gap.hints).toEqual({ min: 1, max: 8, step: 1 })
       expect(gap.problems).toEqual(["Caliper does not know the hint @colour. It reads @label, @min, @max, @step and @knob ignore."])
       expect(paper).toMatchObject({ _tag: "Located", file: "src/child.css", value: "rgb(9, 9, 9)", ...at(root, "src/child.css", "rgb(9, 9, 9)") })
-      expect(rows).toMatchObject({ _tag: "Located", file: "src/global.css", value: "360", hints: {}, note: "How many rows of virtual pixels." })
+      expect(rows).toMatchObject({ _tag: "Located", file: "src/global.css", line: 7, value: "360", hints: {}, note: "How many rows of virtual pixels." })
       expect(ground).toMatchObject({ _tag: "Located", value: "var(--p8-black)", hints: {} })
       expect(gap.version).toMatch(/^[0-9a-f]{16}$/)
       expect(paper.version).not.toBe(gap.version)
@@ -157,6 +157,28 @@ describe("locating a knob's declaration", () => {
       expect(results[0]).toMatchObject({ _tag: "Located", file: "src/child.css", value: "rgb(1, 1, 1)" })
       const wrong = await post(url, "/__caliper/knobs/locate", { ...body, take: null })
       expect((await wrong.json()).error).toBe(`This stylesheet belongs to take ${take}, not to the real files.`)
+    })
+  })
+
+  test("in a take's frame, finds a declaration in a global stylesheet whose @import the take loads on its own", async () => {
+    await withProject({ files }, async ({ get, url, root }) => {
+      const take = createTakeStore(root).create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      // The frame page flattens the take's global stylesheets.
+      expect((await get(`/__caliper/frame?part=src/Box.part.tsx&take=${take}`)).status).toBe(200)
+      const css = await served(get, `/src/global.css?take=${take}`)
+      expect(css).not.toContain("@import")
+      const { results } = await (await post(url, "/__caliper/knobs/locate", {
+        sheet: `${join(root, "src/global.css")}?take=${take}`,
+        take,
+        css,
+        rules: [
+          { path: [0], kind: "property", name: "--rows" },
+          { path: [1], kind: "property", name: "--ground" },
+          { path: [2], kind: "style", selector: ".theme" },
+        ],
+        targets: [{ path: [2], property: "--gap" }],
+      })).json()
+      expect(results[0]).toMatchObject({ _tag: "Located", file: "src/global.css", value: "4px", ...at(root, "src/global.css", "4px") })
     })
   })
 
