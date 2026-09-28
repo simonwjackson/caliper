@@ -188,6 +188,11 @@ device size, timeouts and evidence. Prefer established query, interaction and
 assertion tools over Caliper-specific equivalents. Select libraries after
 verifying their fit with Vite and take overlays.
 
+The user requires a modern public authoring API and permits mature internal
+dependencies. A Chai dependency does not disqualify a module. Chai-style chains
+are not the target authoring syntax. Evaluate typed DOM matchers, browser
+compatibility and useful failure messages, not package age alone.
+
 This is an input-boundary decision, not an implemented feature or an approved
 complete API. Export syntax, execution details and libraries remain open.
 The reporting-only Replace policy remains unchanged.

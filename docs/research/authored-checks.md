@@ -2,7 +2,9 @@
 
 ## Result
 
-A browser-local check can use DOM Testing Library queries, Chai assertions and a bounded Playwright input bridge. This combination worked through Caliper's existing Vite server and take overlay. It is the recommended direction, not an approved production API.
+A browser-local check can use existing DOM query and assertion libraries with a bounded Playwright input bridge. This worked through Caliper's Vite server and take overlay. The first spike used Chai for basic assertions; it did not establish Chai as the best authoring API.
+
+The user then chose a modern public API with mature internals permitted. A follow-up verified standalone `@vitest/expect` plugins with `@testing-library/jest-dom` for typed `expect(element).toBeVisible()` assertions. This is the recommended assertion direction, not a shipped feature or an approved complete API.
 
 Keep check functions with their product states. Execute product and check modules in the browser, not Node. Reuse `playwright-core` for actual input. Caliper must own the check lifecycle and the small browser-to-driver transport, not new query or assertion semantics.
 
@@ -34,13 +36,30 @@ The experiment confirmed a storage write before closing each context, then check
 | Product scenario | Supplies local data, starting state and real action behavior. |
 | Check in the product module | Queries the rendered product and asserts outcomes in its browser context. |
 | DOM Testing Library | Supplies `within`, asynchronous queries and `waitFor`. |
-| Chai | Supplies browser-compatible assertions. Eventual assertions need `waitFor`; Chai does not retry them itself. |
+| Standalone `@vitest/expect` plugins and `@testing-library/jest-dom` | Supply modern DOM assertions over Chai internally. Eventual assertions still need `waitFor`. |
 | Existing Playwright driver | Sends browser input and performs click actionability checks. |
 | Caliper | Supplies fresh contexts, run identity, deadlines, reporting and a bounded input transport. |
 
-This direction needs DOM Testing Library and Chai plus their dependencies. It does not need user-event, a new Vitest runtime, or Playwright Test assertions in the product. The comparison spike installed those alternatives only to test them. Production dependency delivery and Vite resolution in consumers remain design work.
+The proposed stack uses DOM Testing Library, standalone Vitest assertion plugins, jest-dom matchers and a compatible Chai version underneath. It does not need user-event, the Vitest runner or Playwright Test assertions in the product. Production dependency delivery and Vite resolution in consumers remain design work.
 
 The transport does not implement role queries or matchers. It passes DOM element handles to a small set of driver operations. The spike uses public APIs from pinned Playwright 1.59.1, including `exposeBinding` with `handle: true`. Verify that API before upgrading; moving-version documentation is not the tested package contract.
+
+## Modern assertion follow-up
+
+The public API requirement is modern, typed assertions. It is not a ban on Chai as an internal dependency.
+
+| Candidate | Observed result at both viewport sizes |
+|---|---|
+| `@vitest/expect` 4.1.10 plugins + jest-dom 6.9.1 | All 20 outcomes matched expectations: 12 passes and eight deliberate failures. Visibility, negation, focus, accessible names, async retry and take changes behaved as expected. |
+| Jest's standalone `expect` 30.2.0 + jest-dom | All 20 probes failed to load with `process is not defined`. No browser polyfill was supplied. This rejects the unmodified setup, not every possible integration. |
+
+The working setup had no Vitest-worker, Vitest-browser or Node-process global. It loaded dependencies lazily and imported the changed assertion helper through the real take tag. Negative results contained the expected matcher names. TypeScript checked the adapter and authored-check modules with strict checking and library checking enabled. Six negative type cases verified unknown matcher names, extra arguments and invalid accessible-name values.
+
+Assembly follows the pinned package's public Chai-plugin recipe. The raw `JestExtend` method takes the expect function and matchers as two arguments; its signature was checked in the pinned source. Caliper must own that setup and its type augmentation, keep compatible versions aligned, and rerun these probes after upgrades. No private imports, copied matchers or fake runner globals were used.
+
+This is not the complete Vitest `expect` interface. Soft assertions, snapshots, assertion counts and `expect.poll` were not provided. Assertions are synchronous; `waitFor` supplies retries. A visibility matcher does not prove that a pointer can reach an element. Playwright input handles that separately.
+
+The follow-up source, lockfile, strict type probes, report and three screenshots are archived under tag `spike-assertion-api-fit-2026-09-28`. Its `spike/authored-checks/README.md` gives commands. Chromium 149.0.7827.200 and Vite 6.4.2 were used; other browsers remain untested. The input-bridge lifecycle limits below remain open.
 
 ## Work still required
 
@@ -78,4 +97,6 @@ nix shell nixpkgs#nodejs --command node summarize.mjs
 - [Testing Library's user-event introduction](https://testing-library.com/docs/user-event/intro/) describes simulated interactions through dispatched events. The complete page was inspected, then the covered-click difference was measured.
 - [Playwright library guide](https://playwright.dev/docs/library) distinguishes library execution from the test runner. The experiment verified the two named assertions outside the runner; it did not verify screenshot assertions.
 - [Vitest browser-context API](https://vitest.dev/api/browser/context) distinguishes provider input from simulation and explains the browser/driver split. The fetched page described a newer Vitest release than the installed 4.1.10 probe. The result here is explicitly version-bound.
-- The archive includes the pre-spike primary-source survey at `docs/research/authored-check-library-sources.md`. Its initial synthetic-input recommendation is superseded by the covered-click evidence.
+- The initial archive includes the pre-spike primary-source survey at `docs/research/authored-check-library-sources.md`. Its initial synthetic-input recommendation is superseded by the covered-click evidence.
+- [Pinned @vitest/expect plugin recipe](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/expect/README.md) documents the standalone plugin setup used in the follow-up.
+- [jest-dom's other-expect instructions](https://github.com/testing-library/jest-dom#with-another-jest-compatible-expect) document its public standalone matcher export.
