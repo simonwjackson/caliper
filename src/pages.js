@@ -12,17 +12,27 @@ export const FRAME_WATCHDOG_MS = 10_000
  * The import map names the browser packages the chrome loads from Caliper's
  * own node_modules, such as CodeMirror. It must come before any module script.
  *
- * @param {{ clientUrl: string, importMap: { imports: Record<string, string> } }} input
+ * @param {{ clientUrl: string, pwaUrl: string, themeColor: string, importMap: { imports: Record<string, string> } }} input
  */
-export function chromePage({ clientUrl, importMap }) {
+export function chromePage({ clientUrl, pwaUrl, themeColor, importMap }) {
   const map = JSON.stringify(importMap).replaceAll("<", "\\u003c")
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Caliper</title>
-    <link rel="icon" href="data:," />
+    <link rel="manifest" href="${pwaUrl}/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="${pwaUrl}/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="${pwaUrl}/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="${pwaUrl}/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="${pwaUrl}/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="${pwaUrl}/apple-touch-icon.png" />
+    <meta name="theme-color" content="${escapeHtml(themeColor)}" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Caliper" />
     <link rel="stylesheet" href="${clientUrl}/chrome.css" />
     <script type="importmap">${map}</script>
     <script type="module" src="${clientUrl}/chrome.js"></script>

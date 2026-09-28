@@ -22,11 +22,11 @@ import { caliper } from "../src/plugin.js"
  * Write a project to a temporary folder, start a real Vite dev server on it
  * with `caliper(options)`, run `test`, and clean up.
  *
- * @param {{ files: Record<string, string>, options?: CaliperOptions, git?: boolean }} setup
+ * @param {{ files: Record<string, string>, options?: CaliperOptions, git?: boolean, base?: string }} setup
  *   `git` makes the folder a Git checkout, so `.gitignore` applies
  * @param {(project: RunningProject) => Promise<void>} test
  */
-export async function withProject({ files, options, git = false }, test) {
+export async function withProject({ files, options, git = false, base = "/" }, test) {
   const root = mkdtempSync(join(tmpdir(), "caliper-test-"))
   /** @param {string} file @param {string} content */
   const write = (file, content) => {
@@ -38,6 +38,7 @@ export async function withProject({ files, options, git = false }, test) {
 
   const server = await createServer({
     root,
+    base,
     configFile: false,
     logLevel: "silent",
     plugins: [caliper(options)],

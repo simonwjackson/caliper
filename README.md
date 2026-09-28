@@ -46,6 +46,21 @@ keeps the preview and shows the knobs under it. Controls that do not fit the
 bar, such as the devices and **Calibrate**, move into the **⋯** menu. Nothing
 is removed at any size.
 
+## Install the dev chrome
+
+Open `/__caliper/` on a secure origin (localhost or HTTPS) and use the browser's
+Install action. The install opens Caliper in fullscreen, with standalone and
+minimal-UI fallbacks. Android gets regular and maskable icons; iOS gets a home-screen
+icon and a viewport that keeps controls clear of display cutouts. The manifest,
+icons and install scope stay under `/__caliper/`, including when Vite uses a base
+path. They do not replace the product's own manifest or icons.
+
+This is still a dev tool. Keep the project's Vite server running while using the
+installed app. Caliper has no service worker and does not work offline. To rebuild
+its icons after changing chrome colors, run `nix develop -c node scripts/gen-icons.mjs`
+in this checkout. Run `nix develop -c node scripts/verify-pwa.mjs` to check the
+install metadata, browser installability and safe-area layout on a test product.
+
 ## What Caliper finds by itself
 
 | Need | Where Caliper looks |

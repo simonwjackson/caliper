@@ -26,6 +26,10 @@
   --cal-warn: #f0b85a;
   --cal-bad: #ff7a7a;
   --cal-stage: #0e0f11;
+  --cal-safe-top: env(safe-area-inset-top, 0px);
+  --cal-safe-right: env(safe-area-inset-right, 0px);
+  --cal-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --cal-safe-left: env(safe-area-inset-left, 0px);
   /* Room for captions and a small preview before its region must scroll. */
   --cal-stage-min: 12rem;
   --cal-navigation-min: 6rem;
@@ -62,6 +66,7 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overscroll-behavior: none;
   background: var(--cal-bg);
   color: var(--cal-ink);
   font: var(--cal-text-md) / 1.4 var(--cal-font);
@@ -94,6 +99,12 @@ code,
 pre {
   font-family: var(--cal-mono);
   font-size: var(--cal-text-sm);
+}
+
+/* The installed fullscreen page extends under screen cutouts. Keep every control in the safe box. */
+body {
+  padding: var(--cal-safe-top) var(--cal-safe-right)
+    var(--cal-safe-bottom) var(--cal-safe-left);
 }
 
 /* The app never scrolls as a whole. Each region scrolls inside its own box. */

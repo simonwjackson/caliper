@@ -46,6 +46,56 @@ describe("the chrome page", () => {
     })
   })
 
+  test("installs only the Caliper path, with the old display fallback and every icon", async () => {
+    await withProject({ files: { ...files, "public/manifest.webmanifest": '{"name":"Product"}', "public/icon-192.png": "product-icon" } }, async ({ get }) => {
+      const html = await (await get("/__caliper/")).text()
+      expect(html).toContain('name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"')
+      expect(html).toContain('rel="manifest" href="/__caliper/manifest.webmanifest"')
+      expect(html).toContain('rel="apple-touch-icon" sizes="180x180" href="/__caliper/apple-touch-icon.png"')
+      expect(html).toContain('name="apple-mobile-web-app-capable" content="yes"')
+      expect(html).toContain('name="theme-color" content="#16171a"')
+      const response = await get("/__caliper/manifest.webmanifest")
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-type")).toContain("application/manifest+json")
+      expect(response.headers.get("cache-control")).toBe("no-store")
+      const manifest = await response.json()
+      expect(manifest).toMatchObject({
+        name: "Caliper", start_url: "./", scope: "./", display: "fullscreen",
+        display_override: ["fullscreen", "standalone", "minimal-ui"], orientation: "any",
+      })
+      expect(new URL(manifest.start_url, response.url).pathname).toBe("/__caliper/")
+      expect(new URL(manifest.scope, response.url).pathname).toBe("/__caliper/")
+      for (const icon of manifest.icons) {
+        expect(new URL(icon.src, response.url).pathname).toStartWith("/__caliper/")
+        const image = await get(new URL(icon.src, response.url).pathname)
+        expect(image.status).toBe(200)
+        expect(image.headers.get("content-type")).toBe("image/png")
+        const bytes = Buffer.from(await image.arrayBuffer())
+        expect(bytes.subarray(1, 4).toString()).toBe("PNG")
+        expect(`${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`).toBe(icon.sizes)
+      }
+      expect(await (await get("/manifest.webmanifest")).json()).toEqual({ name: "Product" })
+      expect(await (await get("/icon-192.png")).text()).toBe("product-icon")
+      expect((await get("/__caliper/icon-missing.png")).status).toBe(404)
+    })
+  })
+
+  test("keeps install URLs beneath Vite's base path", async () => {
+    await withProject({ files, base: "/preview/" }, async ({ get, url }) => {
+      const pageResponse = await get("/__caliper/")
+      expect(pageResponse.status).toBe(200)
+      const html = await pageResponse.text()
+      expect(html).toContain('rel="manifest" href="/preview/__caliper/manifest.webmanifest"')
+      expect(html).toContain('src="/preview/__caliper/client/chrome.js"')
+      const response = await get("/__caliper/manifest.webmanifest")
+      expect(response.status).toBe(200)
+      const manifest = await response.json()
+      expect(new URL(manifest.start_url, response.url).pathname).toBe("/preview/__caliper/")
+      expect(new URL(manifest.icons[0].src, response.url).pathname).toBe("/preview/__caliper/icon-192.png")
+      expect((await fetch(new URL("/preview/__caliper/icon-192.png", url))).status).toBe(200)
+    })
+  })
+
   test("/__caliper redirects to /__caliper/", async () => {
     await withProject({ files }, async ({ url }) => {
       const response = await fetch(new URL("__caliper", url), { redirect: "manual" })

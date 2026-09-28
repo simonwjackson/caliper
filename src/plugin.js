@@ -37,6 +37,18 @@ import { takeParts } from "./takes/parts.js"
 export const CALIPER_PATH = "/__caliper"
 
 const CLIENT_DIR = fileURLToPath(new URL("./client/", import.meta.url))
+const PWA_DIR = fileURLToPath(new URL("./pwa/", import.meta.url))
+const PWA_FILES = new Map([
+  ["manifest.webmanifest", "application/manifest+json"],
+  ["favicon.svg", "image/svg+xml"],
+  ["favicon-16.png", "image/png"],
+  ["favicon-32.png", "image/png"],
+  ["apple-touch-icon.png", "image/png"],
+  ["icon-192.png", "image/png"],
+  ["icon-512.png", "image/png"],
+  ["icon-maskable-192.png", "image/png"],
+  ["icon-maskable-512.png", "image/png"],
+])
 /** Caliper's package folder, where the chrome's browser packages resolve from. */
 const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url))
 const CLIENT_FILES = new Map([
@@ -159,8 +171,11 @@ export function caliper(options = {}) {
     configureServer(server) {
       const session = createSession(server, root, options, env, overlay)
       closeSession = session.close
+      const base = server.config.base.replace(/\/$/, "")
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? "/", "http://caliper.local")
+        if (base && !url.pathname.startsWith(`${base}${CALIPER_PATH}`)) return next()
+        if (base) url.pathname = url.pathname.slice(base.length)
         if (url.pathname !== CALIPER_PATH && !url.pathname.startsWith(`${CALIPER_PATH}/`)) return next()
         session.handle(url, request, response).catch(next)
       })
@@ -267,7 +282,8 @@ function createSession(server, root, options, env, overlay) {
   /** @type {Map<string, import("./code/modules.js").ServedModule>} */
   const moduleCache = new Map()
   const modulesUrl = `${base}${CALIPER_PATH}/modules`
-  const chromeHtml = chromePage({ clientUrl: `${base}${CALIPER_PATH}/client`, importMap: importMap(modules.packages, modulesUrl) })
+  const themeColor = JSON.parse(readFileSync(join(PWA_DIR, "manifest.webmanifest"), "utf8")).theme_color
+  const chromeHtml = chromePage({ clientUrl: `${base}${CALIPER_PATH}/client`, pwaUrl: `${base}${CALIPER_PATH}`, themeColor, importMap: importMap(modules.packages, modulesUrl) })
 
   const agent = resolveAgent({ option: options.agent, env, home: homedir() })
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -345,6 +361,12 @@ function createSession(server, root, options, env, overlay) {
     }
     if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
     if (path === "/") return send(response, 200, "text/html", chromeHtml)
+    const pwaFile = path.slice(1)
+    const pwaType = PWA_FILES.get(pwaFile)
+    if (pwaType !== undefined) {
+      response.writeHead(200, { "content-type": pwaType, "cache-control": "no-store" })
+      return response.end(readFileSync(join(PWA_DIR, pwaFile)))
+    }
     if (["/project.json", "/check-source", "/check-revision"].includes(path)) {
       const take = url.searchParams.get("take") ?? undefined
       if (take !== undefined && (!isTakeId(take) || store.record(take) === null)) return send(response, 404, "application/json", JSON.stringify({ error: "Take does not exist." }))
