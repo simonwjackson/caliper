@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caliper mockup C: Tiles</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+/* ------------------------------------------------------------------
+   Direction C: Tiles.
+   The chrome is a tiling window manager, because that is the desk it
+   lives on. Every region is a tile with a one-line title bar. The
+   focused tile has a two-pixel border in the one accent. A status bar
+   at the bottom names the workspaces and carries the readouts. On a
+   phone each workspace is one full tile, and the bar switches them.
+   No radius, no shadow, no gradient. Title bars and readouts are set
+   in mono, because that is the vernacular here, not a decoration.
+   ------------------------------------------------------------------ */
+:root {
+  --sans: "Fira Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --fs-1: 12px; --fs-2: 13px; --fs-3: 15px;
+  --mm: 3.875px;
+  --gap: 6px;
+
+  --bg: #0F1216; --tile: #161A20; --title: #1C2129; --title-ink: #8C96A3;
+  --border: #262C35; --focus: #58C4AE;
+  --ink: #E3E7EC; --ink-2: #9AA3AF; --ink-3: #616B78;
+  --good: #7DD39A; --warn: #F0B35A; --bad: #F2766B;
+  --stage: #0A0C0F;
+  color-scheme: dark;
+}
+:root[data-scheme="light"] {
+  color-scheme: light;
+  --bg: #D9DEE5; --tile: #F2F4F7; --title: #E2E6EC; --title-ink: #5E6875;
+  --border: #C2C9D3; --focus: #0E7C6F;
+  --ink: #171B21; --ink-2: #545D69; --ink-3: #8A93A0;
+  --good: #1E7A45; --warn: #9B5E00; --bad: #B3261E;
+  --stage: #E8EBEF;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-scheme="dark"]) {
+    color-scheme: light;
+    --bg: #D9DEE5; --tile: #F2F4F7; --title: #E2E6EC; --title-ink: #5E6875;
+    --border: #C2C9D3; --focus: #0E7C6F;
+    --ink: #171B21; --ink-2: #545D69; --ink-3: #8A93A0;
+    --good: #1E7A45; --warn: #9B5E00; --bad: #B3261E;
+    --stage: #E8EBEF;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 400 var(--fs-2)/1.4 var(--sans);
+  color: var(--ink); background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  container-type: size; container-name: app;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.mono { font-family: var(--mono); font-size: var(--fs-1); }
+
+.app {
+  height: 100dvh; display: grid; gap: var(--gap); padding: var(--gap);
+  grid-template-columns: 17rem 1fr 22rem; grid-template-rows: 1fr auto;
+  grid-template-areas: "parts stage takes" "bar bar bar";
+}
+
+/* --- tile ------------------------------------------------------------- */
+.tile {
+  background: var(--tile); border: 2px solid var(--border);
+  display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0;
+}
+.tile.focus { border-color: var(--focus); }
+.tile > .title {
+  display: flex; align-items: center; gap: .6rem; padding: .3rem .6rem;
+  background: var(--title); color: var(--title-ink); font: 500 var(--fs-1)/1.4 var(--mono);
+}
+.tile.focus > .title { color: var(--ink); }
+.tile > .title .k { color: var(--focus); }
+.tile > .title .r { margin-left: auto; color: var(--ink-3); font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile > .title .r b { color: var(--title-ink); font-weight: 500; }
+
+/* --- parts ------------------------------------------------------------ */
+.t-parts { grid-area: parts; }
+.parts-body { display: grid; grid-template-rows: auto auto 1fr auto; min-height: 0; }
+.filter { margin: .5rem .6rem 0; border: 1px solid var(--border); background: var(--bg); padding: .35rem .5rem; color: var(--ink-3); font-family: var(--mono); font-size: var(--fs-1); }
+.preview { margin: .4rem .6rem 0; display: flex; gap: .5rem; align-items: center; font-size: var(--fs-1); color: var(--ink-2); }
+.preview select { flex: 1; border: 1px solid var(--border); background: var(--tile); padding: .25rem .4rem; font-size: var(--fs-1); }
+.tree { overflow: auto; padding: .4rem 0; }
+.layer h3 { margin: .5rem .6rem .1rem; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.part { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: .5rem; padding: .28rem .6rem; }
+.row .caret { width: 10px; color: var(--ink-3); font-size: 9px; }
+.row .name { flex: 1; }
+.row .n { color: var(--ink-3); font: 400 var(--fs-1)/1 var(--mono); }
+.open > .row .name { font-weight: 500; }
+.states { list-style: none; margin: 0 0 .3rem; padding: 0; }
+.states li { padding: .24rem .6rem .24rem 1.55rem; color: var(--ink-2); position: relative; }
+.states li::before { content: ""; position: absolute; left: 1rem; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.states li.on { color: var(--ink); font-weight: 500; background: color-mix(in srgb, var(--focus) 16%, transparent); }
+.states li.on::before { width: 2px; background: var(--focus); }
+.setup { border-top: 1px solid var(--border); padding: .45rem .6rem; font: 400 var(--fs-1)/1.4 var(--mono); color: var(--ink-2); display: flex; gap: .5rem; align-items: center; }
+.setup i { width: 7px; height: 7px; background: var(--good); }
+
+/* --- stage ------------------------------------------------------------ */
+.t-stage { grid-area: stage; }
+.stage-body { position: relative; min-height: 0; overflow: auto; background: var(--stage); display: grid; place-items: center; padding: 1rem; }
+.device { display: grid; gap: .6rem; justify-items: center; }
+.screen { display: block; width: calc(var(--mm) * 72); height: auto; image-rendering: pixelated; outline: 1px solid var(--border); }
+.readout { display: flex; gap: 1rem; font: 400 var(--fs-1)/1.4 var(--mono); color: var(--ink-2); flex-wrap: wrap; justify-content: center; }
+.readout .true { color: var(--good); }
+.readout .scaled { color: var(--warn); }
+.readout .k { color: var(--ink-3); }
+.devices { display: inline-flex; gap: 2px; }
+.devices button { border: 1px solid var(--border); background: var(--tile); padding: .1rem .5rem; font: 500 var(--fs-1)/1.5 var(--mono); color: var(--ink-2); }
+.devices button[aria-pressed="true"] { background: var(--focus); border-color: var(--focus); color: var(--bg); }
+
+/* --- takes ------------------------------------------------------------ */
+.t-takes { grid-area: takes; }
+.takes-body { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+.take-list { overflow: auto; min-height: 0; }
+.take { display: grid; grid-template-columns: 4.5rem 1fr; gap: .6rem; padding: .6rem; border-bottom: 1px solid var(--border); }
+.take .idx { grid-column: 1 / -1; font: 500 var(--fs-1)/1.2 var(--mono); color: var(--ink-3); display: flex; gap: .6rem; }
+.take .idx .st { margin-left: auto; }
+.take .idx .st.good { color: var(--good); }
+.take .idx .st.bad { color: var(--bad); }
+.take .idx .st.run { color: var(--warn); }
+.take .thumb { aspect-ratio: 4/3; background: #000 center / cover no-repeat; image-rendering: pixelated; outline: 1px solid var(--border); }
+.take .thumb.t2 { filter: hue-rotate(160deg); }
+.take .thumb.t3 { filter: saturate(.15) brightness(.55); }
+.take h4 { margin: 0 0 .2rem; font-size: var(--fs-2); font-weight: 500; }
+.take .meta { color: var(--ink-3); font: 400 var(--fs-1)/1.4 var(--mono); }
+.take .actions { display: flex; gap: .3rem; margin-top: .45rem; }
+.take .actions button { border: 1px solid var(--border); background: var(--tile); padding: .18rem .5rem; font-size: var(--fs-1); }
+.take .actions .primary { background: var(--ink); color: var(--tile); border-color: var(--ink); font-weight: 500; }
+.take .actions .primary kbd, .take .actions kbd { font: 400 10px/1 var(--mono); color: inherit; opacity: .6; margin-left: .35em; }
+.progress { height: 2px; background: var(--border); margin-top: .5rem; }
+.progress i { display: block; height: 100%; width: 42%; background: var(--warn); }
+.composer { border-top: 2px solid var(--border); padding: .5rem .6rem .6rem; display: grid; gap: .45rem; }
+.composer .prompt { display: flex; gap: .5rem; align-items: start; font-family: var(--mono); font-size: var(--fs-1); min-width: 0; }
+.composer .prompt .ps { color: var(--focus); padding-top: .5rem; }
+.composer textarea { flex: 1; min-width: 0; min-height: 3.6rem; resize: none; border: 1px solid var(--border); background: var(--bg); padding: .45rem .5rem; color: var(--ink); font-family: var(--sans); font-size: var(--fs-2); }
+.composer textarea::placeholder { color: var(--ink-3); }
+.composer .foot { display: flex; align-items: center; gap: .5rem; font: 400 var(--fs-1)/1.4 var(--mono); color: var(--ink-3); }
+.composer .count { border: 1px solid var(--border); padding: .12rem .4rem; color: var(--ink-2); }
+.composer .go { margin-left: auto; border: 0; background: var(--focus); color: var(--bg); padding: .35rem .7rem; font-weight: 500; }
+
+/* --- status bar ------------------------------------------------------- */
+.bar {
+  grid-area: bar; display: flex; align-items: stretch; background: var(--tile); border: 2px solid var(--border);
+  font: 500 var(--fs-1)/1 var(--mono); color: var(--ink-2); min-height: 1.9rem; min-width: 0; overflow: hidden;
+}
+.ws { display: flex; }
+.ws button { border: 0; border-right: 1px solid var(--border); background: none; color: var(--ink-2); padding: 0 .75rem; font: inherit; display: flex; align-items: center; gap: .45rem; }
+.ws button[aria-current="true"] { background: var(--focus); color: var(--bg); }
+.ws button .n { opacity: .55; }
+.ws button .pip { width: 6px; height: 6px; background: var(--good); }
+.ws button .pip.warn { background: var(--warn); }
+.status { margin-left: auto; display: flex; }
+.status span { display: flex; align-items: center; padding: 0 .75rem; border-left: 1px solid var(--border); gap: .4rem; }
+.status .k { color: var(--ink-3); }
+.status .true { color: var(--good); }
+.status .scaled { color: var(--warn); }
+.status button { border: 0; background: none; color: var(--ink-2); font: inherit; padding: 0; }
+
+/* ===================================================================
+   Narrow: one workspace at a time. The bar stays; the readouts fold
+   into the stage tile's title. Every tile is still reachable: Parts,
+   Preview, Takes, Code, Knobs, Checks are the workspaces.
+   =================================================================== */
+@container app (width < 44rem) {
+  .app { grid-template-columns: 1fr; grid-template-rows: minmax(0, auto) minmax(0, 1fr) auto; grid-template-areas: "stage" "takes" "bar"; }
+  .t-stage { min-height: 50%; }
+  .t-parts { display: none; }
+  .stage-body { padding: .5rem; align-content: start; }
+  .readout { gap: .4rem .8rem; }
+  .status > span:not(.keep) { display: none; }
+  .status > span.keep:last-child { display: none; }
+  .ws button .w { display: none; }
+  .ws button { padding: 0 .55rem; min-height: 2.4rem; }
+  .ws button[aria-current="true"] .w { display: inline; }
+  .bar { padding-bottom: env(safe-area-inset-bottom); }
+  .composer .prompt .ps { display: none; }
+  .composer { grid-template-columns: 1fr auto; align-items: end; }
+  .composer textarea { min-height: 2.5rem; }
+  .composer .foot { display: grid; gap: .3rem; }
+  .composer .foot .hint { display: none; }
+  .composer .go { margin: 0; }
+  .take .actions kbd { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="tile t-parts">
+    <div class="title"><span class="k">1</span> parts <span class="r"><b>@korri/pico</b> 52</span></div>
+    <div class="parts-body">
+      <input class="filter" placeholder="/ filter">
+      <label class="preview">Preview <select><option>Isolated</option><option>Composed: Home shelf</option></select></label>
+      <div class="tree">
+        <div class="layer"><h3>pages</h3>
+          <ul class="part">
+            <li class="open"><div class="row"><span class="caret">▼</span><span class="name">Game Detail</span><span class="n">5</span></div>
+              <ul class="states"><li class="on">Default</li><li>No art or history</li><li>Multiple locations</li><li>Choose location</li><li>Confirm removal</li></ul></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Home</span><span class="n">4</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Find</span><span class="n">12</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Gameplay Overlay</span><span class="n">3</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Runner Picker</span><span class="n">2</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Settings</span><span class="n">6</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Settings Panel</span><span class="n">3</span></div></li>
+          </ul></div>
+        <div class="layer"><h3>templates</h3>
+          <ul class="part">
+            <li><div class="row"><span class="caret">▶</span><span class="name">Game Overlay</span><span class="n">2</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Panel Screen</span><span class="n">2</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Screen Shell</span><span class="n">1</span></div></li>
+          </ul></div>
+        <div class="layer"><h3>organisms</h3>
+          <ul class="part">
+            <li><div class="row"><span class="caret">▶</span><span class="name">Shelf</span><span class="n">3</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Keyboard</span><span class="n">2</span></div></li>
+            <li><div class="row"><span class="caret">▶</span><span class="name">Identity Dialog</span><span class="n">4</span></div></li>
+          </ul></div>
+      </div>
+      <div class="setup"><i></i>setup ok: entry, css, wrapper</div>
+    </div>
+  </section>
+
+  <section class="tile t-stage focus">
+    <div class="title"><span class="k">2</span> preview <span class="r"><b>Game Detail</b> / Default</span></div>
+    <div class="stage-body">
+      <div class="device">
+        <img class="screen" src="assets/pico-game-detail.png" alt="Game Detail, Default state, RG353M">
+        <div class="readout">
+          <span class="devices"><button aria-pressed="true">rg353m</button><button>odin2portal</button></span>
+          <span><span class="k">w </span>72mm</span>
+          <span><span class="k">vp </span>640x480</span>
+          <span class="true">true size</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tile t-takes">
+    <div class="title"><span class="k">3</span> takes <span class="r">claude-opus-5-5 / medium</span></div>
+    <div class="takes-body">
+      <div class="take-list">
+        <div class="take">
+          <div class="idx">#1 <span>2 files</span><span>48s</span><span class="st good">3/3 checks</span></div>
+          <div class="thumb" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Cover art two thirds wide</h4>
+            <div class="actions"><button class="primary">Accept<kbd>a</kbd></button><button>Compare<kbd>c</kbd></button><button>Discard<kbd>d</kbd></button></div></div>
+        </div>
+        <div class="take">
+          <div class="idx">#2 <span>1 file</span><span>39s</span><span class="st bad">1 check failed</span></div>
+          <div class="thumb t2" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Stats in one row under the title</h4>
+            <div class="actions"><button class="primary">Accept<kbd>a</kbd></button><button>Compare<kbd>c</kbd></button><button>Discard<kbd>d</kbd></button></div></div>
+        </div>
+        <div class="take">
+          <div class="idx">#3 <span>21s</span><span class="st run">rendering 3/5</span></div>
+          <div class="thumb t3" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Actions as one horizontal row of chips</h4><div class="progress"><i></i></div></div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="prompt"><span class="ps">&gt;</span><textarea placeholder="Describe a change to Game Detail"></textarea></div>
+        <div class="foot"><span class="count">takes 1 ▾</span><span class="hint">C-Enter starts</span><button class="go">New take</button></div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="bar">
+    <div class="ws">
+      <button aria-current="false"><span class="n">1</span><span class="w">parts</span></button>
+      <button aria-current="true"><span class="n">2</span><span class="w">preview</span></button>
+      <button aria-current="false"><span class="n">3</span><span class="w">takes</span><i class="pip warn"></i></button>
+      <button aria-current="false"><span class="n">4</span><span class="w">code</span></button>
+      <button aria-current="false"><span class="n">5</span><span class="w">knobs</span></button>
+      <button aria-current="false"><span class="n">6</span><span class="w">checks</span><i class="pip"></i></button>
+    </div>
+    <div class="status">
+      <span><span class="k">device</span>rg353m</span>
+      <span><span class="k">w</span>72mm</span>
+      <span><span class="k">vp</span>640x480</span>
+      <span class="true">true size</span>
+      <span class="keep"><button>calibrate</button></span>
+      <span class="keep"><span class="k">pico</span>:5198</span>
+    </div>
+  </nav>
+</div>
+</body>
+</html>

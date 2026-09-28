@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caliper: three visual directions</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 15px/1.5 "Plex Sans", system-ui, sans-serif; padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 72rem; margin-inline: auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.2rem; margin: 2.5rem 0 .25rem; }
+  p { max-width: 62ch; margin: .25rem 0 .75rem; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; align-items: start; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+  figcaption { font-size: 13px; opacity: .7; margin-top: .3rem; }
+  .live { font-size: 13px; }
+  .live a { margin-right: 1rem; }
+  .phone { max-width: 14rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; font-size: 14px; max-width: 62ch; }
+  dt { opacity: .7; }
+</style>
+</head>
+<body>
+<h1>Caliper: three visual directions</h1>
+<p>Each direction shows the same screen: Game Detail, Default state, with Takes open. Desk at 1600 × 1000 and folded phone at 416 × 640, light and dark. Open the live page on this phone to see the direction at its real size; it follows the system colour scheme.</p>
+
+<h2>A. Bench</h2>
+<p>The instrument on a workbench. A millimetre rule along the top and left of the stage carries the identity, and the device lies on the mat at true size. Flat paper panels, one accent (tape yellow) for what is selected, measurements in mono and nothing else.</p>
+<dl><dt>Type</dt><dd>IBM Plex Sans, Plex Mono for readouts</dd><dt>Light</dt><dd>mat #E7E4DC, paper #F7F5EF, ink #1F1D19, tape #E9BB0A</dd><dt>Dark</dt><dd>mat #1B1C18, paper #24251F, ink #ECE8DD, tape #F2C627</dd></dl>
+<p class="live"><a href="a-bench.html">Open live</a></p>
+<div class="row">
+  <figure><img src="out/a-bench-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
+  <figure><img src="out/a-bench-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
+  <figure class="phone"><img src="out/a-bench-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
+  <figure class="phone"><img src="out/a-bench-phone-dark.png" alt=""><figcaption>Phone, dark</figcaption></figure>
+</div>
+
+<h2>B. Darkroom</h2>
+<p>What legacy's Photoshop look promised, without the glass. The room is dark and the device is the only lit thing. A tool rail on the left, panels that float as opaque cards with one hard edge, and safelight amber for the current tool and a running take. Light mode turns the room into a lightbox.</p>
+<dl><dt>Type</dt><dd>Public Sans, tabular numerals, no mono</dd><dt>Dark</dt><dd>room #121316, card #1C1D21, ink #ECECEE, amber #F5A93D</dd><dt>Light</dt><dd>room #DDDEE2, card #F7F7F9, ink #17181C, amber #C7740A</dd></dl>
+<p class="live"><a href="b-darkroom.html">Open live</a></p>
+<div class="row">
+  <figure><img src="out/b-darkroom-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
+  <figure><img src="out/b-darkroom-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
+  <figure class="phone"><img src="out/b-darkroom-phone-dark.png" alt=""><figcaption>Phone, dark. The ODIN 2 PORTAL cannot fit at true size, so the caption says so.</figcaption></figure>
+  <figure class="phone"><img src="out/b-darkroom-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
+</div>
+
+<h2>C. Tiles</h2>
+<p>The chrome is a tiling window manager, because that is the desk it lives on. Every region is a tile with a title bar; the focused tile has a two-pixel border in the one accent; a status bar at the bottom names the workspaces and carries the readouts. On a phone each workspace is one full tile. No radius, no shadow.</p>
+<dl><dt>Type</dt><dd>Fira Sans, JetBrains Mono for title bars and readouts</dd><dt>Dark</dt><dd>bg #0F1216, tile #161A20, ink #E3E7EC, focus #58C4AE</dd><dt>Light</dt><dd>bg #D9DEE5, tile #F2F4F7, ink #171B21, focus #0E7C6F</dd></dl>
+<p class="live"><a href="c-tiles.html">Open live</a></p>
+<div class="row">
+  <figure><img src="out/c-tiles-desk-dark.png" alt=""><figcaption>Desk, dark</figcaption></figure>
+  <figure><img src="out/c-tiles-desk-light.png" alt=""><figcaption>Desk, light</figcaption></figure>
+  <figure class="phone"><img src="out/c-tiles-phone-dark.png" alt=""><figcaption>Phone, dark</figcaption></figure>
+  <figure class="phone"><img src="out/c-tiles-phone-light.png" alt=""><figcaption>Phone, light</figcaption></figure>
+</div>
+</body>
+</html>

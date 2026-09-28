@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caliper mockup B: Darkroom</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+/* ------------------------------------------------------------------
+   Direction B: Darkroom.
+   What legacy's Photoshop look promised, without the glass. The
+   canvas is a dark room and the device is the only lit thing in it.
+   Tools live on a narrow rail at the left, like a tool column. Panels
+   are opaque cards that float over the canvas with one hard edge and
+   no blur. The accent is safelight amber, used only for the current
+   tool and a running take. In light mode the room becomes a lightbox.
+   ------------------------------------------------------------------ */
+:root {
+  --sans: "Public Sans", system-ui, sans-serif;
+  --fs-1: 12px; --fs-2: 13px; --fs-3: 15px; --fs-4: 18px;
+  --mm: 3.875px;
+
+  --room: #121316; --card: #1C1D21; --card-2: #24262B; --edge: #303237; --edge-2: #3E4148;
+  --ink: #ECECEE; --ink-2: #A3A6AE; --ink-3: #6E717A;
+  --amber: #F5A93D; --amber-ink: #1A1206;
+  --good: #7FD39A; --warn: #F5A93D; --bad: #FF7B72;
+  --lift: 0 0 0 1px var(--edge), 0 12px 32px -14px rgba(0,0,0,.9);
+  --glow: 0 0 0 1px rgba(0,0,0,.8), 0 0 60px -10px rgba(245,169,61,.18);
+  color-scheme: dark;
+}
+:root[data-scheme="light"] {
+  color-scheme: light;
+  --room: #DDDEE2; --card: #F7F7F9; --card-2: #ECEDF0; --edge: #C9CBD2; --edge-2: #B3B6BF;
+  --ink: #17181C; --ink-2: #5C5F68; --ink-3: #8B8E97;
+  --amber: #C7740A; --amber-ink: #FFF7EA;
+  --good: #1F7A45; --warn: #A65E00; --bad: #B3261E;
+  --lift: 0 0 0 1px var(--edge), 0 10px 28px -14px rgba(23,24,28,.35);
+  --glow: 0 0 0 1px rgba(0,0,0,.5), 0 20px 50px -20px rgba(23,24,28,.5);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-scheme="dark"]) {
+    color-scheme: light;
+    --room: #DDDEE2; --card: #F7F7F9; --card-2: #ECEDF0; --edge: #C9CBD2; --edge-2: #B3B6BF;
+    --ink: #17181C; --ink-2: #5C5F68; --ink-3: #8B8E97;
+    --amber: #C7740A; --amber-ink: #FFF7EA;
+    --good: #1F7A45; --warn: #A65E00; --bad: #B3261E;
+    --lift: 0 0 0 1px var(--edge), 0 10px 28px -14px rgba(23,24,28,.35);
+    --glow: 0 0 0 1px rgba(0,0,0,.5), 0 20px 50px -20px rgba(23,24,28,.5);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 400 var(--fs-2)/1.4 var(--sans); font-feature-settings: "tnum";
+  color: var(--ink); background: var(--room);
+  -webkit-font-smoothing: antialiased;
+  container-type: size; container-name: app;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+.app { height: 100dvh; position: relative; overflow: hidden; display: grid; grid-template-columns: 3rem 1fr; }
+
+/* --- rail ------------------------------------------------------------- */
+.rail {
+  display: flex; flex-direction: column; align-items: center; gap: .25rem;
+  padding: .6rem 0; background: var(--card); border-right: 1px solid var(--edge);
+}
+.rail .mark { width: 26px; height: 26px; margin-bottom: .75rem; color: var(--ink); }
+.tool {
+  width: 2.25rem; height: 2.25rem; border: 0; border-radius: 6px; background: none; color: var(--ink-2);
+  display: grid; place-items: center; position: relative;
+}
+.tool svg { width: 18px; height: 18px; }
+.tool[aria-pressed="true"] { background: var(--card-2); color: var(--ink); box-shadow: inset 3px 0 0 var(--amber); border-radius: 0 6px 6px 0; }
+.tool .pip { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); border: 2px solid var(--card); }
+.tool .pip.good { background: var(--good); }
+.rail .end { margin-top: auto; }
+
+/* --- room ------------------------------------------------------------- */
+.room { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.room::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 60% 55% at 46% 46%, color-mix(in srgb, var(--ink) 5%, transparent), transparent 70%);
+}
+
+/* floating panels */
+.panel {
+  position: absolute; background: var(--card); border-radius: 8px; box-shadow: var(--lift);
+  display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden;
+}
+.panel > header {
+  display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem; border-bottom: 1px solid var(--edge);
+  font-weight: 600; font-size: var(--fs-2);
+}
+.panel > header .sub { color: var(--ink-3); font-weight: 400; margin-left: auto; font-size: var(--fs-1); }
+.panel > header .grip { color: var(--ink-3); font-size: 10px; letter-spacing: 1px; }
+
+.p-parts { left: 1rem; top: 1rem; bottom: 1rem; width: 16.5rem; }
+.p-takes { right: 1rem; top: 1rem; bottom: 1rem; width: 21rem; grid-template-rows: auto 1fr auto; }
+
+/* parts panel */
+.filter { margin: .6rem .85rem 0; border: 1px solid var(--edge); background: var(--room); border-radius: 6px; padding: .4rem .6rem; color: var(--ink-3); }
+.preview { margin: .5rem .85rem 0; display: flex; align-items: center; gap: .5rem; font-size: var(--fs-1); color: var(--ink-2); }
+.preview select { flex: 1; border: 1px solid var(--edge); background: var(--card-2); border-radius: 6px; padding: .3rem .4rem; font-size: var(--fs-1); }
+.tree { overflow: auto; padding: .4rem 0 .5rem; }
+.layer h3 { margin: .6rem .85rem .2rem; font-size: 11px; font-weight: 600; color: var(--ink-3); letter-spacing: .02em; }
+.part { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: .5rem; padding: .32rem .85rem .32rem .75rem; }
+.row .caret { width: 10px; color: var(--ink-3); font-size: 9px; }
+.row .name { flex: 1; }
+.row .n { color: var(--ink-3); font-size: var(--fs-1); }
+.open > .row .name { font-weight: 600; }
+.states { list-style: none; margin: 0 .5rem .3rem .85rem; padding: .2rem 0; background: var(--room); border-radius: 6px; }
+.states li { padding: .28rem .6rem .28rem 1.2rem; color: var(--ink-2); border-radius: 6px; margin: 0 .25rem; }
+.states li.on { background: var(--card-2); color: var(--ink); font-weight: 500; position: relative; }
+.states li.on::before { content: ""; position: absolute; left: .55rem; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: var(--amber); }
+.setup { border-top: 1px solid var(--edge); padding: .55rem .85rem; font-size: var(--fs-1); color: var(--ink-2); display: flex; gap: .5rem; align-items: center; }
+.setup i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+
+/* the lit device */
+.subject {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -54%); width: max-content;
+  display: grid; gap: .9rem; justify-items: center;
+}
+.slate {
+  display: flex; align-items: baseline; gap: .75rem; padding: .35rem .8rem; border-radius: 999px;
+  background: var(--card); box-shadow: var(--lift); font-size: var(--fs-1); color: var(--ink-2);
+}
+.slate b { color: var(--ink); font-weight: 600; font-size: var(--fs-2); }
+.slate .sep { width: 1px; height: 12px; background: var(--edge-2); align-self: center; }
+.screen { display: block; width: calc(var(--mm) * 72); height: auto; image-rendering: pixelated; box-shadow: var(--glow); border-radius: 2px; }
+.caption {
+  display: flex; align-items: center; gap: .9rem; font-size: var(--fs-1); color: var(--ink-2);
+}
+.caption .k { color: var(--ink-3); }
+.caption .v { color: var(--ink); }
+.caption .true { color: var(--good); font-weight: 600; }
+.caption .scaled { color: var(--warn); font-weight: 600; }
+.devices { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--card); box-shadow: var(--lift); }
+.devices button { border: 0; background: none; border-radius: 999px; padding: .2rem .6rem; color: var(--ink-2); font-size: var(--fs-1); }
+.devices button[aria-pressed="true"] { background: var(--amber); color: var(--amber-ink); font-weight: 600; }
+
+/* takes panel */
+.take-list { overflow: auto; min-height: 0; padding: .5rem; display: grid; gap: .5rem; align-content: start; }
+.take { display: grid; grid-template-columns: 5rem 1fr; gap: .7rem; padding: .6rem; border-radius: 6px; background: var(--card-2); }
+.take .thumb { aspect-ratio: 4/3; background: #000 center / cover no-repeat; border-radius: 3px; image-rendering: pixelated; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+.take .thumb.t2 { filter: hue-rotate(160deg); }
+.take .thumb.t3 { filter: saturate(.15) brightness(.55); }
+.take h4 { margin: 0 0 .15rem; font-size: var(--fs-2); font-weight: 600; }
+.take .meta { color: var(--ink-2); font-size: var(--fs-1); display: flex; gap: .55rem; flex-wrap: wrap; }
+.take .meta .good { color: var(--good); }
+.take .meta .bad { color: var(--bad); }
+.take .actions { display: flex; gap: .3rem; margin-top: .5rem; }
+.take .actions button { border: 1px solid var(--edge-2); background: transparent; border-radius: 5px; padding: .22rem .55rem; font-size: var(--fs-1); }
+.take .actions .primary { background: var(--ink); color: var(--card); border-color: var(--ink); font-weight: 600; }
+.running .thumb { position: relative; }
+.running .thumb::after { content: ""; position: absolute; inset: 0; border-radius: 3px; box-shadow: inset 0 0 0 2px var(--amber); }
+.progress { height: 3px; border-radius: 2px; background: var(--room); margin-top: .55rem; }
+.progress i { display: block; height: 100%; width: 42%; background: var(--amber); border-radius: 2px; }
+.composer { border-top: 1px solid var(--edge); padding: .6rem; display: grid; gap: .5rem; }
+.composer textarea { width: 100%; min-height: 4.2rem; resize: none; border: 1px solid var(--edge); background: var(--room); border-radius: 6px; padding: .5rem .6rem; color: var(--ink); }
+.composer textarea::placeholder { color: var(--ink-3); }
+.composer .foot { display: flex; align-items: center; gap: .5rem; font-size: var(--fs-1); color: var(--ink-2); }
+.composer .count { border: 1px solid var(--edge); border-radius: 5px; padding: .18rem .45rem; }
+.composer .go { margin-left: auto; border: 0; border-radius: 6px; background: var(--amber); color: var(--amber-ink); font-weight: 600; padding: .42rem .8rem; }
+
+/* phone-only chrome */
+.dock, .sheet-handle { display: none; }
+
+/* ===================================================================
+   Narrow. The rail turns into a bottom dock, the parts panel becomes
+   a drawer behind Parts, and Takes becomes a sheet pulled up over the
+   room. The room keeps the top; the device is scaled only when it
+   cannot fit, and the caption says so.
+   =================================================================== */
+@container app (width < 44rem) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .rail { display: none; }
+  .p-parts { display: none; }
+  .room { grid-row: 1; }
+  .subject { top: 0; transform: translate(-50%, 0); padding-top: .75rem; gap: .6rem; max-width: 100%; }
+  .screen { width: calc(var(--mm) * 156 * .48); }  /* ODIN 2 PORTAL at 48 % */
+  .caption .scaled { flex-basis: 100%; text-align: center; }
+  .caption .devices { order: -1; flex-basis: 100%; justify-content: center; width: max-content; margin: 0 auto; }
+  .slate .sep, .slate > span:last-child { display: none; }
+  .caption { flex-wrap: wrap; justify-content: center; gap: .25rem .8rem; padding: 0 .75rem; }
+  .subject { gap: .5rem; }
+  .p-takes {
+    left: 0; right: 0; bottom: 0; top: auto; width: auto; height: 40%;
+    border-radius: 14px 14px 0 0; grid-template-rows: auto auto 1fr auto;
+  }
+  .sheet-handle { display: block; width: 2.4rem; height: 4px; border-radius: 2px; background: var(--edge-2); margin: .5rem auto 0; }
+  .p-takes > header { border-bottom: 0; padding-top: .35rem; }
+  .composer { grid-template-columns: 1fr auto; align-items: end; }
+  .composer textarea { min-height: 2.6rem; }
+  .composer .foot { display: grid; gap: .3rem; }
+  .composer .foot .hint { display: none; }
+  .composer .go { margin: 0; }
+  .dock {
+    grid-row: 2; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    background: var(--card); border-top: 1px solid var(--edge); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .dock button { border: 0; background: none; color: var(--ink-2); padding: .5rem 0 .45rem; display: grid; justify-items: center; gap: .15rem; font-size: 11px; position: relative; }
+  .dock button svg { width: 19px; height: 19px; }
+  .dock button[aria-pressed="true"] { color: var(--ink); }
+  .dock button[aria-pressed="true"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--amber); }
+  .dock .pip { position: absolute; top: 6px; right: calc(50% - 14px); width: 7px; height: 7px; border-radius: 50%; background: var(--good); border: 2px solid var(--card); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Tools">
+    <svg class="mark" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h18M4 7v13M9 7v4M14 7v6M19 7v4"/></svg>
+    <button class="tool" aria-pressed="true" title="Parts"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h12M3 9h12M3 14h8"/></svg></button>
+    <button class="tool" aria-pressed="false" title="Code"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4 2 9l4 5M12 4l4 5-4 5"/></svg></button>
+    <button class="tool" aria-pressed="true" title="Takes"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="6" height="6"/><rect x="10" y="3" width="6" height="6"/><rect x="2" y="11" width="6" height="4"/><rect x="10" y="11" width="6" height="4"/></svg><i class="pip"></i></button>
+    <button class="tool" aria-pressed="false" title="Knobs"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h12M3 12h12"/><circle cx="7" cy="6" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></button>
+    <button class="tool" aria-pressed="false" title="Checks"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9.5 7 13l8-8"/></svg><i class="pip good"></i></button>
+    <button class="tool end" aria-pressed="false" title="Calibrate"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4.5" width="14" height="9" rx="1.5"/><path d="M2 7.5h14"/></svg></button>
+  </nav>
+
+  <main class="room">
+    <section class="panel p-parts">
+      <header>@korri/pico <span class="sub">52 parts</span></header>
+      <div style="display:grid;grid-template-rows:auto auto 1fr auto;min-height:0">
+        <input class="filter" placeholder="Filter parts">
+        <label class="preview">Preview <select><option>Isolated</option><option>Composed: Home shelf</option></select></label>
+        <div class="tree">
+          <div class="layer"><h3>Pages</h3>
+            <ul class="part">
+              <li class="open"><div class="row"><span class="caret">▼</span><span class="name">Game Detail</span><span class="n">5</span></div>
+                <ul class="states"><li class="on">Default</li><li>No art or history</li><li>Multiple locations</li><li>Choose location</li><li>Confirm removal</li></ul></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Home</span><span class="n">4</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Find</span><span class="n">12</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Gameplay Overlay</span><span class="n">3</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Runner Picker</span><span class="n">2</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Settings</span><span class="n">6</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Settings Panel</span><span class="n">3</span></div></li>
+            </ul></div>
+          <div class="layer"><h3>Templates</h3>
+            <ul class="part">
+              <li><div class="row"><span class="caret">▶</span><span class="name">Game Overlay</span><span class="n">2</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Panel Screen</span><span class="n">2</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Screen Shell</span><span class="n">1</span></div></li>
+            </ul></div>
+          <div class="layer"><h3>Organisms</h3>
+            <ul class="part">
+              <li><div class="row"><span class="caret">▶</span><span class="name">Shelf</span><span class="n">3</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Keyboard</span><span class="n">2</span></div></li>
+              <li><div class="row"><span class="caret">▶</span><span class="name">Identity Dialog</span><span class="n">4</span></div></li>
+            </ul></div>
+        </div>
+        <div class="setup"><i></i>Setup: entry, CSS and wrapper found</div>
+      </div>
+    </section>
+
+    <figure class="subject" style="margin:0">
+      <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>The screen after selecting a game</span></div>
+      <img class="screen" src="assets/pico-game-detail.png" alt="Game Detail, Default state">
+      <div class="caption">
+        <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+        <span><span class="k">Width </span><span class="v">72 mm</span></span>
+        <span><span class="k">Viewport </span><span class="v">640 × 480</span></span>
+        <span class="true">True size</span>
+      </div>
+    </figure>
+
+    <section class="panel p-takes">
+      <div class="sheet-handle"></div>
+      <header>Takes <span class="sub">claude-opus-5-5, reasoning medium</span></header>
+      <div class="take-list">
+        <div class="take">
+          <div class="thumb" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Cover art two thirds wide</h4>
+            <div class="meta"><span class="good">3 of 3 checks passed</span><span>2 files</span><span>48 s</span></div>
+            <div class="actions"><button class="primary">Accept</button><button>Compare</button><button>Discard</button></div></div>
+        </div>
+        <div class="take">
+          <div class="thumb t2" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Stats in one row under the title</h4>
+            <div class="meta"><span class="bad">1 check failed</span><span>1 file</span><span>39 s</span></div>
+            <div class="actions"><button class="primary">Accept</button><button>Compare</button><button>Discard</button></div></div>
+        </div>
+        <div class="take running">
+          <div class="thumb t3" style="background-image:url(assets/pico-game-detail.png)"></div>
+          <div><h4>Actions as one horizontal row of chips</h4>
+            <div class="meta"><span>Rendering, step 3 of 5</span><span>21 s</span></div>
+            <div class="progress"><i></i></div></div>
+        </div>
+      </div>
+      <div class="composer">
+        <textarea placeholder="Describe a change to Game Detail"></textarea>
+        <div class="foot"><span class="count">Takes <b>1</b> ▾</span><span class="hint">Ctrl+Enter starts</span><button class="go">New take</button></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="dock">
+    <button aria-pressed="false"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h12M3 9h12M3 14h8"/></svg>Parts</button>
+    <button aria-pressed="true"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1.5"/></svg>Preview</button>
+    <button aria-pressed="true"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="6" height="6"/><rect x="10" y="3" width="6" height="6"/><rect x="2" y="11" width="6" height="4"/><rect x="10" y="11" width="6" height="4"/></svg>Takes</button>
+    <button aria-pressed="false"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4 2 9l4 5M12 4l4 5-4 5"/></svg>Code</button>
+    <button aria-pressed="false"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h12M3 12h12"/><circle cx="7" cy="6" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg>Knobs</button>
+    <button aria-pressed="false"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9.5 7 13l8-8"/></svg><i class="pip"></i>Checks</button>
+  </nav>
+</div>
+<script>
+// On the phone this mockup shows the other device, the ODIN 2 PORTAL,
+// which cannot fit at true size on a 416 px screen. The caption must say so.
+if (document.body.clientWidth < 44 * 16) {
+  const d = document.querySelectorAll(".devices button");
+  d[0].setAttribute("aria-pressed", "false"); d[1].setAttribute("aria-pressed", "true");
+  const c = document.querySelector(".caption");
+  c.querySelector(".v").textContent = "156 mm";
+  c.querySelectorAll(".v")[1].textContent = "1920 × 1080";
+  const t = c.querySelector(".true"); t.className = "scaled"; t.textContent = "Scaled to 48%: the screen is too narrow for true size";
+}
+</script>
+</body>
+</html>
