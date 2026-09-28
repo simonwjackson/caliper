@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   controlFor, declarationsIn, formatNumber, labelFor, mergeHints, namespaceOf, parseSyntax, readersOf, replaceThreshold, scrub, sentinelFor,
-  referenceGraph, syntaxOfValue, thresholdsOf,
+  literalSentinels, literalType, referenceGraph, suggestTokenName, syntaxOfValue, thresholdsOf,
 } from "../src/client/knob-values.js"
 
 describe("the control a registered property gets", () => {
@@ -125,6 +125,34 @@ describe("container thresholds", () => {
     const condition = "pico-stage (width < 45em) and (height >= 40em)"
     expect(replaceThreshold(condition, 1, "36.5em")).toBe("pico-stage (width < 45em) and (height >= 36.5em)")
     expect(replaceThreshold(condition, 0, "100em")).toBe("pico-stage (width < 100em) and (height >= 40em)")
+  })
+})
+
+describe("literals", () => {
+  test("a literal is one length, percentage, number or colour, with no token or math in it", () => {
+    expect(literalType("12px", false)).toBe("length")
+    expect(literalType("-0.5rem", false)).toBe("length")
+    expect(literalType("40%", false)).toBe("percentage")
+    expect(literalType("1.5", false)).toBe("number")
+    expect(literalType("#ff77a8", true)).toBe("color")
+    expect(literalType("rgb(1 2 3 / 50%)", true)).toBe("color")
+    // A zero is a length when the property takes one; the caller asks the browser.
+    expect(literalType("0", false)).toBe("number")
+    for (const value of ["12px 8px", "var(--gap)", "calc(1px + 2px)", "auto", "currentColor", "transparent", "inherit"]) {
+      expect(literalType(value, value === "currentColor" || value === "transparent")).toBeNull()
+    }
+  })
+
+  test("test values for a literal are of its type", () => {
+    expect(literalSentinels("length")).toEqual(["4321px", "3px"])
+    expect(literalSentinels("color")).toEqual(["rgb(1, 2, 3)", "rgb(4, 5, 6)"])
+    expect(literalSentinels("number")[0]).toBe("4321")
+  })
+
+  test("a token's suggested name is the namespace, the rule's last class without it, and the property", () => {
+    expect(suggestTokenName(".pico-cart[data-shell='4'] > .pico-cart-label", "padding-inline", "--pico-")).toBe("--pico-cart-label-padding-inline")
+    expect(suggestTokenName(".card", "color", "--")).toBe("--card-color")
+    expect(suggestTokenName("main > p", "gap", "--app-")).toBe("--app-p-gap")
   })
 })
 

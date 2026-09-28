@@ -1,12 +1,12 @@
 // @ts-check
 import { h } from "./dom.js"
 import {
-  animatedProperties, applyLive, containersOf, declarationsOf, initialComputed, isRead, knockout, longhandsIn, observeSheets,
-  plainProperties, projectSheets, readTargets, referenceBlocks, registrations, sample, summarize,
+  animatedProperties, applyLive, containersOf, declarationsOf, initialComputed, isRead, kindOf, knockout, literalWins, longhandsIn,
+  observeSheets, plainProperties, projectSheets, readTargets, referenceBlocks, registrations, sample, summarize, tokenHomes, walk,
 } from "./knob-cssom.js"
 import {
-  clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, readersOf, referenceGraph, replaceThreshold, scrub,
-  sentinelFor, syntaxOfValue, thresholdsOf,
+  clampTo, controlFor, declarationsIn, formatNumber, labelFor, literalSentinels, literalType, mergeHints, namespaceOf, parseNumber,
+  readersOf, referenceGraph, replaceThreshold, scrub, sentinelFor, suggestTokenName, syntaxOfValue, thresholdsOf,
 } from "./knob-values.js"
 
 /**
@@ -43,6 +43,16 @@ import {
  *   | { _tag: "Finding" }
  *   | { _tag: "Ready", knobs: Knob[], skipped: Skipped[], problems: string[] }} View
  * @typedef {{ _tag: "Saving" } | { _tag: "Saved" } | { _tag: "Conflict", reason: string } | { _tag: "Failed", reason: string }} Status
+ * @typedef {{ selector: string, anchor: string, source: Located }} Home
+ *   A rule a new token can go in; the token goes after its `anchor` declaration.
+ * @typedef {{ key: string, property: string, value: string, selector: string, source: Located, homes: Home[] }} Literal
+ *   A standard declaration with one literal value that wins on the part.
+ * @typedef {{ _tag: "Closed" }
+ *   | { _tag: "Finding" }
+ *   | { _tag: "Ready", literals: Literal[], refused: Skipped[], taken: Set<string> }
+ *   | { _tag: "Failed", message: string }} LiteralView
+ *   `taken` holds every custom property name the frames declare or register.
+ * @typedef {{ key: string, name: string, home: number, status: { _tag: "Editing" } | { _tag: "Saving" } | { _tag: "Failed", reason: string } }} Draft
  */
 
 /** Elements sampled per frame for knockout. */
@@ -89,6 +99,15 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
   const observed = new WeakMap()
   /** Which knobs show their palette. @type {Set<string>} */
   const palettes = new Set()
+  /** Whether the literals section is open; Caliper looks for literals only then. */
+  let literalsOpen = false
+  /** @type {LiteralView} */
+  let literalView = { _tag: "Closed" }
+  let literalGeneration = 0
+  /** The literal being made a token, and the form's state. @type {Draft | null} */
+  let draft = null
+  /** What the last promotion did, shown above the literals. */
+  let literalNotice = ""
 
   /** @returns {Frame[]} the rendered frames of the variant */
   const variantFrames = () => {
@@ -173,6 +192,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
         if (knob === undefined || knob.source.value === entry.value || Date.now() > entry.until) live.delete(key)
       }
       show(found)
+      if (literalsOpen) void findLiterals()
     } catch (error) {
       if (id !== generation) return
       show({ _tag: "Idle", message: `Caliper could not find the knobs: ${error instanceof Error ? error.message : String(error)}` })
@@ -211,9 +231,225 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
             h("ul", {}, ...skipped.map(item => h("li", {},
               h("code", {}, item.name), item.where ? h("span", { class: "cal-knob-where" }, ` ${item.where}`) : null,
               h("span", {}, ` ${item.reason}`)))))]),
+          literalSection(),
         )
       }
     }
+  }
+
+  /** Find the literals of the variant's frames, and show them. */
+  const findLiterals = async () => {
+    const target = variant()
+    const id = ++literalGeneration
+    const list = variantFrames()
+    if (target === null || list.length === 0) return
+    if (literalView._tag !== "Ready") {
+      literalView = { _tag: "Finding" }
+      render()
+    }
+    try {
+      const found = await discoverLiterals(list, target.take)
+      if (id !== literalGeneration) return
+      literalView = found
+      if (draft !== null && !found.literals.some(literal => literal.key === draft?.key)) draft = null
+    } catch (error) {
+      if (id !== literalGeneration) return
+      literalView = { _tag: "Failed", message: `Caliper could not find the literals: ${error instanceof Error ? error.message : String(error)}` }
+    }
+    if (dragging === null) render()
+  }
+
+  /**
+   * Literals: values written straight into a rule that win on the part.
+   * Making one a token moves it into a rule with tokens, so it gets a knob.
+   */
+  const literalSection = () => {
+    const count = literalView._tag === "Ready" ? ` (${literalView.literals.length})` : ""
+    const section = h("details", {
+      class: "cal-knobs-literals",
+      open: literalsOpen,
+      onToggle: () => {
+        const next = /** @type {HTMLDetailsElement} */ (section).open
+        if (next === literalsOpen) return
+        literalsOpen = next
+        if (next) void findLiterals()
+      },
+    }, h("summary", {}, `Literals${count}`))
+    if (!literalsOpen) return section
+    switch (literalView._tag) {
+      case "Closed":
+      case "Finding":
+        section.append(h("p", { class: "cal-knobs-note" }, "Finding the literals…"))
+        return section
+      case "Failed":
+        section.append(h("p", { class: "cal-knobs-problem", role: "alert" }, literalView.message))
+        return section
+      case "Ready": {
+        const { literals, refused } = literalView
+        section.append(...[
+          h("p", { class: "cal-knobs-note" }, literals.length === 0
+            ? "No value written straight into a rule changes this part."
+            : "Values written straight into a rule. Make one a token to get a knob for it."),
+          literalNotice ? h("p", { class: "cal-literal-notice", role: "status" }, literalNotice) : null,
+          literals.length === 0 ? null : h("ul", { class: "cal-knob-list" }, ...literals.map(literalRow)),
+          refused.length === 0 ? null : h("details", { class: "cal-knobs-skipped" },
+            h("summary", {}, `${refused.length} Caliper could not place`),
+            h("ul", {}, ...refused.map(item => h("li", {},
+              h("code", {}, item.name), h("span", { class: "cal-knob-where" }, ` ${item.where}`), h("span", {}, ` ${item.reason}`))))),
+        ].filter(node => node !== null))
+        return section
+      }
+    }
+  }
+
+  /** @param {Literal} literal */
+  const literalRow = literal => {
+    const editing = draft?.key === literal.key
+    return h("li", { class: "cal-literal", "data-literal": literal.key },
+      h("div", { class: "cal-knob-head" },
+        h("code", { class: "cal-literal-value" }, `${literal.property}: ${literal.value}`),
+        h("button", {
+          type: "button",
+          class: "cal-literal-make",
+          "aria-expanded": String(editing),
+          onClick: () => {
+            literalNotice = ""
+            draft = editing ? null : startDraft(literal)
+            render()
+            if (draft === null) return
+            container.querySelector(".cal-literal-form")?.scrollIntoView({ block: "nearest" })
+            const input = /** @type {HTMLInputElement | null} */ (container.querySelector("input.cal-literal-name"))
+            input?.focus()
+          },
+        }, "Make a token")),
+      h("p", { class: "cal-knob-site" }, `in ${literal.selector} · `, fileButton(literal.source)),
+      editing && draft !== null ? literalForm(literal, draft) : null)
+  }
+
+  /** @param {Located} source */
+  const fileButton = source => h("button", { type: "button", class: "cal-knob-file", title: "Open this file in the code pane", onClick: () => openFile(source.file) },
+    `${source.file.split("/").pop()}:${source.line}`)
+
+  /** @param {Literal} literal @returns {Draft} */
+  const startDraft = literal => {
+    const home = literal.homes[0]
+    return {
+      key: literal.key,
+      name: suggestTokenName(literal.selector, literal.property, home === undefined ? "--" : namespaceOf(home.anchor)),
+      home: 0,
+      status: { _tag: "Editing" },
+    }
+  }
+
+  /**
+   * The form that confirms the token's name and the rule it goes in, and
+   * says both edits before Caliper makes them (decision 26).
+   *
+   * @param {Literal} literal
+   * @param {Draft} state
+   */
+  const literalForm = (literal, state) => {
+    const { homes } = literal
+    if (homes.length === 0) {
+      return h("div", { class: "cal-literal-form" },
+        h("p", { class: "cal-knobs-note" }, "No rule with tokens reaches this element, so a token has nowhere to go. Declare a custom property in a rule around it first."),
+        h("div", { class: "cal-literal-actions" }, h("button", { type: "button", onClick: () => { draft = null; render() } }, "Cancel")))
+    }
+    const preview = h("p", { class: "cal-literal-preview" })
+    const error = h("p", { class: "cal-knob-problem", role: "alert" })
+    const update = () => {
+      const home = homes[state.home] ?? homes[0]
+      if (home === undefined) return
+      preview.replaceChildren("Adds ", h("code", {}, `${state.name}: ${literal.value};`), ` to ${home.selector} (`, fileButton(home.source),
+        "), and writes ", h("code", {}, `var(${state.name})`), " in its place (", fileButton(literal.source), ").")
+      const problem = nameProblem(state.name, literal)
+      error.textContent = state.status._tag === "Failed" ? state.status.reason : problem ?? ""
+    }
+    const name = /** @type {HTMLInputElement} */ (h("input", {
+      class: "cal-literal-name cal-knob-text",
+      type: "text",
+      value: state.name,
+      spellcheck: "false",
+      "aria-label": "Token name",
+      onInput: () => {
+        state.name = name.value.trim()
+        if (state.status._tag === "Failed") state.status = { _tag: "Editing" }
+        update()
+      },
+    }))
+    const select = /** @type {HTMLSelectElement} */ (h("select", {
+      class: "cal-literal-home cal-knob-select",
+      "aria-label": "Rule the token goes in",
+      onChange: () => {
+        state.home = Number(select.value)
+        update()
+      },
+    }, ...homes.map((home, index) => h("option", { value: String(index), ...(index === state.home ? { selected: true } : {}) },
+      `${home.selector} · ${home.source.file.split("/").pop()}:${home.source.line}`))))
+    const saving = state.status._tag === "Saving"
+    const form = h("form", {
+      class: "cal-literal-form",
+      onSubmit: event => {
+        event.preventDefault()
+        void promote(literal, state)
+      },
+    },
+    h("label", { class: "cal-literal-field" }, h("span", {}, "Token name"), name),
+    h("label", { class: "cal-literal-field" }, h("span", {}, "Put it in"), select),
+    preview,
+    error,
+    h("div", { class: "cal-literal-actions" },
+      h("button", { type: "button", onClick: () => { draft = null; render() } }, "Cancel"),
+      h("button", { type: "submit", class: "cal-primary", disabled: saving }, saving ? "Creating…" : "Create token")))
+    update()
+    return form
+  }
+
+  /**
+   * Why a name cannot be the new token's, or null.
+   *
+   * @param {string} name
+   * @param {Literal} literal
+   */
+  const nameProblem = (name, literal) => {
+    if (!/^--[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) return "A token name starts with -- and holds letters, digits, - and _."
+    if (literalView._tag === "Ready" && literalView.taken.has(name)) return `${name} is already a custom property here. Pick another name.`
+    if (literal.homes.length === 0) return "No rule with tokens reaches this element."
+    return null
+  }
+
+  /**
+   * Make the literal a token: both edits, once, after the user confirmed them.
+   *
+   * @param {Literal} literal
+   * @param {Draft} state
+   */
+  const promote = async (literal, state) => {
+    const problem = nameProblem(state.name, literal)
+    const home = literal.homes[state.home]
+    if (problem !== null || home === undefined) return render()
+    state.status = { _tag: "Saving" }
+    render()
+    /** @param {Located} source */
+    const span = source => ({ file: source.file, version: source.version, start: source.start, end: source.end, expected: source.value })
+    try {
+      const response = await fetch("knobs/promote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ take: variant()?.take ?? null, name: state.name, literal: span(literal.source), home: span(home.source) }),
+      })
+      const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }))
+      if (response.ok) {
+        draft = null
+        literalNotice = `Made ${state.name} in ${home.selector}. Its knob is in the list above.`
+      } else {
+        state.status = { _tag: "Failed", reason: result._tag === "Conflict" ? result.reason : result.error ?? `HTTP ${response.status}` }
+      }
+    } catch (error) {
+      state.status = { _tag: "Failed", reason: error instanceof Error ? error.message : String(error) }
+    }
+    render()
+    schedule()
   }
 
   /** @param {Knob} knob */
@@ -769,6 +1005,87 @@ async function discover(list, target) {
   knobs.sort((left, right) => left.source.file.localeCompare(right.source.file) || left.source.start - right.source.start)
   skipped.sort((left, right) => left.name.localeCompare(right.name))
   return { _tag: "Ready", knobs, skipped, problems }
+}
+
+/**
+ * Find the literals that win on the part, where each lives in source, and
+ * the rules a token for it can go in (decision 26; spike/knob-reads, part 2).
+ * Every element of the part is tested, not a sample. A literal that
+ * knockout cannot see change anything, such as `border: 0` with no border
+ * style, is not offered.
+ *
+ * @param {Frame[]} list
+ * @param {string | null} take
+ * @returns {Promise<Extract<LiteralView, { _tag: "Ready" }>>}
+ */
+async function discoverLiterals(list, take) {
+  /** @type {Map<string, { site: Site, value: string, elements: Element[], document: Document }>} */
+  const found = new Map()
+  /** @type {Set<string>} */
+  const taken = new Set()
+  for (const { document, window } of list) {
+    for (const name of plainProperties(document, new Set())) taken.add(name)
+    for (const name of registrations(document).keys()) taken.add(name)
+    const host = document.getElementById("caliper-host")
+    if (host === null) continue
+    const elements = [host, ...host.querySelectorAll("*")]
+    const longhands = longhandsIn(document)
+    for (const { id, sheet } of projectSheets(document)) {
+      for (const { rule, path } of walk(sheet.cssRules)) {
+        if (kindOf(rule) !== "style") continue
+        const style = /** @type {CSSStyleRule} */ (rule)
+        for (const [property, value] of declarationsIn(style.style.cssText)) {
+          if (property.startsWith("--")) continue
+          let type = literalType(value, CSS.supports("color", value))
+          // A zero is a length when the property takes one.
+          if (type === "number" && Number(value) === 0 && CSS.supports(property, "1px")) type = "length"
+          if (type === null) continue
+          const site = { sheetId: id, path, property, name: property, selector: style.selectorText }
+          const key = siteKey(site)
+          const known = found.get(key)
+          const candidate = { sheetId: id, path, selector: style.selectorText, value, priority: "", rule: style }
+          const wins = literalWins(window, elements, candidate, property, longhands(property), literalSentinels(type))
+          if (wins.length === 0) continue
+          if (known === undefined) found.set(key, { site, value, elements: wins, document })
+        }
+      }
+    }
+  }
+  // Each literal's homes, in its first frame; each home by its anchor declaration.
+  /** @type {Map<string, { site: Site, document: Document }>} */
+  const asks = new Map()
+  /** @type {Map<string, Array<{ key: string, selector: string, anchor: string }>>} */
+  const homesOf = new Map()
+  for (const [key, { site, elements, document }] of found) {
+    asks.set(key, { site, document })
+    homesOf.set(key, tokenHomes(document, elements).map(home => {
+      const anchor = { sheetId: home.sheetId, path: home.path, property: home.anchor, name: home.anchor, selector: home.selector }
+      if (!asks.has(siteKey(anchor))) asks.set(siteKey(anchor), { site: anchor, document })
+      return { key: siteKey(anchor), selector: home.selector, anchor: home.anchor }
+    }))
+  }
+  const { located } = await locateAll([...asks.values()], take)
+  /** @type {Literal[]} */
+  const literals = []
+  /** @type {Skipped[]} */
+  const refused = []
+  // The browser writes a value its own way (0 as 0px), so the source's text
+  // is the literal; locating already checked it against the served CSS.
+  for (const [key, { site, value }] of found) {
+    const source = located.get(key)
+    if (source === undefined || source._tag === "Refused") {
+      refused.push({ name: `${site.property}: ${value}`, where: site.selector, reason: source?.reason ?? "Caliper did not get an answer for it." })
+      continue
+    }
+    /** @type {Home[]} */
+    const homes = (homesOf.get(key) ?? []).flatMap(home => {
+      const anchor = located.get(home.key)
+      return anchor?._tag === "Located" ? [{ selector: home.selector, anchor: home.anchor, source: anchor }] : []
+    })
+    literals.push({ key, property: site.property, value: source.value, selector: site.selector, source, homes })
+  }
+  literals.sort((left, right) => left.source.file.localeCompare(right.source.file) || left.source.start - right.source.start)
+  return { _tag: "Ready", literals, refused, taken }
 }
 
 /** @param {Pick<Site, "sheetId" | "path" | "property">} site */

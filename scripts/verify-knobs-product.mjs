@@ -134,6 +134,46 @@ try {
     // Let the panel find the knobs again after the write, before the next drag.
     await page.waitForTimeout(3500)
   }
+  // Literals: list them, then make the first one that has a home a token, and
+  // check that no element of the part changes its value.
+  const opened = Date.now()
+  await page.locator(".cal-knobs-literals > summary").click()
+  await page.waitForFunction(() => /Literals \(\d+\)/.test(document.querySelector(".cal-knobs-literals > summary")?.textContent ?? ""), null, { timeout: 60000 })
+  const literals = await page.locator(".cal-literal").evaluateAll(rows => rows.map(row => `${row.querySelector(".cal-literal-value")?.textContent} ${row.querySelector(".cal-knob-site")?.textContent}`))
+  console.log(`\nLiterals: ${literals.length}, found ${Date.now() - opened} ms after the section opened.`)
+  for (const line of literals.slice(0, 12)) console.log(`  ${line}`)
+  if (literals.length > 12) console.log(`  … and ${literals.length - 12} more`)
+  const unplaced = await page.locator(".cal-knobs-literals .cal-knobs-skipped li").allTextContents()
+  if (unplaced.length) console.log(`Literals Caliper could not place: ${unplaced.length}`)
+  for (const line of unplaced) console.log(`  ${line}`)
+  /** @param {string} property */
+  const valuesOf = property => page.evaluate(name => [...document.querySelectorAll("iframe.cal-frame[src]")].flatMap(iframe => {
+    const frame = /** @type {HTMLIFrameElement} */ (iframe)
+    const host = frame.contentDocument?.getElementById("caliper-host")
+    return host ? [host, ...host.querySelectorAll("*")].map(element => frame.contentWindow?.getComputedStyle(element).getPropertyValue(name)) : []
+  }).join("|"), property)
+  for (let index = 0; index < literals.length; index++) {
+    const row = page.locator(".cal-literal").nth(index)
+    await row.getByRole("button", { name: "Make a token" }).click()
+    if ((await row.locator("select.cal-literal-home").count()) === 0) {
+      await row.getByRole("button", { name: "Cancel" }).click()
+      continue
+    }
+    const [property = "", value = ""] = (await row.locator(".cal-literal-value").innerText()).split(": ")
+    const suggested = await row.locator("input.cal-literal-name").inputValue()
+    console.log(`\nMaking ${property}: ${value} a token. Caliper suggests ${suggested}.\n  ${await row.locator(".cal-literal-preview").innerText()}`)
+    const before = await valuesOf(property)
+    await row.locator("input.cal-literal-name").fill("--caliper-check-token")
+    const answer = page.waitForResponse(response => response.url().includes("/knobs/promote"))
+    await row.getByRole("button", { name: "Create token" }).click()
+    const result = await (await answer).json()
+    assert.equal(result._tag, "Promoted", JSON.stringify(result))
+    await page.locator('.cal-knob[data-knob$="#--caliper-check-token"]').waitFor({ timeout: 10000 })
+    const after = await valuesOf(property)
+    assert.equal(after, before, "every element of the part keeps its value")
+    console.log(`Edited ${result.files.join(" and ")}; ${before.split("|").length} elements kept their ${property}; the new token has a knob.`)
+    break
+  }
   await page.screenshot({ path: "/tmp/caliper-verify-knobs-product.png" })
   assert.deepEqual(errors, [], "the chrome threw no errors")
   console.log("\nScreenshot: /tmp/caliper-verify-knobs-product.png")

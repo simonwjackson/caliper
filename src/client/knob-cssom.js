@@ -225,6 +225,78 @@ export function knockout(window, elements, property, candidates, sentinel) {
 }
 
 /**
+ * Where a literal would win, found by knockout: the elements whose value of
+ * a longhand changes with a test value in the declaration, and that the
+ * rule's selector matches. A changed element that the rule does not match
+ * only follows another element's layout or inheritance, so it is left out
+ * (spike/knob-reads, part 2). Empty when no test value is valid.
+ *
+ * @param {Window} window
+ * @param {Element[]} elements
+ * @param {Candidate} candidate
+ * @param {string} property
+ * @param {string[]} longhands
+ * @param {string[]} sentinels in order of preference
+ * @returns {Element[]}
+ */
+export function literalWins(window, elements, candidate, property, longhands, sentinels) {
+  const style = candidate.rule.style
+  const value = style.getPropertyValue(property)
+  const priority = style.getPropertyPriority(property)
+  const sentinel = sentinels.find(option => option !== value.trim() && CSS.supports(property, option))
+  if (sentinel === undefined) return []
+  const own = elements.filter(element => {
+    try {
+      return element.matches(candidate.selector)
+    } catch {
+      return false
+    }
+  })
+  if (own.length === 0) return []
+  const read = () => own.map(element => {
+    const computed = window.getComputedStyle(element)
+    return longhands.map(name => computed.getPropertyValue(name)).join("\u0000")
+  })
+  const before = read()
+  style.setProperty(property, sentinel, priority)
+  const after = read()
+  style.setProperty(property, value, priority)
+  return own.filter((_, index) => after[index] !== before[index])
+}
+
+/**
+ * Rules a new token can go in: top-level style rules that declare custom
+ * properties, whose selector matches each element or one of its ancestors,
+ * so the token reaches them. Most custom properties first. `anchor` is the
+ * last custom property the rule declares; the token goes after it.
+ *
+ * @param {Document} document
+ * @param {Element[]} elements
+ * @returns {Array<{ sheetId: string, path: number[], selector: string, anchor: string, count: number, names: string[] }>}
+ */
+export function tokenHomes(document, elements) {
+  const found = []
+  for (const { id, sheet } of projectSheets(document)) {
+    for (let index = 0; index < sheet.cssRules.length; index++) {
+      const rule = /** @type {CSSRule} */ (sheet.cssRules[index])
+      if (kindOf(rule) !== "style") continue
+      const style = /** @type {CSSStyleRule} */ (rule)
+      const names = [...style.style].filter(name => name.startsWith("--"))
+      if (names.length === 0) continue
+      const reaches = elements.every(element => {
+        try {
+          return element.closest(style.selectorText) !== null
+        } catch {
+          return false
+        }
+      })
+      if (reaches) found.push({ sheetId: id, path: [index], selector: style.selectorText, anchor: /** @type {string} */ (names.at(-1)), count: names.length, names })
+    }
+  }
+  return found.sort((left, right) => right.count - left.count)
+}
+
+/**
  * The custom properties that style rules declare and no `@property`
  * registers.
  *

@@ -34,6 +34,22 @@ export const WriteRequestSchema = Type.Object({
   value: Type.String({ minLength: 1, maxLength: 512 }),
 }, { additionalProperties: false })
 
+const span = Type.Object({
+  file: name,
+  version: Type.String({ pattern: "^[0-9a-f]{16}$" }),
+  start: index,
+  end: index,
+  expected: Type.String({ minLength: 1, maxLength: 4096 }),
+}, { additionalProperties: false })
+
+/** Promote a literal to a token: `literal` is the value, `home` a custom property declaration the token goes after. */
+export const PromoteRequestSchema = Type.Object({
+  take,
+  name: Type.String({ pattern: "^--[A-Za-z_][A-Za-z0-9_-]*$", maxLength: 128 }),
+  literal: span,
+  home: span,
+}, { additionalProperties: false })
+
 const number = Type.Number()
 export const KnobHintsSchema = Type.Object({
   label: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
@@ -48,3 +64,4 @@ export const KnobOptionsSchema = Type.Record(Type.String({ pattern: "^--[A-Za-z0
 
 /** @typedef {import("typebox").Static<typeof LocateRequestSchema>} LocateRequest */
 /** @typedef {import("typebox").Static<typeof WriteRequestSchema>} WriteRequest */
+/** @typedef {import("typebox").Static<typeof PromoteRequestSchema>} PromoteRequest */

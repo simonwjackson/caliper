@@ -503,14 +503,44 @@ write, says so, and the knob shows the file's value. A save to the same file
 during a drag does not lose the dragged value in the frames. Click the file
 name under a knob to open that file in the code pane.
 
+### Make a literal a token
+
+A **literal** is a value written straight into a rule, such as
+`padding: 12px` or `color: #ff77a8`: one length, percentage, number or colour,
+with no `var()` and no math. Open **Literals** at the foot of the Knobs panel
+to see the literals that win on the part. Caliper looks for them only while
+the section is open. A literal that another rule overrides on the part, or
+whose change shows nothing, such as `border: 0` with no border style, is not
+listed.
+
+**Make a token** opens a form. Caliper suggests a name from the tokens beside
+it, the rule and the property, for example `--pico-cart-padding`. **Put it in**
+lists the rules that already declare custom properties and reach every
+element the literal is on, most tokens first. The form says both edits before
+Caliper makes them:
+
+```text
+Adds --stage-width: 300px; to .theme (tokens.css:44), and writes var(--stage-width) in its place (card.css:15).
+```
+
+**Create token** adds the declaration after the last custom property of that
+rule and puts `var(--stage-width)` where the literal was. The part looks the
+same, and the new token shows as a knob. Caliper refuses a name that is not a
+custom property or that the frames already declare, and both edits wait if
+either file changed since Caliper read it. In a take's frame, both edits go to
+the take's copies.
+
 Caliper turns on Vite's `css.devSourcemap`, because a knob maps a rule in the
 browser to its source file through it. Served CSS is larger in development.
 
 Costs and limits: the Knobs and Takes panels never show at the same time.
-Promoting a literal to a token is not built yet. Finding which plain
+Finding which plain
 properties a part reads costs about 40 ms per frame, and up to about 700 ms on
 a page with 280 elements. A plain property is a knob only for the states on
-the stage: a value that only a hidden state reads does not show. The `knobs` option gives no hints to a `@container` threshold. Caliper refuses a knob in
+the stage: a value that only a hidden state reads does not show. The `knobs` option gives no hints to a `@container` threshold.
+A literal in a `::before` or `::after` rule, or in a shorthand with more than
+one value, is not listed. Caliper does not check the part after the edits. It
+offers only rules that reach the literal's elements. Caliper refuses a knob in
 nested CSS, `@layer`, `@scope` and `@starting-style`, which are not tested.
 Tailwind, Sass and CSS modules are not tested. Only Chromium has run the
 panel. The code pane still saves over a change made elsewhere, so a pane save
@@ -871,12 +901,14 @@ CHROMIUM=/path/to/chromium node scripts/verify-knobs-product.mjs --root /path/to
 
 `scripts/verify-knobs.mjs` runs the Knobs panel on a temporary project shaped
 like Pico's tokens: discovery and its refusals, a live drag that writes the
-file once on release, a `@container` threshold, the token picker, a take's
-copy, a save to the same file during a drag, and five window sizes. Screenshots go to
+file once on release, a `@container` threshold, a plain custom property, a
+literal made a token, the token picker, a take's copy, a save to the same file during a drag, and five window sizes. Screenshots go to
 `/tmp/caliper-verify-knobs`. `scripts/verify-knobs-product.mjs` copies a real
 project to a temporary folder, prints every knob and refusal Caliper finds for
-one part, and drags the first number knob of a property and the first
-`@container` threshold. `--with ../../contracts` copies a
+one part, drags the first number knob of a property, of a plain custom
+property and of a `@container` threshold, then lists the literals and makes
+the first one a token, and checks that no element of the part changed its
+value. `--with ../../contracts` copies a
 folder the project imports from, at the same place. The real project never
 changes.
 

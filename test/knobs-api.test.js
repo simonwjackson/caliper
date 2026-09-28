@@ -323,6 +323,93 @@ describe("writing a knob's value", () => {
   })
 })
 
+describe("promoting a literal to a token", () => {
+  const box = [
+    ".tokens {",
+    "  --box-a: 1px;",
+    "}",
+    "",
+    ".box {",
+    "  padding: 12px;",
+    "  color: #ff77a8;",
+    "}",
+    "",
+  ].join("\n")
+  const withBox = { ...files, "src/box.css": box, "src/index.ts": 'import "./global.css"\nimport "./box.css"\n' }
+  const boxRules = [{ path: [0], kind: "style", selector: ".tokens" }, { path: [1], kind: "style", selector: ".box" }]
+
+  /**
+   * Locate declarations in one stylesheet, as the chrome does.
+   *
+   * @param {{ get: (path: string) => Promise<Response>, url: string, root: string }} project
+   * @param {string} file
+   * @param {object[]} sheetRules
+   * @param {Array<{ path: number[], property: string }>} targets
+   * @param {string | null} [take]
+   */
+  const locate = async ({ get, url, root }, file, sheetRules, targets, take = null) => {
+    const css = await served(get, take === null ? `/${file}` : `/${file}?take=${take}`)
+    const { results } = await (await post(url, "/__caliper/knobs/locate", {
+      sheet: take === null ? join(root, file) : `${join(root, file)}?take=${take}`, take, css, rules: sheetRules, targets,
+    })).json()
+    return results
+  }
+  /** @param {any} found */
+  const span = found => ({ file: found.file, version: found.version, start: found.start, end: found.end, expected: found.value })
+
+  test("moves the literal into a new token beside the anchor declaration, and names the token where the literal was", async () => {
+    await withProject({ files: withBox }, async project => {
+      const [padding] = await locate(project, "src/box.css", boxRules, [{ path: [1], property: "padding" }])
+      const [anchor] = await locate(project, "src/global.css", rules, [{ path: [3], property: "--ground" }])
+      expect(padding).toMatchObject({ _tag: "Located", value: "12px" })
+      const response = await post(project.url, "/__caliper/knobs/promote", { take: null, name: "--box-pad", literal: span(padding), home: span(anchor) })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ _tag: "Promoted", files: ["src/box.css", "src/global.css"] })
+      expect(readFileSync(join(project.root, "src/box.css"), "utf8")).toBe(box.replace("padding: 12px;", "padding: var(--box-pad);"))
+      expect(readFileSync(join(project.root, "src/global.css"), "utf8"))
+        .toBe(files["src/global.css"].replace("  --ground: var(--p8-black);\n", "  --ground: var(--p8-black);\n  --box-pad: 12px;\n"))
+    })
+  })
+
+  test("makes both edits when the literal and the token share a file", async () => {
+    await withProject({ files: withBox }, async project => {
+      const [color, anchor] = await locate(project, "src/box.css", boxRules, [{ path: [1], property: "color" }, { path: [0], property: "--box-a" }])
+      const response = await post(project.url, "/__caliper/knobs/promote", { take: null, name: "--box-ink", literal: span(color), home: span(anchor) })
+      expect(await response.json()).toMatchObject({ _tag: "Promoted", files: ["src/box.css"] })
+      expect(readFileSync(join(project.root, "src/box.css"), "utf8"))
+        .toBe(box.replace("  --box-a: 1px;\n", "  --box-a: 1px;\n  --box-ink: #ff77a8;\n").replace("color: #ff77a8;", "color: var(--box-ink);"))
+    })
+  })
+
+  test("refuses a name that is not a custom property or that the file already declares, and a file that changed", async () => {
+    await withProject({ files: withBox }, async project => {
+      const [padding] = await locate(project, "src/box.css", boxRules, [{ path: [1], property: "padding" }])
+      const [anchor] = await locate(project, "src/global.css", rules, [{ path: [3], property: "--ground" }])
+      const promote = (/** @type {object} */ patch) => post(project.url, "/__caliper/knobs/promote", { take: null, name: "--box-pad", literal: span(padding), home: span(anchor), ...patch })
+      const invalid = await promote({ name: "box-pad" })
+      expect(invalid.status).toBe(400)
+      const taken = await promote({ name: "--gap" })
+      expect(taken.status).toBe(409)
+      expect(await taken.json()).toEqual({ _tag: "Conflict", reason: "src/global.css already declares --gap. Pick another name." })
+      project.write("src/global.css", `/* moved */\n${files["src/global.css"]}`)
+      const changed = await promote({})
+      expect(changed.status).toBe(409)
+      expect(readFileSync(join(project.root, "src/box.css"), "utf8")).toBe(box)
+    })
+  })
+
+  test("in a take's frame, edits the take's copies and leaves the real files", async () => {
+    await withProject({ files: withBox }, async project => {
+      const take = createTakeStore(project.root).create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      const [color, anchor] = await locate(project, "src/box.css", boxRules, [{ path: [1], property: "color" }, { path: [0], property: "--box-a" }], take)
+      const response = await post(project.url, "/__caliper/knobs/promote", { take, name: "--box-ink", literal: span(color), home: span(anchor) })
+      expect(response.status).toBe(200)
+      expect(readFileSync(join(project.root, ".caliper/takes", take, "src/box.css"), "utf8")).toContain("color: var(--box-ink);")
+      expect(readFileSync(join(project.root, "src/box.css"), "utf8")).toBe(box)
+    })
+  })
+})
+
 describe("the dev server", () => {
   test("serves CSS with an inline sourcemap, which a knob needs", async () => {
     await withProject({ files }, async ({ get }) => {

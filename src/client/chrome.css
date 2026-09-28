@@ -2087,3 +2087,97 @@ button:disabled {
 .cal-knob-where {
   font-family: var(--cal-mono);
 }
+
+/* Literals: values written into a rule, which a token would turn into knobs. */
+.cal-knobs-literals {
+  margin-top: var(--cal-space-3);
+  padding-top: var(--cal-space-2);
+  border-top: 1px solid var(--cal-line);
+}
+
+.cal-knobs-literals > summary {
+  cursor: pointer;
+  font-size: var(--cal-text-sm);
+  color: var(--cal-muted);
+}
+
+.cal-knobs-literals[open] > summary {
+  color: var(--cal-ink);
+}
+
+.cal-literal {
+  padding: var(--cal-space-2) 0;
+  border-bottom: 1px solid var(--cal-line);
+}
+
+.cal-literal-value {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-literal-make {
+  margin-left: auto;
+  font-size: var(--cal-text-sm);
+}
+
+.cal-literal-make[aria-expanded="true"] {
+  border-color: var(--cal-accent);
+}
+
+.cal-literal-notice {
+  margin: var(--cal-space-1) 0;
+  color: var(--cal-good);
+  font-size: var(--cal-text-sm);
+}
+
+/* The form stacks at every width: the panel column is its container. */
+.cal-literal-form {
+  display: grid;
+  gap: var(--cal-space-2);
+  margin: var(--cal-space-2) 0 0;
+  padding: var(--cal-space-2);
+  border-radius: var(--cal-radius);
+  background: var(--cal-bg);
+}
+
+.cal-literal-field {
+  display: grid;
+  gap: var(--cal-space-1);
+  font-size: var(--cal-text-sm);
+  color: var(--cal-muted);
+}
+
+.cal-literal-field .cal-knob-text,
+.cal-literal-field .cal-knob-select {
+  width: 100%;
+  min-width: 0;
+  color: var(--cal-ink);
+}
+
+.cal-literal-preview {
+  margin: 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cal-literal-preview code {
+  color: var(--cal-ink);
+}
+
+.cal-literal-form .cal-knob-problem:empty {
+  display: none;
+}
+
+.cal-literal-form .cal-knob-problem {
+  margin: 0;
+}
+
+.cal-literal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cal-space-2);
+}

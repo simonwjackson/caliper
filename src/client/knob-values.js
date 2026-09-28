@@ -336,6 +336,58 @@ export function syntaxOfValue(value, isColor) {
   return isColor ? "<color>" : "*"
 }
 
+const KEYWORD_COLOR = /^(currentcolor|transparent|inherit|initial|unset|revert|revert-layer)$/i
+
+/**
+ * The type of a literal: one length, percentage, number or colour, with no
+ * `var()` and no math. Null for anything else, such as `12px 8px` or `auto`.
+ *
+ * @param {string} value
+ * @param {boolean} isColor whether the browser reads the value as a colour
+ * @returns {"length" | "percentage" | "number" | "color" | null}
+ */
+export function literalType(value, isColor) {
+  const text = value.trim()
+  if (/\bvar\(/i.test(text) || FORMULA.test(text)) return null
+  const number = parseNumber(text)
+  if (number !== null) return number.unit === "" ? "number" : number.unit === "%" ? "percentage" : "length"
+  return isColor && !KEYWORD_COLOR.test(text) ? "color" : null
+}
+
+/**
+ * Test values for knockout on a literal, in the order to try them: the
+ * first one the property accepts and that differs from the literal.
+ *
+ * @param {"length" | "percentage" | "number" | "color"} type
+ */
+export function literalSentinels(type) {
+  return {
+    length: ["4321px", "3px"],
+    percentage: ["43.21%", "3%"],
+    number: ["4321", "0.4321", "3"],
+    color: ["rgb(1, 2, 3)", "rgb(4, 5, 6)"],
+  }[type]
+}
+
+/**
+ * A name for the token a literal becomes: the namespace of the tokens beside
+ * it, the rule's last class (or element) without that namespace, and the
+ * property. The user confirms or changes it.
+ *
+ * @param {string} selector
+ * @param {string} property
+ * @param {string} namespace such as `--pico-`
+ */
+export function suggestTokenName(selector, property, namespace) {
+  const last = selector.split(",").at(-1) ?? ""
+  const compound = last.trim().split(/\s*[\s>+~]\s*/).at(-1) ?? ""
+  const classes = [...compound.matchAll(/\.([\w-]+)/g)].map(match => match[1] ?? "")
+  const subject = classes.at(-1) ?? /^[a-z][\w-]*/i.exec(compound)?.[0] ?? ""
+  const prefix = namespace.replace(/^--/, "")
+  const trimmed = prefix !== "" && subject.startsWith(prefix) ? subject.slice(prefix.length) : subject
+  return `${namespace}${[trimmed, property].filter(Boolean).join("-")}`
+}
+
 /**
  * @param {...(KnobHints | undefined)} layers lowest first
  * @returns {KnobHints}

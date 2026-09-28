@@ -5,9 +5,9 @@ import { Check, Errors } from "typebox/value"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse } from "../http.js"
 import { blankImports, takeOf } from "../takes/overlay.js"
 import { fenceProjectPath } from "../takes/store.js"
-import { editSource, valueProblem, versionOf } from "./edit.js"
+import { editSource, promoteSource, valueProblem, versionOf } from "./edit.js"
 import { locateDeclarations } from "./locate.js"
-import { KnobOptionsSchema, LocateRequestSchema, WriteRequestSchema } from "./contract.js"
+import { KnobOptionsSchema, LocateRequestSchema, PromoteRequestSchema, WriteRequestSchema } from "./contract.js"
 
 /**
  * The knobs API, under `/__caliper/knobs` (decisions 23 and 26).
@@ -16,6 +16,9 @@ import { KnobOptionsSchema, LocateRequestSchema, WriteRequestSchema } from "./co
  *     where each declaration a knob shows lives in its source file
  *   POST /knobs/write { file, take, version, start, end, expected, value }
  *     replace one value, once, when you release the knob
+ *   POST /knobs/promote { take, name, literal, home }
+ *     move a literal into a new token `name` after the declaration `home`,
+ *     and put `var(name)` where the literal was
  *
  * A located declaration carries the version of the file it was found in. A
  * write names that version, so a file that changed since gets no write: its
@@ -106,6 +109,35 @@ export function createKnobsApi({ store, writeTake, options }) {
     return { _tag: "Written", file: fenced.file, version: versionOf(edited.text) }
   }
 
+  /** @param {unknown} body */
+  const promote = body => {
+    if (!Check(PromoteRequestSchema, body)) throw new Error(`The promote request is not valid: ${firstError(PromoteRequestSchema, body)}`)
+    const problem = valueProblem(body.literal.expected)
+    if (problem !== null) throw new Error(problem)
+    if (body.take !== null && store.record(body.take) === null) throw new Error(`Take ${body.take} does not exist. It may have been accepted or discarded.`)
+    /** @type {Map<string, string>} */
+    const texts = new Map()
+    const spans = []
+    for (const span of [body.literal, body.home]) {
+      const fenced = fenceProjectPath(store.root, span.file)
+      if (fenced._tag === "Outside") throw new Error(fenced.reason)
+      const text = readVariant(store, body.take, fenced.file)
+      if (text === null) throw new Error(`"${fenced.file}" is not a file.`)
+      texts.set(fenced.file, text)
+      spans.push({ ...span, file: fenced.file })
+    }
+    const [literal, home] = /** @type {[typeof spans[0], typeof spans[0]]} */ (spans)
+    const edited = promoteSource({ texts, name: body.name, literal, home })
+    if (edited._tag === "Conflict") return edited
+    const files = [...edited.texts.keys()]
+    for (const file of files) {
+      const text = /** @type {string} */ (edited.texts.get(file))
+      if (body.take === null) writeFileSync(join(store.root, file), text)
+      else writeTake(body.take, file, text)
+    }
+    return { _tag: "Promoted", files, name: body.name }
+  }
+
   /**
    * @param {string} path below `/__caliper`
    * @param {IncomingMessage} request
@@ -113,7 +145,7 @@ export function createKnobsApi({ store, writeTake, options }) {
    * @returns {Promise<boolean>} false when the path is not the API's
    */
   const handle = async (path, request, response) => {
-    if (path !== "/knobs/locate" && path !== "/knobs/write") return false
+    if (path !== "/knobs/locate" && path !== "/knobs/write" && path !== "/knobs/promote") return false
     const refusal = refuse(request)
     if (refusal !== null) {
       json(response, 403, { error: refusal })
@@ -124,6 +156,9 @@ export function createKnobsApi({ store, writeTake, options }) {
       const body = await readJson(request, path === "/knobs/locate" ? MAX_FILE_BODY : MAX_BODY)
       if (path === "/knobs/locate") {
         json(response, 200, locate(body))
+      } else if (path === "/knobs/promote") {
+        const result = promote(body)
+        json(response, result._tag === "Conflict" ? 409 : 200, result)
       } else {
         const result = write(body)
         json(response, result._tag === "Conflict" ? 409 : 200, result)
