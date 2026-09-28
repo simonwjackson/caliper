@@ -17,6 +17,7 @@ import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code
 import { listeningOrigin } from "./server-origin.js"
 import { reportLateChanges } from "./late-changes.js"
 import { resolveAgent } from "./agent/config.js"
+import { discoverSkills } from "./agent/skills.js"
 import { chromePage, framePage } from "./pages.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
@@ -286,6 +287,7 @@ function createSession(server, root, options, env, overlay) {
     serverUrl: () => listeningOrigin(server),
     chromium: env.CHROMIUM,
     onChange: takesChanged,
+    skills: () => discoverSkills({ root, home: homedir(), option: options.agent?.skills }),
   })
 
   const checks = createChecksApi({

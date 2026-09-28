@@ -259,6 +259,53 @@ ones. Existing takes without a context remain isolated.
 conversation lives only in the dev server: after a restart, the take's files
 remain, and its next prompt starts a new conversation.
 
+### Give the agent skills
+
+The agent uses [Agent Skills](https://agentskills.io): folders that hold a
+`SKILL.md` with a `name` and a `description` in YAML front matter, then
+Markdown instructions. Skills made for pi, Claude Code or another client work
+unchanged. Caliper looks in these folders, and the first skill found with a
+name wins:
+
+1. `.agents/skills/` in the project root, then in each parent folder up to the
+   Git root, so a monorepo can share skills.
+2. Each folder in `agent.skills`, in order.
+3. `~/.agents/skills/`.
+
+```ts
+caliper({
+  agent: {
+    model: "claude-opus-5-5",
+    // A folder of skills, or one skill's folder. Relative to the project root, or under ~/.
+    skills: ["~/.pi/agent/skills/intrinsic-design"],
+  },
+})
+```
+
+`skills: false` turns skills off. Caliper does not read `~/.pi/agent/skills/`
+or `.claude/skills/` unless you list them: those folders belong to other
+clients, and hold skills that expect a shell, which the take agent does not
+have. A skill in a folder under your home folder also exists only on your
+machine, so a teammate's takes do not get it.
+
+The agent sees only each skill's name and description, about 100 tokens per
+skill. When your request matches a description, it calls `activate_skill` to
+load the instructions, and `read_skill_file` to read a file the skill refers to.
+Type `/name` in a prompt to load a skill yourself; a skill with
+`disable-model-invocation: true` loads only this way. The planner sees the
+names and descriptions too, so a direction can name the skill its take should
+use. Caliper reads the skills again for each new agent, so a new or changed
+skill needs no restart.
+
+The Takes panel lists the skills under the model. It also lists the problems:
+a missing folder, a skill with no description (skipped), a name that differs
+from its folder, or a skill hidden by another with the same name.
+
+Costs: every take pays for the list of names and descriptions, even when it
+loads no skill. The agent decides from the description alone, so it can skip a
+skill that applies. Name the skill with `/name` when it must apply. A project's
+skills are as trusted as its `vite.config`, which Vite already runs.
+
 ### Add an alternate without replacing existing callers
 
 Choose **Add an alternate** on an experiment. Caliper copies it into a separate

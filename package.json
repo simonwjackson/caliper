@@ -55,7 +55,8 @@
     "playwright-core": "1.59.1",
     "postcss": "8.5.28",
     "typebox": "1.3.27",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
     "vite": "^6.0.0 || ^7.0.0"

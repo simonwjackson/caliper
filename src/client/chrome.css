@@ -1369,6 +1369,37 @@ pre {
   color: var(--cal-muted);
 }
 
+/* Collapsed by default. Open, it takes at most a third of Caliper's height
+ * and scrolls, so the take list and the composer stay near. */
+.cal-skills {
+  margin: var(--cal-space-1) 0 0;
+  font-size: var(--cal-text-sm);
+  color: var(--cal-muted);
+}
+
+.cal-skills > summary {
+  cursor: pointer;
+}
+
+.cal-skills-failed > summary {
+  color: var(--cal-bad);
+}
+
+.cal-skills-body {
+  max-height: 33cqh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.cal-skills-body ul {
+  margin: var(--cal-space-1) 0;
+  padding-left: var(--cal-space-3);
+}
+
+.cal-skills-body p {
+  margin: var(--cal-space-1) 0;
+}
+
 .cal-agent-failed {
   color: var(--cal-bad);
 }

@@ -266,7 +266,10 @@ app.append(
     h("aside", { class: "cal-takes", id: "cal-takes", "aria-label": "Takes" },
       h("header", { class: "cal-takes-head" },
         h("h2", {}, "Takes"),
-        h("p", { class: "cal-agent" })),
+        h("p", { class: "cal-agent" }),
+        h("details", { class: "cal-skills", hidden: true },
+          h("summary", {}),
+          h("div", { class: "cal-skills-body" }))),
       h("div", { class: "cal-take-list", role: "list" }),
       h("div", { class: "cal-log", "aria-live": "polite" }),
       h("form", {
@@ -1467,6 +1470,7 @@ function renderAgent() {
     line.textContent = "Connecting…"
     return
   }
+  renderSkills()
   if (agent._tag === "Ready") {
     line.textContent = `${agent.model} · reasoning ${agent.reasoning}`
     line.title = `${agent.baseUrl} (${agent.api}) from ${agent.baseUrlFrom}. Key from ${agent.keyFrom}.`
@@ -1475,6 +1479,29 @@ function renderAgent() {
   line.classList.add(agent._tag === "Failed" ? "cal-agent-failed" : "cal-agent-off")
   line.textContent = agent._tag === "Failed" ? `${agent.reason} ${agent.hint}` : agent.hint
   line.title = ""
+}
+
+/** The skills the agent can load, and what Caliper could not load. Shown only while the agent is ready. */
+function renderSkills() {
+  const details = /** @type {HTMLDetailsElement} */ ($(".cal-skills"))
+  const status = state.takes?.agent._tag === "Ready" ? state.takes.skills : undefined
+  details.hidden = status === undefined
+  if (status === undefined) return
+  const { skills, problems } = status
+  const count = skills.length === 1 ? "1 skill" : `${skills.length} skills`
+  $(".cal-skills summary").textContent = problems.length ? `${count} · ${problems.length} ${problems.length === 1 ? "problem" : "problems"}` : count
+  details.classList.toggle("cal-skills-failed", problems.length > 0)
+  $(".cal-skills-body").replaceChildren(
+    ...problems.map(problem => h("p", { class: "cal-agent-failed" }, problem)),
+    ...(skills.length === 0
+      ? [h("p", {}, "The agent has no skills. Add SKILL.md folders to .agents/skills/ in the project or in your home folder, or list folders in agent.skills.")]
+      : [
+        h("ul", {}, ...skills.map(skill => h("li", { title: skill.description },
+          h("code", {}, skill.name),
+          h("span", { class: "cal-site" }, ` ${skill.location}`)))),
+        h("p", {}, "The agent loads a skill when your request matches its description. Type /name in a prompt to load one yourself."),
+      ]),
+  )
 }
 
 function renderTakeList() {

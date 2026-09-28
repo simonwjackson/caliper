@@ -46,7 +46,22 @@ describe("the takes API", () => {
   test("reports the agent as off when vite.config has no agent", async () => {
     await withProject({ files }, async ({ get }) => {
       const snapshot = await (await get("/__caliper/takes.json")).json()
-      expect(snapshot).toMatchObject({ agent: { _tag: "Off" }, takes: [] })
+      expect(snapshot).toMatchObject({ agent: { _tag: "Off" }, skills: { skills: [], problems: [] }, takes: [] })
+    })
+  })
+
+  test("lists the project's skills and the problems with agent.skills for the chrome", async () => {
+    const skillFiles = {
+      ...files,
+      ".agents/skills/spacing/SKILL.md": "---\nname: spacing\ndescription: Spacing rules.\n---\nBody\n",
+    }
+    const options = { agent: { model: "m", baseUrl: "http://127.0.0.1:9/v1", apiKeyEnv: "PATH", skills: ["./missing"] } }
+    await withProject({ files: skillFiles, options, git: true }, async ({ get }) => {
+      /** @type {import("../src/types").TakesSnapshot} */
+      const snapshot = await (await get("/__caliper/takes.json")).json()
+      expect(snapshot.agent._tag).toBe("Ready")
+      expect(snapshot.skills.skills).toContainEqual({ name: "spacing", description: "Spacing rules.", scope: "project", location: ".agents/skills/spacing/SKILL.md" })
+      expect(snapshot.skills.problems).toContain("Skill folder missing does not exist.")
     })
   })
 

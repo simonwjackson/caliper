@@ -177,6 +177,31 @@ export type AgentOptions = {
   readonly api?: "chat-completions" | "responses"
   /** The environment variable that holds the API key. Default: "CALIPER_AGENT_API_KEY". */
   readonly apiKeyEnv?: string
+  /**
+   * Agent Skills (SKILL.md folders, https://agentskills.io) for the agent.
+   * Caliper always looks in `.agents/skills/` of the project and its parent
+   * folders up to the Git root, then in `~/.agents/skills/`. List more
+   * folders here: a folder of skills or one skill's folder, relative to the
+   * project root or starting with `~/`, for example `["~/.pi/agent/skills"]`.
+   * `false` turns skills off.
+   */
+  readonly skills?: false | readonly string[]
+}
+
+/** One skill the agent can load. */
+export type SkillSummary = {
+  readonly name: string
+  readonly description: string
+  /** Where Caliper found it: the project, `agent.skills`, or `~/.agents/skills`. */
+  readonly scope: "project" | "configured" | "user"
+  /** SKILL.md, relative to the project root, under `~`, or absolute. */
+  readonly location: string
+}
+
+/** The skills the agent can load, and what Caliper could not load. */
+export type SkillsStatus = {
+  readonly skills: readonly SkillSummary[]
+  readonly problems: readonly string[]
 }
 
 /** What the chrome knows about the agent. It never holds the key. */
@@ -259,6 +284,7 @@ export type TakeView = {
 /** What the event stream sends as `takes`. */
 export type TakesSnapshot = {
   readonly agent: AgentStatus
+  readonly skills: SkillsStatus
   readonly takes: readonly TakeView[]
 }
 

@@ -5,6 +5,7 @@ import { DEVICES } from "../client/device-frame.js"
 import { takeTools } from "./tools.js"
 import { metadataTools } from "./metadata-tools.js"
 import { createIntegrationReview } from "../takes/integration.js"
+import { skillPrompt, skillSession } from "./skills.js"
 
 /**
  * @typedef {import("./model.js").Engine} Engine
@@ -16,10 +17,16 @@ import { createIntegrationReview } from "../takes/integration.js"
  * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
  *   `direction` is the planner's way for this take to answer the prompt;
  *   `others` are the titles of the directions its sibling takes got.
- * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string> }} Live
+ * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
+ * @typedef {ReturnType<typeof skillSession>} SkillSession
+ * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string>, skills?: SkillSession }} Live
  *   `agent` is null until the first prompt creates it, and stays null when that fails.
  *   `edited` holds the files you changed by hand since the agent's last turn.
+ *   `skills` is the agent's use of the skills; it exists once the agent does.
  */
+
+/** @returns {SkillCatalog} */
+const noSkills = () => ({ skills: [], problems: [] })
 
 /** A run stops after this many model turns, so a confused agent cannot spend without end. */
 export const MAX_TURNS = 40
@@ -33,11 +40,14 @@ export const MAX_TURNS = 40
  *   engine: () => Engine,
  *   renderFor: (take: string, ask: TakeAsk) => RenderTake,
  *   onChange: () => void,
+ *   skills?: () => SkillCatalog,
  * }} input
  *   `engine` is called when a take starts, so a missing connection fails that
- *   take, not the server. `onChange` fires on every visible change.
+ *   take, not the server. `onChange` fires on every visible change. `skills`
+ *   is read when a take's agent starts, so a new or changed skill reaches the
+ *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
   const integration = createIntegrationReview(store)
@@ -194,9 +204,11 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
       const first = entry.agent === null
       const agent = entry.agent ?? createAgent(take, record, render, entry)
       entry.agent = agent
+      const named = namedSkills(entry, prompt)
+      if (named.length > 0) onChange()
       const content = first
-        ? await firstMessage(record, `${handNote(edited, true)}${prompt}`, render, store, take)
-        : `${handNote(edited, false)}${prompt}`
+        ? await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take)
+        : `${named}${handNote(edited, false)}${prompt}`
       signal.throwIfAborted()
       if (live.get(take) !== entry) return
       await (typeof content === "string"
@@ -224,13 +236,17 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   const createAgent = (take, ask, render, entry) => {
     const { models, model, reasoning } = engine()
     const preview = ask.context ?? ask
+    const catalog = skills()
+    const session = skillSession(catalog)
+    entry.skills = session
     const tools = [
       ...takeTools({ store, take, render, defaults: { part: preview.part, state: preview.state, device: ask.device } }),
       ...metadataTools({ store, take, onChange, integration }),
+      ...session.tools,
     ]
     let turns = 0
     const agent = new Agent({
-      initialState: { systemPrompt: systemPrompt(take), model, thinkingLevel: reasoning, tools },
+      initialState: { systemPrompt: `${systemPrompt(take)}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
       streamFn: models.streamSimple.bind(models),
       sessionId: `caliper-take-${take}-${Date.now()}`,
       toolExecution: "sequential",
@@ -272,6 +288,22 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   }
 
   return { start, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+}
+
+/**
+ * The instructions of each skill the prompt names as `/name`, which the
+ * agent has not loaded yet, for the start of the message. Each one shows in
+ * the take's log as a loaded skill.
+ *
+ * @param {Live} entry
+ * @param {string} prompt
+ */
+function namedSkills(entry, prompt) {
+  const loaded = entry.skills?.mentioned(prompt) ?? []
+  for (const skill of loaded) {
+    entry.log.push({ _tag: "Tool", id: `named-${skill.name}-${entry.log.length}`, name: "activate_skill", subject: skill.name, outcome: "Done", detail: `Loaded because the prompt names /${skill.name}.` })
+  }
+  return loaded.map(skill => `${skill.text}\n\n`).join("")
 }
 
 /**
@@ -322,7 +354,7 @@ export function applyEvent(log, event) {
     const index = log.findIndex(entry => entry._tag === "Tool" && entry.id === event.toolCallId)
     const current = log[index]
     if (current === undefined || current._tag !== "Tool") return false
-    log[index] = { ...current, outcome: event.isError ? "Failed" : "Done", detail: detailOf(event.result, event.isError) }
+    log[index] = { ...current, outcome: event.isError ? "Failed" : "Done", detail: detailOf(event.result, event.isError, event.toolName) }
     return true
   }
   return false
@@ -341,16 +373,20 @@ function lastAssistant(log) {
 function subjectOf(name, args) {
   if (name === "render") return args?.related ? "all declared related scenarios" : [args?.part, args?.state, args?.device].filter(Boolean).join("@") || "as asked"
   if (name === "list_files") return String(args?.folder || ".")
+  if (name === "activate_skill") return String(args?.name ?? "")
+  if (name === "read_skill_file") return `${args?.name ?? ""}: ${args?.path ?? ""}`
   return String(args?.path ?? "")
 }
 
 /**
  * @param {{ content?: Array<{ type: string, text?: string }>, details?: any }} result
  * @param {boolean} isError
+ * @param {string} name the tool's name
  */
-function detailOf(result, isError) {
+function detailOf(result, isError, name) {
   const text = result?.content?.find(block => block.type === "text")?.text ?? ""
   if (isError) return text.slice(0, 400)
+  if (name === "activate_skill") return text.startsWith("<skill_content") ? "Loaded its instructions." : "Already loaded."
   const verdicts = result?.details?.results
   if (Array.isArray(verdicts)) {
     return verdicts.map(verdict => {

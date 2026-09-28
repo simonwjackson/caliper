@@ -1,5 +1,6 @@
 // @ts-check
 import { Type } from "typebox"
+import { plannerSkillNote } from "./skills.js"
 
 /**
  * The planner turns one prompt into several different directions, so the
@@ -39,15 +40,17 @@ const planTool = {
  *   device: string,
  *   context: Content[],
  *   preview?: import("../types").StateRef,
+ *   skills?: import("./skills.js").SkillCatalog,
  *   signal?: AbortSignal,
  * }} input
  *   `context` is what the planner sees of the part: its source and how it renders now.
+ *   `skills` are the skills the take agents can load; a brief can name one.
  * @returns {Promise<TakePlan>}
  */
-export async function planDirections({ engine, prompt, count, part, state, device, context, preview, signal }) {
+export async function planDirections({ engine, prompt, count, part, state, device, context, preview, skills, signal }) {
   const { models, model, reasoning } = engine
   const message = await models.completeSimple(model, {
-    systemPrompt: systemPrompt(count),
+    systemPrompt: `${systemPrompt(count)}${skills ? plannerSkillNote(skills) : ""}`,
     tools: [planTool],
     messages: [{
       role: "user",

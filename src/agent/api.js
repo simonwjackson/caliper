@@ -16,6 +16,7 @@ import { connectEngine } from "./model.js"
 import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
+import { skillsStatus } from "./skills.js"
 import { Type } from "typebox"
 
 /**
@@ -26,6 +27,7 @@ import { Type } from "typebox"
  * @typedef {import("../types").TakesSnapshot} TakesSnapshot
  * @typedef {import("./config.js").Connection} Connection
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
+ * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
  */
 
 const MAX_PROMPT = 8_000
@@ -46,9 +48,11 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  *   serverUrl: () => string | null,
  *   chromium: string | undefined,
  *   onChange: () => void,
+ *   skills?: () => SkillCatalog,
  * }} input
+ *   `skills` finds the skills each new agent, the planner and the chrome see.
  */
-export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange }) {
+export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, skills = () => ({ skills: [], problems: [] }) }) {
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
   const shutdown = new AbortController()
   /** @type {Set<Promise<unknown>>} */
@@ -123,6 +127,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       })
     },
     onChange,
+    skills,
   })
 
   /** Checks hold a take still until they finish, including follow-up and discard. */
@@ -180,11 +185,11 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     } catch (error) {
       context.push({ type: "text", text: `Caliper could not render the part: ${error instanceof Error ? error.message : String(error)}` })
     }
-    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, ...(ask.context === undefined ? {} : { preview: ask.context }) })
+    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, skills: skills(), ...(ask.context === undefined ? {} : { preview: ask.context }) })
   }
 
   /** @returns {TakesSnapshot} */
-  const snapshot = () => ({ agent: status, takes: agents.views() })
+  const snapshot = () => ({ agent: status, skills: status._tag === "Ready" ? skillsStatus(skills()) : { skills: [], problems: [] }, takes: agents.views() })
 
   /**
    * @param {string} path below `/__caliper`
