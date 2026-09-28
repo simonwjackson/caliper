@@ -4,12 +4,15 @@ import { createRequire } from "node:module"
 import { homedir } from "node:os"
 import { isAbsolute, join, relative, resolve as resolvePath } from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadEnv } from "vite"
+import { loadEnv, mergeConfig } from "vite"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { createTakesApi } from "./agent/api.js"
 import { codeChange, createCodeApi } from "./code/api.js"
 import { createChecksApi } from "./checks/api.js"
+import { createSourceRevision } from "./checks/source-revision.js"
+import { checkSource } from "./authored/source.js"
+import { authoredCheckDelivery } from "./authored/delivery.js"
 import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code/modules.js"
 import { listeningOrigin } from "./server-origin.js"
 import { reportLateChanges } from "./late-changes.js"
@@ -71,6 +74,7 @@ export function caliper(options = {}) {
   let root = process.cwd()
   let cacheDir = join(root, "node_modules/.vite")
   const overlay = takeOverlay(() => root, () => cacheDir)
+  const checkDelivery = authoredCheckDelivery()
   /** @type {Record<string, string | undefined>} */
   let env = { ...process.env }
   let closeSession = async () => {}
@@ -84,12 +88,12 @@ export function caliper(options = {}) {
       const parts = discoverParts(root).map(part => part.file)
       const require = createRequire(join(root, "package.json"))
       const react = REACT_PACKAGES.filter(name => canResolve(require, name))
-      return {
+      return mergeConfig({
         optimizeDeps: {
           entries: parts,
           include: react,
         },
-      }
+      }, checkDelivery.config())
     },
 
     configResolved(config) {
@@ -104,6 +108,8 @@ export function caliper(options = {}) {
       order: "pre",
       async handler(id, importer, resolveOptions) {
         if (id === REACT_MODULE) return RESOLVED_REACT_MODULE
+        const checkRuntime = await checkDelivery.resolveId.call(this, id, importer)
+        if (checkRuntime) return checkRuntime
         const tagged = await overlay.resolveId.call(this, id, importer, resolveOptions)
         if (tagged) return tagged
         // Vite pre-transforms the frame page's script. Point it at the real file,
@@ -125,6 +131,8 @@ export function caliper(options = {}) {
     },
 
     load(id) {
+      const checkRuntime = checkDelivery.load(id)
+      if (checkRuntime !== null) return checkRuntime
       // Caliper's own folder is outside the project's fs.allow, so read it here.
       if (id.startsWith(CLIENT_DIR)) return readFileSync(id, "utf8")
       const taken = overlay.load.call(this, id)
@@ -231,6 +239,8 @@ function createSession(server, root, options, env, overlay) {
 
   const base = server.config.base.replace(/\/$/, "")
   const store = createTakeStore(root)
+  const sourceRevision = createSourceRevision({ root, store, cacheDir: server.config.cacheDir })
+  for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) server.watcher.on(event, sourceRevision.invalidate)
 
   // The code pane follows every file on disk: the real files and the takes' copies.
   /** @param {string} file */
@@ -323,7 +333,16 @@ function createSession(server, root, options, env, overlay) {
     }
     if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
     if (path === "/") return send(response, 200, "text/html", chromeHtml)
-    if (path === "/project.json") return send(response, 200, "application/json", (await load()).json)
+    if (["/project.json", "/check-source", "/check-revision"].includes(path)) {
+      const take = url.searchParams.get("take") ?? undefined
+      if (take !== undefined && (!isTakeId(take) || store.record(take) === null)) return send(response, 404, "application/json", JSON.stringify({ error: "Take does not exist." }))
+      if (path === "/check-source") return send(response, 200, "application/json", JSON.stringify(checkSource({ store, revision: sourceRevision, take })))
+      if (path === "/check-revision") return send(response, 200, "application/json", JSON.stringify(sourceRevision.stamp({ take })))
+      // Keep the session's project and the discovery response on the same revision.
+      current = null
+      const { project } = await load()
+      return send(response, 200, "application/json", JSON.stringify({ ...project, parts: take === undefined ? project.parts : takeParts(store, take, project.parts) }))
+    }
     if (path === "/events") return openStream(response, (await load()).json)
     if (path === "/frame") {
       const params = url.searchParams
@@ -408,9 +427,13 @@ function createSession(server, root, options, env, overlay) {
     clearTimeout(takesTimer)
     for (const stream of streams) stream.end()
     streams.clear()
-    for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) server.watcher.off(event, checks.invalidate)
+    for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) {
+      server.watcher.off(event, checks.invalidate)
+      server.watcher.off(event, sourceRevision.invalidate)
+    }
+    sourceRevision.close()
     stopLateChanges()
-    await checks.close()
+    await Promise.all([checks.close(), takes.close()])
     // Vite awaits closeBundle before a test or caller removes the project root.
     // Await a derivation already in flight as well as cancelling queued work.
     await current?.catch(() => {})

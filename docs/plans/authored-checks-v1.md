@@ -1,6 +1,6 @@
-# Authored checks v1: proposed contract and implementation plan
+# Authored checks v1: approved contract and implementation plan
 
-Status: proposed for approval. No authored-check runtime has shipped. This plan follows the verified [modular/full-runtime comparison](../research/vitest-browser-mode.md). It does not reopen the browser-input decision or change ordinary Replace.
+Status: approved and implemented. Verification details follow the plan below. The plan follows the [modular/full-runtime comparison](../research/vitest-browser-mode.md). It does not reopen the browser-input decision or change ordinary Replace.
 
 ## Deliverable
 
@@ -30,7 +30,7 @@ export const checks = {
 } satisfies StateChecks
 ```
 
-This is proposed syntax, not supported syntax today. A check returns normally on success and throws or rejects on failure. A successful return does not prove the author wrote a useful assertion.
+This is the supported v1 syntax. A check returns normally on success and throws or rejects on failure. A successful return does not prove the author wrote a useful assertion.
 
 | Context member | Contract |
 |---|---|
@@ -76,7 +76,7 @@ No new product dev server, test config file, or manifest is required. The CLI st
 6. Finish with an assertion outcome, observed browser errors, elapsed time, and a bounded attempt to capture an interaction screenshot. Missing screenshot evidence is explicit and does not erase an assertion failure.
 7. Dispose handles and close the context on every path. After the run, close Chromium. Source invalidation, user cancellation, CLI interruption, and Vite shutdown stop queued checks and tear down active ones.
 
-Proposed starting budgets are 15 seconds for browser startup, 15 seconds per check including frame load and helper imports, and 2 seconds per input operation. Each action is also bounded by the remaining check budget. Cleanup gets a separate 5-second budget before terminating the owned Chromium process through a public process handle. Verify that termination path before promising a hard deadline; do not use Playwright's private fields.
+Starting budgets are 15 seconds for browser startup, 15 seconds per check including frame load and helper imports, and up to 2 seconds per input operation. Each action is also bounded by the remaining check budget. Cleanup gets a separate 5-second budget before terminating the owned Chromium process. The implementation obtains its process identity through the public Chromium SystemInfo protocol. Real hanging/non-yielding callbacks and process-exit probes verify this path without private Playwright fields.
 
 Apply cancellation and finite budgets to the initial render passes too. Otherwise Stop can hang before authored execution starts. Propagate caller cancellation through the UI request, CLI signals, and agent tool AbortSignal into the same runner.
 
@@ -122,7 +122,7 @@ Keep controls reachable through the current container-based layout and scrolling
 
 ## Build slices and acceptance gates
 
-Each slice uses one real failing public-contract test before its implementation. Proposed test boundaries are discovery/types, execution through the real Vite/frame route, and the public UI/CLI/agent reporting paths. Internal helper call sequences are not the test contract.
+Each slice uses one real failing public-contract test before its implementation. Approved test boundaries are discovery/types, execution through the real Vite/frame route, and the public UI/CLI/agent reporting paths. Internal helper call sequences are not the test contract.
 
 | Slice | Work | Completion evidence |
 |---|---|---|
@@ -142,3 +142,18 @@ Use a worktree for implementation. Land verified slices by rebase and fast-forwa
 After runtime changes land, restart the linked Pico Vite consumer using its existing project configuration and verify the new plugin is served. Exercise its existing preview and check paths. If Pico has no authored checks, state that limit and use the real temporary/packed consumer for interaction verification rather than inventing Pico action behavior. If deployment is unavailable, report the blocker and the exact restart/verification command.
 
 V1 excludes controller commands, cross-origin or nested-frame input, arbitrary Node checks, full Vitest APIs, source freezing, whole-application network sealing, changed-file consumer inference, and a new CI acceptance policy. Automated coverage starts with Chromium; the existing visible preview support policy does not change.
+
+## Implementation evidence and adjustments
+
+- `test/authored-execution.test.js` first failed because reports remained v1. It now exercises real retry success, assertion failures, independent fresh checks, unchanged visual evidence, and rejection of output aliases into source.
+- `scripts/verify-authored-checks.mjs` covers both viewports, portal input, keyboard input, stale/foreign/concurrent/unawaited input rejection, helper overlays, invalid/no declarations, source changes, timeouts, a non-yielding callback, actual browser-process exit, external browser loss, and cancellation in each visual pass.
+- `scripts/verify-authored-agent-cli.mjs` covers take-only discovery, failed checks with a written report, CLI SIGINT/SIGTERM, and real SDK Stop/close. Playwright's default signal handlers were disabled so Caliper can finish cleanup and emit cancellation JSON.
+- `scripts/verify-authored-ui.mjs` drives real Run, result/image inspection, Stop, rerun, and helper-edit invalidation. It captures wide, narrow-tall, wide-short, small, and embedded-container evidence.
+- `scripts/verify-authored-package.mjs` installs isolated linked and packed consumers without direct assertion dependencies. It verifies original and broken-take outcomes on both devices and that normal previews fetch no check libraries.
+- `scripts/verify-authored-regressions.mjs` retains the frame-commit, composition, checks, checks-UI, expectations, reviewed-alternate, and fast-save browser gates. `scripts/verify-authored-release.mjs` runs the four authored integration gates serially.
+
+Before landing, the full suite passed 328 tests with no failures and no skipped tests under the configured Chromium environment. TypeScript passed. All four authored release gates and all seven existing browser regression gates passed. Linked/packed verification covered eight original/broken-take outcomes and four library-free ordinary previews. UI verification used five container shapes.
+
+The implementation rejects value wildcard re-exports because they can hide imported check declarations. Explicit named exports and type-only wildcards remain available. It also rejects output within product source except `.caliper/checks`, including aliases into source. These restrictions avoid silently losing declarations or invalidating runs through their own output.
+
+The browser keeps Playwright's pipe transport. WebSocket connections timed out under Bun 1.3.3 in a small reproduction, and repeated Bun pipe runs also stalled. Bun callers now send validated jobs to a fixed trusted Node worker; Node callers run directly. Product/check modules remain browser-only. This adds one Node process per Bun run and requires `node` on PATH. Public Chromium SystemInfo supplies the owned process identity for forced teardown. Timeout and non-yielding process cleanup are verified; a stalled CDP ownership handshake before process identity exists is bounded in code but was not independently reproduced. Chromium on Linux is the tested runtime, not a cross-browser or physical-device claim.

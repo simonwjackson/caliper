@@ -1,6 +1,6 @@
 // @ts-check
 import { createHash, randomUUID } from "node:crypto"
-import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs"
+import { lstatSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { Check } from "typebox/value"
 import { json, readJson } from "../http.js"
@@ -8,8 +8,8 @@ import { CheckReportSchema } from "../render/check-contract.js"
 import { approveBaselines, checkJobs } from "../render/checks.js"
 import { planRenders } from "../render/plan.js"
 import { takeParts } from "../takes/parts.js"
-import { TAKES_DIR } from "../takes/store.js"
-import { ApproveCheckSchema, CheckRequestSchema } from "./contract.js"
+import { createSourceRevision } from "./source-revision.js"
+import { ApproveCheckSchema, CancelCheckSchema, CheckProgressSchema, CheckRequestSchema } from "./contract.js"
 
 /** @typedef {import('./contract.js').ChecksView} ChecksView */
 /** @typedef {import('./contract.js').CheckRequest} CheckRequest */
@@ -18,8 +18,6 @@ import { ApproveCheckSchema, CheckRequestSchema } from "./contract.js"
 const digest = bytes => createHash("sha256").update(bytes).digest("hex")
 /** @param {unknown} error */
 const reason = error => error instanceof Error ? error.message : String(error)
-const ignored = new Set(["node_modules", ".git", ".caliper", ".vite", ".worktree", ".worktrees"])
-const generated = new Set(["dist", "build", "coverage"])
 
 /**
  * Session-local reports. Saved evidence stays on disk, but is not loaded on restart.
@@ -41,15 +39,16 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
   let evidence = null
   /** @type {Promise<void> | null} */
   let pending = null
+  /** @type {AbortController | null} */
+  let controller = null
   let starting = false
   let closed = false
   let changed = false
   const root = resolve(store.root)
   const baselines = join(root, ".caliper", "baselines")
   const output = join(root, ".caliper", "checks")
-  const cache = resolve(root, cacheDir ?? "node_modules/.vite")
-  /** @param {string} file */
-  const inCache = file => file === cache || file.startsWith(`${cache}${sep}`)
+  const source = createSourceRevision({ root, cacheDir, store })
+  const fingerprint = source.fingerprint
 
   /** Refuse links in every storage ancestor, even links within the project.
    * @param {string} file @param {string} [boundary]
@@ -67,48 +66,14 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
     return file
   }
 
-  /** Broad source fingerprint: content, names and links, not modification times.
-   * @param {CheckRequest} request
-   */
-  const fingerprint = request => {
-    const hash = createHash("sha256")
-    /** @param {string} directory @param {Set<string>} ancestors */
-    const walk = (directory, ancestors) => {
-      const real = realpathSync(directory)
-      if (ancestors.has(real)) return
-      const next = new Set([...ancestors, real])
-      for (const name of readdirSync(directory).sort()) {
-        if (ignored.has(name) || directory === root && generated.has(name)) continue
-        const file = join(directory, name)
-        if (inCache(file)) continue
-        let stat = lstatSync(file)
-        if (stat.isSymbolicLink()) {
-          hash.update(JSON.stringify([relative(root, file), readlinkSync(file)]))
-          try { stat = lstatSync(realpathSync(file)) } catch { continue }
-        }
-        if (stat.isDirectory()) walk(file, next)
-        else if (stat.isFile()) hash.update(JSON.stringify([relative(root, file), digest(readFileSync(file))]))
-      }
-    }
-    walk(root, new Set())
-    if (request.take !== undefined) {
-      if (store.record(request.take) === null) throw new Error(`Take ${request.take} no longer exists.`)
-      walk(safe(join(root, TAKES_DIR, request.take)), new Set())
-    }
-    return hash.digest("hex")
-  }
   const publish = () => { if (!closed) onChange() }
   /** @param {string} file */
   const invalidate = file => {
-    if (closed || view._tag === "Idle" || view._tag === "Failed") return
-    const absolute = resolve(root, file)
-    const path = relative(root, absolute)
-    if (!path || path.startsWith(`..${sep}`) || isAbsolute(path) || inCache(absolute)) return
-    const segments = path.split(sep)
-    const takePrefix = view.request.take === undefined ? null : `${TAKES_DIR}/${view.request.take}/`
-    const normalized = segments.join("/")
-    const selectedTake = takePrefix !== null && (normalized.startsWith(takePrefix) || normalized === `${TAKES_DIR}/${view.request.take}.json`)
-    if (!selectedTake && (segments.some(segment => ignored.has(segment)) || generated.has(segments[0] ?? ""))) return
+    if (closed) return
+    const request = "request" in view ? view.request : {}
+    const before = source.stamp(request).generation
+    source.invalidate(file)
+    if (view._tag === "Idle" || view._tag === "Failed" || view._tag === "Cancelled" || source.stamp(request).generation === before) return
     changed = true
     if (view._tag === "Ready" && !view.stale) {
       view = { ...view, stale: true }
@@ -138,6 +103,8 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
       const out = safe(join(output, id))
       safe(baselines)
       changed = false
+      controller = new AbortController()
+      const signal = controller.signal
       evidence = null
       view = { _tag: "Running", id, request, startedAt: new Date().toISOString(), total: plan.jobs.length }
       const running = view
@@ -149,15 +116,25 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
           if (!chromium) throw new Error("Set CHROMIUM to a Chromium executable before running checks.")
           const url = serverUrl()
           if (!url) throw new Error("The dev server is not listening yet.")
-          const result = await run({ url, project: original.name, jobs: plan.jobs, out, executablePath: chromium, baselines })
+          const result = await run({ url, project: original.name, jobs: plan.jobs, out, executablePath: chromium, baselines, signal,
+            onProgress: progress => {
+              if (closed || view._tag !== "Running" || view.id !== id || !Check(CheckProgressSchema, progress)) return
+              view = { ...view, progress }
+              publish()
+            },
+          })
           if (closed) return
           const reportPath = safe(resolve(result.reportPath), out)
           const report = JSON.parse(readFileSync(reportPath, "utf8"))
           if (!Check(CheckReportSchema, report)) throw new Error("Invalid saved check report.")
-          if (report.project !== original.name || report.results.length !== plan.jobs.length
-            || report.results.some((item, index) => {
-              const job = plan.jobs[index]
-              return !job || item.part !== job.part || item.state !== job.state || item.device !== job.device || item.take !== job.take
+          const partial = report.version === 2 && report.run.termination !== "Completed"
+          const identities = new Set()
+          if (report.project !== original.name || (!partial && report.results.length !== plan.jobs.length)
+            || report.results.some(item => {
+              const key = JSON.stringify([item.part, item.state, item.device, item.take])
+              const duplicate = identities.has(key)
+              identities.add(key)
+              return duplicate || !plan.jobs.some(job => item.part === job.part && item.state === job.state && item.device === job.device && item.take === job.take)
             })) throw new Error("The check report does not match the requested states and devices.")
           /** @type {Map<string, Artifact>} */
           const images = new Map()
@@ -166,6 +143,15 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
               const file = safe(resolve(/** @type {string} */ (path)), out)
               if (digest(readFileSync(file)) !== hash) throw new Error("Report images changed during checks.")
               images.set(`${index}:${kind}`, { path: file, hash: /** @type {string} */ (hash) })
+            }
+            for (const [checkIndex, check] of (item.authored?.checks ?? []).entries()) {
+              if (!check.image && !check.imageSha256) continue
+              if (!check.image || !check.imageSha256 || !/^[a-f0-9]{64}$/.test(check.imageSha256)) throw new Error("Interaction evidence needs an image and its SHA-256 hash.")
+              const file = safe(resolve(check.image), out)
+              const content = readFileSync(file)
+              if (!file.endsWith(".png") || !content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error("Interaction evidence must be a PNG image.")
+              if (digest(content) !== check.imageSha256) throw new Error("Interaction evidence changed during checks.")
+              images.set(`${index}:authored:${checkIndex}`, { path: file, hash: check.imageSha256 })
             }
             const baseline = item.checks.find(check => check.name === "baseline")
             if (baseline?.image) {
@@ -178,13 +164,14 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
           }
           // Save the copied baseline location, so later approval cannot rewrite history.
           writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
-          let stale = changed
+          let stale = changed || (report.version === 2 && report.run.stale)
           try { stale ||= before !== fingerprint(request) } catch { stale = true }
           evidence = { id, report: { path: reportPath, hash: digest(readFileSync(reportPath)) }, images, fingerprint: before }
           view = { _tag: "Ready", id, request, report, stale, approved: [] }
         } catch (error) {
-          if (!closed) view = { _tag: "Failed", id, request, reason: reason(error) }
+          if (!closed) view = { _tag: error instanceof Error && error.name === "AbortError" ? "Cancelled" : "Failed", id, request, reason: reason(error) }
         } finally {
+          controller = null
           pending = null
           publish()
         }
@@ -208,8 +195,8 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
    * @param {import('node:http').ServerResponse} response
    */
   const handle = async (path, url, request, response) => {
-    if (!["/checks", "/checks/run", "/checks/approve", "/checks/image", "/checks/report"].includes(path)) return false
-    const write = path === "/checks/run" || path === "/checks/approve"
+    if (!["/checks", "/checks/run", "/checks/cancel", "/checks/approve", "/checks/image", "/checks/report"].includes(path)) return false
+    const write = path === "/checks/run" || path === "/checks/cancel" || path === "/checks/approve"
     if (request.method !== (write ? "POST" : "GET")) {
       json(response, 405, { error: write ? "Use POST." : "Use GET." })
       return true
@@ -224,6 +211,14 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
         if (!Check(CheckRequestSchema, body)) throw new Error("Name a part and state, with an optional take. No other fields are allowed.")
         if (starting || pending !== null) { json(response, 409, { error: "Checks are already running." }); return true }
         json(response, 202, await start(body))
+      } else if (path === "/checks/cancel") {
+        const body = await readJson(request)
+        if (!Check(CancelCheckSchema, body)) throw new Error("Stop needs only the current run id.")
+        if (view._tag !== "Running" || view.id !== body.id || controller === null) throw new Error("That run is no longer running.")
+        view = { ...view, stopping: true }
+        controller.abort(new DOMException("Stopped by user.", "AbortError"))
+        publish()
+        json(response, 202, view)
       } else if (path === "/checks/approve") {
         const body = await readJson(request)
         if (!Check(ApproveCheckSchema, body)) throw new Error("Approval needs a run id, an integer result index and reviewed: true.")
@@ -257,7 +252,10 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
         if (path === "/checks/image") {
           const index = url.searchParams.get("index") ?? ""
           const kind = url.searchParams.get("kind") ?? ""
-          const image = /^(0|[1-9][0-9]*)$/.test(index) && ["first", "repeat", "baseline"].includes(kind) ? evidence.images.get(`${index}:${kind}`) : undefined
+          const checkIndex = url.searchParams.get("check") ?? ""
+          const key = kind === "authored" && /^(0|[1-9][0-9]*)$/.test(checkIndex) ? `authored:${checkIndex}` : kind
+          const allowed = ["first", "repeat", "baseline"].includes(kind) || kind === "authored" && key !== kind
+          const image = /^(0|[1-9][0-9]*)$/.test(index) && allowed ? evidence.images.get(`${index}:${key}`) : undefined
           if (!image) { json(response, 404, { error: "That saved image is not available." }); return true }
           artifact = image
         }
@@ -272,6 +270,11 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
   return {
     handle, invalidate,
     snapshot: () => view,
-    close: async () => { closed = true; await pending },
+    close: async () => {
+      closed = true
+      controller?.abort(new DOMException("Checks server is closing.", "AbortError"))
+      await pending
+      source.close()
+    },
   }
 }

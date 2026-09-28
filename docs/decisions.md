@@ -193,13 +193,103 @@ dependencies. A Chai dependency does not disqualify a module. Chai-style chains
 are not the target authoring syntax. Evaluate typed DOM matchers, browser
 compatibility and useful failure messages, not package age alone.
 
-This is an input-boundary decision, not an implemented feature or an approved
-complete API. Export syntax, execution details and libraries remain open.
-The reporting-only Replace policy remains unchanged.
+On 2026-09-28 the user approved the complete
+[authored-check v1 contract](plans/authored-checks-v1.md), informed by the
+[library-fit spike](research/authored-checks.md) and
+[modular/full-runtime comparison](research/vitest-browser-mode.md).
+The implementation uses the approved modular contract. Verification covers the
+real Vite/frame route, both device sizes, linked/packed delivery, and all three
+reporting paths. Chromium-only evidence does not establish physical-device input
+or other-browser behavior.
+The reporting-only Replace policy and existing reviewed alternate gate stay
+unchanged. This extends the earlier input-boundary decision; it does not replace
+product-owned scenarios from decision 18.
 
-The [library-fit spike](research/authored-checks.md) tested synthetic input,
-driver-side checks and a browser-local check with a bounded Playwright input
-bridge. Its results support further bridge work, not a production API decision.
+A part may export lowercase literal `checks`, keyed first by state export name
+and then by stable, nonblank check name. `default` means the default export.
+Inline arrow functions, function expressions, and methods are accepted, including
+`as const` and `satisfies` wrappers. Static discovery rejects computed keys,
+spreads, getters, duplicates, unknown states, imported maps, and nonfunctions with
+file/line diagnostics. Value wildcard re-exports are also rejected because they
+can hide imported checks; explicit named exports and type-only wildcards remain
+available. This conservatively rejects unrelated value wildcard exports too.
+Reusable browser-safe helpers remain callable inside a
+callback, including lazy imports that follow take overlays. Public `StateChecks`
+types come from `@simonwjackson/caliper/checks` without a second state-name list.
+
+The browser-local context provides Testing Library `canvas`, `within`, and
+`waitFor`; synchronous standalone Vitest `expect` with jest-dom; and awaited
+Playwright-backed `input.click(element)`, `input.type(element, text)`, and
+`input.press(element, key)`. The helper modules resolve from Caliper's installation
+and load only for checks. No full Vitest/Jest runner, synthetic user-event input,
+Node-owned product execution, second dev server, or new config is introduced.
+
+Queries default to `#caliper-host`. Input can target product portals in the same
+frame body. It rejects foreign documents, child iframes, detached elements, and
+Caliper diagnostic controls. Authors must re-query after re-renders and inside
+`waitFor`; there is no automatic action replay or Caliper locator language.
+Covered/disabled targets, unintended focus changes, and concurrent input fail.
+These are targeting guards, not a security sandbox. Navigation testing and
+product-command dispatch remain out of scope.
+
+Each named check runs serially in a fresh Chromium context at the chosen device
+viewport and scale factor 1, after a non-Loading frame verdict. Empty content can
+be valid; failed frames block execution. Unlike initial-state screenshot renders,
+authored checks do not fast-forward animations. Startup, checks, input, evidence,
+and cleanup are bounded. Stop, CLI signals, source invalidation, and Vite shutdown
+cancel queued and active browser work, including the initial visual passes.
+Real hanging and non-yielding callback tests verify deadlines and owned-process
+exit. The driver uses Playwright's pipe transport and Chromium's public
+`SystemInfo.getProcessInfo` to identify the owned browser for last-resort
+termination. Playwright WebSocket connection timed out under Bun 1.3.3 while the
+same probe worked under Node. Repeated Bun pipe runs also stalled intermittently.
+When Vite runs under Bun, Caliper runs browser work in a fixed trusted Node worker
+with schema-validated jobs, progress, cancellation, and results over IPC. Product
+modules still run only in Chromium. Node-hosted Vite uses the driver directly.
+This costs one Node process per run under Bun and requires `node` on PATH.
+It does not create another Vite server or import take code into Node. CDP ownership
+setup is bounded and cancellable. No private Playwright fields are used.
+
+Schema-owned report v2 retains initial-state images and adds separate named
+authored results, source locations, reasons, duration, observed errors, and
+optional interaction images. `Passed` means a normal callback return without
+observed errors and with current source identity. `Failed` includes assertion,
+input, declaration, import, browser, and timeout failures. `Inconclusive` records
+cancellation, changed sources, navigation, or lost infrastructure. `NotRun` records
+missing declarations or work that never started. A callback return does not prove
+a useful assertion. Product expectations cannot waive authored failures;
+`Accepted` remains an automatic-findings status. Old v1 reports stay readable
+as visual evidence, never interaction coverage.
+
+The UI, CLI, and agent use one source-revision and reporting policy. Source or
+helper changes stop remaining work and retain completed observations as stale
+history. This is not source freezing. Take-aware server discovery includes
+new take states and parts. Reports disclose the take, edited files, and literal
+declaration changes; unchanged callback text does not prove unchanged helpers.
+Passing take-defined expectations does not claim preservation of the original
+contract. Output inside the product must be under `.caliper/checks`; other
+project-local output would count as a source edit and is rejected before writing.
+Output outside the product remains supported. This restriction avoids silently
+excluding a source directory from invalidation.
+Cancellation before complete visual evidence must not fabricate images
+or let an empty result list imply success.
+
+The Checks window exposes named results, reasons, progress, provenance, and Stop;
+closing the dialog alone does not cancel. The CLI includes declarations and
+problems in `--list`, keeps `--check` exit 0 as “report written,” and exits
+nonzero on interruption after cleanup. The agent forwards the SDK AbortSignal,
+keeps initial-state images first within its four-image limit, and exposes omitted
+interaction evidence through image and report paths. Baseline approval still
+concerns initial-state visual intent only.
+
+Costs: each authored check adds browser work and another scenario render.
+Caliper owns input transport, focus validation, deadlines, cleanup, lazy dependency
+delivery, and conservative source invalidation. Authors own scenario inputs,
+action behavior, assertions, and coverage. Linked and packed consumers, fresh
+context isolation, portals, action guards, hanging callbacks, source/take identity,
+legacy report compatibility, all three public reporting paths, and cancellation
+have real-browser or public-contract gates in the repository. Source identity is
+conservative, not a filesystem snapshot or a network/security sandbox.
 
 Cost: browser input does not cover every controller or native-device path.
 Those paths retain product-level tests. Add a product-command interface only

@@ -55,7 +55,7 @@ try {
   await open()
   await dialog.getByText("No checks run yet", { exact: true }).waitFor()
   await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
-  await dialog.getByText(/Checking 10 state\/device renders twice/).waitFor()
+  await dialog.getByText(/(?:Checking 10 state\/device results|(?:Initial|Repeat) renders: \d+ of 10)/).waitFor()
   await dialog.getByRole("button", { name: "Close checks" }).click()
   // Run continues outside the dialog. Reopening and reloading retain server state.
   await page.waitForFunction(() => document.querySelector(".cal-checks-toggle")?.textContent?.includes("failed"), null, { timeout: 120_000 })
@@ -94,7 +94,7 @@ try {
   assert.equal((await getView())._tag, "Ready")
 
   await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
-  await dialog.getByText(/Checking 10 state\/device renders twice/).waitFor()
+  await dialog.getByText(/(?:Checking 10 state\/device results|(?:Initial|Repeat) renders: \d+ of 10)/).waitFor()
   await dialog.locator(".cal-check-summary").waitFor({ timeout: 120_000 })
   ready = await getView()
   assert(ready._tag === "Ready")
@@ -146,7 +146,7 @@ try {
   await page.locator(`.cal-state[data-take="${take}"]`).click()
   await open()
   await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
-  await dialog.getByText(/Checking 2 state\/device renders twice/).waitFor()
+  await dialog.getByText(/(?:Checking 2 state\/device results|(?:Initial|Repeat) renders: \d+ of 2)/).waitFor()
   await dialog.locator(".cal-check-summary").waitFor({ timeout: 120_000 })
   ready = await getView()
   assert(ready._tag === "Ready" && ready.request.take === take)

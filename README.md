@@ -405,7 +405,9 @@ accepted baselines remain in `<project>/.caliper/baselines`. UI evidence stays i
 The UI does not freeze files while checks run or discover every affected consumer.
 
 The same reporting engine is available through the CLI and the agent's render
-tool. It does not run authored interaction tests.
+tool. The [authored-check contract](#author-browser-input-checks) below is approved.
+It runs through the same product frames; see the
+[implementation and verification plan](docs/plans/authored-checks-v1.md).
 
 ```sh
 CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
@@ -413,7 +415,10 @@ CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
   --baselines /path/to/project/.caliper/baselines --out /tmp/caliper-checks
 ```
 
-Each run writes a unique folder with `report.json` and two sets of PNGs. The JSON
+Each run writes a unique folder with `report.json` and two sets of PNGs.
+Use an output directory outside the product or under `<project>/.caliper/checks`.
+Other project-local output directories are rejected before writing: their generated
+files would invalidate the source revision being checked. The JSON
 on stdout includes the report path, raw first-render results, and checks. Each
 check reports one of these statuses:
 
@@ -427,7 +432,8 @@ check reports one of these statuses:
 | `NotRun` | No baseline directory was supplied. |
 
 With `--check`, exit 0 means the report was written, **not that it passed**.
-Setup and browser failures exit 2. Without `--check`, the existing render exit
+SIGINT and SIGTERM cancel work, wait for browser cleanup, and exit 130 and 143.
+Setup and browser failures without a report exit 2. Without `--check`, the existing render exit
 policy stays unchanged. `--part '*'` selects every discovered part; `--state '*'`
 selects every declared state of those parts. A selected state is not evidence
 about unselected states or undeclared consumers.
@@ -496,6 +502,117 @@ stale empty warnings. A committed null Suspense fallback is still observed as em
 Caliper does not infer when all product data has settled. Checks version 2 changes
 the recorded environment, so older visual baselines need fresh review.
 
+### Author browser-input checks
+
+Add an optional lowercase literal `checks` export to the existing part file.
+Outer keys are real state export names; `default` means the default export.
+Inner keys are stable, nonblank check names. Product scenarios still own their
+local data and real action behavior. Caliper does not make a no-op handler work.
+
+```tsx
+import type { StateChecks } from "@simonwjackson/caliper/checks"
+
+// This part already exports an Error state with a working retry action.
+export const checks = {
+  Error: {
+    "retry loads the library": async ({ canvas, input, expect, waitFor }) => {
+      await input.click(canvas.getByRole("button", { name: "Try again" }))
+      await waitFor(() => {
+        expect(canvas.getByRole("heading", { name: "Library" })).toBeVisible()
+      })
+    },
+  },
+} satisfies StateChecks
+```
+
+No test config, manifest, or second dev server is required. The type import is
+sufficient for a simple check; Caliper supplies runtime helpers lazily when a
+check runs, not during an ordinary preview. Product callbacks execute in the
+product browser document, never through a Node or SSR import.
+
+| Helper | Use and limit |
+|---|---|
+| `canvas` | Testing Library queries scoped to `#caliper-host`, excluding Caliper diagnostics. Prefer role and accessible-name queries. |
+| `within(root)` | Standard Testing Library queries scoped to a product root, including a portal outside the host. |
+| `input.click(element)` | An awaited Playwright-backed click. Covered and disabled targets fail actionability checks. |
+| `input.type(element, text)` | Focus and type into that element. An unintended focus change fails rather than typing elsewhere. |
+| `input.press(element, key)` | Send one Playwright key expression to that element, for example `"Enter"`. |
+| `expect(value)` | Synchronous typed Vitest assertions with jest-dom matchers. This is not the Vitest runner: no snapshots or `expect.poll`. |
+| `waitFor(callback)` | Retry assertions within the overall check deadline. Re-query inside the callback. |
+
+Input accepts DOM elements, not locators. A saved element can become detached
+after a re-render. **Re-query immediately before each action.** Await each input
+operation; concurrent input is rejected. Caliper does not replay partial or failed
+actions. Product portals in the same frame body are valid targets. Another
+document, a child iframe, detached nodes, and Caliper-owned diagnostic controls
+are not. These guards are not a security sandbox. Unexpected navigation makes
+the check inconclusive; v1 has no navigation-testing or product-command API.
+
+Discovery reads source structure and file/line locations without executing code.
+Use direct arrow functions, function expressions, or methods as check values.
+`as const` and `satisfies` wrappers are supported. Computed keys, spreads, getters,
+duplicate names, unknown states, imported maps, and nonfunction values produce
+failed declaration results. Put reusable browser-safe behavior inside an inline
+callback; its imports, including lazy imports, follow the selected take.
+Value wildcard re-exports such as `export * from "./helpers"` are rejected because
+static discovery cannot tell whether they hide an imported `checks` export. Use
+explicit named exports instead. Type-only wildcard exports remain allowed.
+
+Run checks from **Checks**, `caliper-render --check`, or the agent's
+`render({ checks: true })`. `--list --take <id>` lists that take's states,
+`authoredChecks`, and `authoredCheckProblems`. The Checks window
+includes named results, reasons, progress, and **Stop**. Closing the window does
+not cancel a run. Agent **Stop** and Vite shutdown also await render cleanup.
+
+Each named check runs serially in a fresh Chromium context at the chosen device
+viewport, with a scale factor of 1. It waits for the frame verdict before calling
+the callback. Failed frames block checks; empty content can be a valid starting
+point. Authored execution does not fast-forward animations. Input operations and
+the full check have finite deadlines, including frame and helper loading.
+Startup and each check allow 15 seconds; input allows up to 2 seconds. Evidence
+capture is bounded separately. Cleanup gets 5 seconds before terminating the owned
+Chromium process. Caliper obtains that process identity through Chromium's public
+SystemInfo protocol, not private Playwright fields. Interrupted input skips image
+capture so cleanup can start immediately. Browser execution uses Node. If Vite
+runs under Bun, a trusted Node worker receives validated jobs and returns progress
+and results; `node` must be on PATH. This avoids intermittent Playwright transport
+stalls observed under Bun. The worker never imports product or take code.
+
+| Authored status | Meaning |
+|---|---|
+| `Passed` | The callback returned without an observed error and the source identity is current. This does not prove it contained a useful assertion. |
+| `Failed` | An assertion, input, callback, declaration, import, browser error, or timeout occurred. |
+| `Inconclusive` | Cancellation, changed sources, unexpected navigation, or lost infrastructure prevented completion. |
+| `NotRun` | No check was declared, or queued work never started. This is not an interaction pass. |
+
+Product `expectations` cannot waive authored failures. `Accepted` describes only
+automatic findings. **Neither authored checks nor their absence add a Replace
+gate.** The reviewed alternate policy also stays unchanged.
+
+Version 2 reports keep initial-state render evidence and authored results separate.
+Each authored result names the check and source location, status, reason, elapsed
+time, errors, and any interaction image. A failed evidence capture is explicit.
+Interaction images cannot replace or approve initial-state baselines. The agent
+keeps its four-image limit: initial-state images come first, then interaction
+images if room remains. Results retain image paths and `checkReport` for omitted
+evidence. `checkRun` exposes run termination and stale state in agent results.
+
+Reports record source revision, selected take, edited files, and declaration
+changes. Other edited modules can change helper behavior even when callback text
+is unchanged. Passing take-defined checks does not prove the original contract
+was preserved. Source changes stop remaining checks and retain completed
+observations as stale history, not a current pass. This is invalidation, not a
+frozen filesystem snapshot. Cancellation before a complete visual result does
+not fabricate images or imply success. Old v1 reports remain visual evidence,
+not authored-check coverage.
+
+Costs: each check adds a render and browser work. Authors must maintain scenario
+inputs, action behavior, and assertions. Coverage includes only the declared
+states, devices, and checks; it does not prove hermeticity, network isolation,
+every consumer, controller/native-device input, or all theoretical states.
+Automated authored coverage starts with Chromium. Package delivery, lifecycle,
+all public paths, and deployment still need the release gates named above.
+
 ### Approve reviewed images
 
 Open both PNGs for every state in the saved report. If they show the intended
@@ -561,9 +678,14 @@ CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/t
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium ./scripts/verify-authored-agent-cli.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks-ui.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-expectations.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-frame-commit.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-authored-checks.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-authored-agent-cli.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-authored-ui.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-authored-package.mjs
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 CHROMIUM=/path/to/chromium node scripts/verify-fast-saves.mjs
 ```

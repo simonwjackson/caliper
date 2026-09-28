@@ -1,5 +1,6 @@
 // @ts-check
 import { Type } from "typebox"
+import { AuthoredResultSchema, CheckRunSchema } from "../authored/contract.js"
 
 export const CheckSchema = Type.Object({
   name: Type.Union([Type.Literal("render"), Type.Literal("browser"), Type.Literal("spill"), Type.Literal("accessibility"), Type.Literal("determinism"), Type.Literal("baseline"), Type.Literal("expectations")]),
@@ -19,12 +20,23 @@ export const CheckResultSchema = Type.Object({
   viewport: Type.Object({ width: Type.Number(), height: Type.Number() }),
   png: Type.String(), repeatPng: Type.String(), sha256: Digest, repeatSha256: Digest,
   checks: Type.Array(CheckSchema),
+  authored: Type.Optional(AuthoredResultSchema),
 })
-export const CheckReportSchema = Type.Object({
-  version: Type.Literal(1), project: Type.String({ minLength: 1 }), environment: Type.String({ minLength: 1 }),
+const reportFields = {
+  project: Type.String({ minLength: 1 }), environment: Type.String({ minLength: 1 }),
   createdAt: Type.String(), coverage: Type.String(),
-  results: Type.Array(CheckResultSchema, { minItems: 1 }),
-})
+}
+// Saved v1 reports remain valid for baseline review. They contain no authored coverage.
+export const CheckReportSchema = Type.Union([
+  Type.Object({
+    version: Type.Literal(1), ...reportFields,
+    results: Type.Array(Type.Object({ ...CheckResultSchema.properties, authored: Type.Optional(Type.Never()) }), { minItems: 1 }),
+  }),
+  Type.Object({
+    version: Type.Literal(2), ...reportFields, run: CheckRunSchema,
+    results: Type.Array(Type.Object({ ...CheckResultSchema.properties, authored: AuthoredResultSchema }), { minItems: 1 }),
+  }),
+])
 export const BaselineSchema = Type.Object({
   version: Type.Literal(1), project: Type.String(), environment: Type.String(),
   part: Type.String(), state: Type.String(), device: Type.String(),

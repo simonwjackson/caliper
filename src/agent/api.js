@@ -50,6 +50,17 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  */
 export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange }) {
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
+  const shutdown = new AbortController()
+  /** @type {Set<Promise<unknown>>} */
+  const rendering = new Set()
+  /** @template T @param {() => Promise<T>} run @returns {Promise<T>} */
+  const trackRender = async run => {
+    shutdown.signal.throwIfAborted()
+    const pending = run()
+    rendering.add(pending)
+    try { return await pending }
+    finally { rendering.delete(pending) }
+  }
   const engine = () => {
     if (connection === null) throw new Error(status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.")
     return connectEngine(connection)
@@ -86,7 +97,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
     const url = serverUrl()
     if (url === null) throw new Error("The dev server is not listening yet.")
-    return renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium })
+    return trackRender(() => renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium, signal: shutdown.signal }))
   }
 
   const agents = createTakeAgents({
@@ -100,9 +111,16 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
       const url = serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
-      const input = { url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium }
-      if (request.checks) return (await checkJobs({ ...input, project: original.name, baselines: join(store.root, ".caliper", "baselines") })).results
-      return renderJobs(input)
+      const signal = request.signal ? AbortSignal.any([shutdown.signal, request.signal]) : shutdown.signal
+      const input = { url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium, signal }
+      return trackRender(async () => {
+        signal.throwIfAborted()
+        if (!request.checks) return renderJobs(input)
+        const checked = await checkJobs({ ...input, project: original.name, baselines: join(store.root, ".caliper", "baselines") })
+        const run = "run" in checked.report ? checked.report.run : undefined
+        if (checked.results.length === 0) throw new Error(`Checks produced no complete visual results. Run: ${JSON.stringify(run)}. Report: ${checked.reportPath}`)
+        return checked.results.map(result => ({ ...result, checkReport: checked.reportPath, ...(run === undefined ? {} : { checkRun: run }) }))
+      })
     },
     onChange,
   })
@@ -127,8 +145,8 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         const url = serverUrl()
         if (!url) throw new Error("The dev server is not listening yet.")
         const jobs = original.parts.flatMap(part => part.states.flatMap(state => DEVICES.map(device => ({ part: part.file, state: state.export, device: device.id }))))
-        const originals = () => renderJobs({ url, jobs, out: join(renderDir, `check-${take}-original`), executablePath: chromium })
-        const proposed = () => renderJobs({ url, jobs: jobs.map(job => ({ ...job, take })), out: join(renderDir, `check-${take}-proposed`), executablePath: chromium })
+        const originals = () => trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `check-${take}-original`), executablePath: chromium, signal: shutdown.signal }))
+        const proposed = () => trackRender(() => renderJobs({ url, jobs: jobs.map(job => ({ ...job, take })), out: join(renderDir, `check-${take}-proposed`), executablePath: chromium, signal: shutdown.signal }))
         return verifyIntegration({ originals, proposed, alternate: () => renderPart(proposal.preview.part, { state: proposal.preview.state, devices: ["*"], take }) })
       })
     } finally {
@@ -188,6 +206,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     try {
       // A save to a take carries a whole file.
       const body = await readJson(request, path.endsWith("/file") ? MAX_FILE_BODY : MAX_BODY)
+      shutdown.signal.throwIfAborted()
       if (path === "/takes") {
         const ask = await validAsk(body)
         json(response, 201, { take: agents.start({ ...ask, ...validDirection(body) }) })
@@ -225,13 +244,13 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         agents.follow(take, validPrompt(body))
         json(response, 200, { take })
       } else if (action === "stop") {
-        agents.stop(take)
+        await agents.stop(take)
         json(response, 200, { take })
       } else if (action === "accept") {
         validateProposedContext(take)
         json(response, 200, { take, files: agents.accept(take) })
       } else if (action === "discard") {
-        agents.discard(take)
+        await agents.discard(take)
         json(response, 200, { take })
       } else {
         json(response, 404, { error: `Takes have no action "${action}".` })
@@ -268,7 +287,13 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     return target
   }
 
-  return { handle, snapshot }
+  // Vite must await this before declaring shutdown complete.
+  const close = async () => {
+    shutdown.abort(new Error("The Vite server is closing."))
+    await Promise.all([agents.close(), Promise.allSettled([...rendering])])
+  }
+
+  return { handle, snapshot, close }
 }
 
 /**

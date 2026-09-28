@@ -179,7 +179,7 @@ try {
   const open = async () => { await (await reveal(page, page.locator(".cal-checks-toggle"))).click(); await dialog.waitFor() }
   const runUi = async () => {
     await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
-    await dialog.getByText(/Checking 2 state\/device renders twice/).waitFor()
+    await dialog.getByText(/(?:Checking 2 state\/device results|(?:Initial|Repeat) renders: \d+ of 2)/).waitFor()
     await dialog.locator(".cal-check-summary").waitFor({ timeout: 120_000 })
     const ready = /** @type {import('../src/checks/contract.js').ChecksView} */ (await (await fetch(`${base}checks`)).json())
     assert(ready._tag === "Ready")

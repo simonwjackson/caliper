@@ -4,8 +4,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFile
 import { join, resolve } from "node:path"
 import { Check } from "typebox/value"
 import { BaselineSchema, CheckReportSchema } from "./check-contract.js"
-import { renderJobs } from "./render.js"
+import { renderJobs, RenderInterrupted } from "./render.js"
 import { applyExpectations } from "./expectations.js"
+import { runAuthoredJobs } from "../authored/execute.js"
+import { validateCheckOutput } from "../checks/output.js"
+import { runNodeWorker } from "./node-worker.js"
+import { readCheckSource, settledCheckSource, sameRevision, watchCheckSource } from "../authored/source-client.js"
 
 /** @typedef {import("./render.js").RenderResult} RenderResult */
 /** @typedef {import("./check-contract.js").CheckResult} CheckResult */
@@ -16,20 +20,76 @@ const COVERAGE = "Only the listed states and devices were checked. These observa
 /**
  * Render twice in fresh browser contexts. Unique run folders retain both images
  * for review and prevent concurrent runs from replacing each other's evidence.
- * @param {{ url: string, project: string, jobs: readonly import("./plan.js").RenderJob[], out: string, executablePath: string, baselines?: string }} input
+ * @param {{ url: string, project: string, jobs: readonly import("./plan.js").RenderJob[], out: string, executablePath: string, baselines?: string, signal?:AbortSignal, onProgress?:(progress:{phase:string,completed:number,total:number})=>void }} input
+ * @returns {Promise<{results:RenderResult[], report:CheckReport, reportPath:string}>}
  */
-export async function checkJobs({ url, project, jobs, out, executablePath, baselines }) {
+export async function checkJobs({ url, project, jobs, out, executablePath, baselines, signal: callerSignal, onProgress }) {
+  if (process.versions.bun) {
+    const result = await runNodeWorker({ type: "checks", input: { url, project, jobs: [...jobs], out, executablePath, ...(baselines === undefined ? {} : { baselines }) } }, { signal: callerSignal, onProgress })
+    if (result.type !== "checks") throw new Error("Browser worker returned the wrong operation.")
+    return { results: result.results, report: result.report, reportPath: result.reportPath }
+  }
   if (jobs.length === 0) throw new Error("No states selected for checks.")
   if (new Set(jobs.map(job => JSON.stringify(job))).size !== jobs.length) throw new Error("Duplicate render jobs in check request.")
+  const take = jobs[0]?.take
+  if (jobs.some(job => job.take !== take)) throw new Error("A check run must use one take or the original files, not mixed overlays.")
+  const source = await settledCheckSource(url, take, callerSignal)
+  validateCheckOutput(source.root, out)
   mkdirSync(out, { recursive: true })
   const run = mkdtempSync(join(resolve(out), "check-"))
-  const first = await renderJobs({ url, jobs, out: join(run, "first"), executablePath, audit: true })
-  const second = await renderJobs({ url, jobs, out: join(run, "repeat"), executablePath, audit: true })
-  const report = compareRenders({ project, first, second, ...(baselines === undefined ? {} : { baselines }) })
-  const reportPath = join(run, "report.json")
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
-  const results = first.map((result, index) => ({ ...result, checks: report.results[index]?.checks ?? [], checkReport: reportPath }))
-  return { results, report, reportPath }
+  const monitor = watchCheckSource(url, take, source.revision)
+  const signal = AbortSignal.any([monitor.signal, ...(callerSignal ? [callerSignal] : [])])
+  /** @type {RenderResult[]} */
+  let first = []
+  /** @type {'first'|'repeat'|'authored'} */
+  let phase = "first"
+  /** @type {RenderResult[]} */
+  let second = []
+  /** @type {import('../authored/contract.js').AuthoredResult[]} */
+  let authored = []
+  try {
+    onProgress?.({ phase: "Initial renders", completed: 0, total: jobs.length })
+    first = await renderJobs({ url, jobs, out: join(run, "first"), executablePath, audit: true, signal })
+    phase = "repeat"
+    onProgress?.({ phase: "Repeat renders", completed: 0, total: jobs.length })
+    second = await renderJobs({ url, jobs, out: join(run, "repeat"), executablePath, audit: true, signal })
+    const visual = compareRenders({ project, first, second, ...(baselines === undefined ? {} : { baselines }) })
+    phase = "authored"
+    const execution = await runAuthoredJobs({ url, jobs, out: join(run, "authored"), executablePath, source, signal, onProgress })
+    authored = execution.results
+    if (!signal.aborted) {
+      try {
+        const after = await readCheckSource(url, take, signal)
+        if (!sameRevision(source.revision, after.revision)) monitor.invalidate()
+      } catch (error) { if (!signal.aborted) monitor.unavailable(error) }
+    }
+    const reason = signal.aborted && signal.reason instanceof Error ? signal.reason.name : ""
+    /** @type {import('../authored/contract.js').CheckRun} */
+    const identity = { id: randomUUID(), source: source.revision, stale: monitor.signal.aborted,
+      termination: !signal.aborted ? execution.failure ? "Infrastructure" : "Completed" : reason === "SourceChanged" ? "SourceChanged" : reason === "InfrastructureError" ? "Infrastructure" : "Cancelled" }
+    const report = { ...visual, version: /** @type {const} */ (2), run: identity,
+      coverage: "Only the listed states, devices and named checks were evaluated. No authored checks means NotRun, not an interaction pass. This does not prove hermeticity, unchanged undeclared consumers, or every possible interaction.",
+      results: visual.results.map((result, index) => ({ ...result, authored: /** @type {import('../authored/contract.js').AuthoredResult} */ (authored[index]) })) }
+    const reportPath = join(run, "report.json")
+    writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+    const results = first.map((result, index) => ({ ...result, checks: report.results[index]?.checks ?? [], authored: authored[index], checkRun: identity, checkReport: reportPath }))
+    return { results, report, reportPath }
+  } catch (error) {
+    // Initial visual evidence cannot be fabricated into a complete report.
+    const completed = error instanceof RenderInterrupted ? error.completedRenders : []
+    const interrupted = { reason: error instanceof Error ? error.message : String(error),
+      completedRenders: phase === "first" ? completed : first,
+      repeatRenders: phase === "repeat" ? completed : second,
+      authored: authored.length ? authored : "NotRun", requested: jobs,
+    }
+    writeFileSync(join(run, "interrupted.json"), `${JSON.stringify(interrupted, null, 2)}\n`)
+    if (signal.aborted) {
+      const failure = new Error(`${interrupted.reason} Saved completed observations: ${join(run, "interrupted.json")}`)
+      failure.name = "AbortError"
+      throw failure
+    }
+    throw error
+  } finally { monitor.close() }
 }
 
 /**
@@ -138,6 +198,7 @@ function checkBaseline(project, environment, result, directory, stable) {
 export function approveBaselines(reportPath, directory) {
   const report = JSON.parse(readFileSync(reportPath, "utf8"))
   if (!Check(CheckReportSchema, report)) throw new Error("Invalid check report.")
+  if (report.version === 2 && report.run.stale) throw new Error("Cannot approve a source-invalidated report. Run checks and review again.")
   const keys = new Set()
   const entries = report.results.map(result => {
     const key = baselineKey(report.project, result)

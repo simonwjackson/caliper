@@ -17,14 +17,17 @@ export function planChecks(width, height) {
 /** @typedef {import('../checks/contract.js').ChecksView} ChecksView */
 /** HTTP acknowledgements and SSE updates can arrive in either order. @param {ChecksView} current @param {ChecksView} next @returns {ChecksView} */
 export function reconcileChecks(current, next) {
-  if ((current._tag === "Ready" || current._tag === "Failed") && next._tag === "Running" && current.id === next.id) return current
+  if ((current._tag === "Ready" || current._tag === "Failed" || current._tag === "Cancelled") && next._tag === "Running" && current.id === next.id) return current
   if (current._tag === "Ready" && next._tag === "Ready" && current.id === next.id && current.stale) return { ...next, stale: true }
   return next
 }
 
 /** @typedef {import('../render/check-contract.js').CheckResult} CheckResult */
-/** @param {readonly CheckResult[]} checks */
-export function summarizeChecks(checks) {
+/** Legacy automatic-check summary. @param {readonly CheckResult[]} checks */
+export function summarizeChecks(checks) { return summarizeFindings(checks) }
+
+/** @param {readonly Pick<CheckResult, 'status' | 'accepted'>[]} checks */
+function summarizeFindings(checks) {
   const failed = checks.filter(check => check.status === "Failed").length
   const review = checks.filter(check => check.status === "Review").length
   const inconclusive = checks.filter(check => check.status === "Inconclusive").length
@@ -36,6 +39,36 @@ export function summarizeChecks(checks) {
   const label = exceptions ? `${primary} · ${exceptionCountLabel(exceptions)}` : primary
   const detail = `${failed} failed, ${review} need review, ${inconclusive} inconclusive, ${notRun} not run, ${exceptionCountLabel(exceptions)}. Accepted is not a clean pass. Covers the listed checks only.`
   return { status, label, detail }
+}
+
+/** @param {import('../render/check-contract.js').CheckReport['results'][number]} result
+ * @returns {Pick<CheckResult, 'status' | 'accepted'>[]}
+ */
+function resultFindings(result) {
+  const authored = result.authored
+  if (!authored) return result.checks
+  // Count named observations, not the aggregate twice. Keep aggregate-only failures visible.
+  const observations = authored.checks.length ? authored.checks : [authored]
+  const aggregate = observations.some(check => check.status === authored.status) ? [] : [authored]
+  return [...result.checks, ...observations, ...aggregate]
+}
+
+/** One state/device summary for automatic and named authored checks.
+ * @param {import('../render/check-contract.js').CheckReport['results'][number]} result
+ */
+export function summarizeResult(result) {
+  return summarizeFindings(resultFindings(result))
+}
+
+/** @param {import('../render/check-contract.js').CheckReport} report
+ * @param {Array<import('../render/check-contract.js').CheckReport['results'][number]>} [results]
+ */
+export function summarizeReport(report, results = report.results) {
+  const findings = results.flatMap(resultFindings)
+  if (report.version === 2 && (report.run.stale || report.run.termination !== "Completed")) findings.push({ status: "Inconclusive" })
+  const summary = summarizeFindings(findings)
+  const coverage = report.version === 1 ? " This saved v1 report has no authored interaction coverage." : " Authored coverage includes only the named checks."
+  return { ...summary, detail: summary.detail + coverage }
 }
 
 /** @param {number} count */
@@ -75,6 +108,24 @@ function observedDetail(check) {
     }
     return JSON.stringify(data, null, 2)
   } catch { return check.detail }
+}
+
+/** @param {import('../authored/contract.js').AuthoredCase} check */
+export function authoredDetail(check) {
+  return [`${check.source.file}:${check.source.line}`, `${check.reason} · ${check.durationMs} ms`, check.detail,
+    ...check.errors.map(error => `Browser error: ${error}`),
+    ...(check.evidenceError ? [`Interaction image unavailable: ${check.evidenceError}`] : []),
+  ].filter(Boolean).join("\n\n").replace(/\u001b\[[0-9;]*m/g, "") // Terminal colors are not browser markup. Keep the raw report unchanged.
+}
+
+/** @param {import('../authored/contract.js').CheckProvenance} provenance */
+export function provenanceDetail(provenance) {
+  if (provenance.kind === "Original") return "Checks declared in real files. Covers these named checks only."
+  return [`Take ${provenance.take ?? "(unknown)"} defines these expectations. Passing does not prove preservation of the original contract.`,
+    `Edited files:\n${provenance.files.join("\n") || "None listed."}`,
+    `Changed check declarations:\n${provenance.changedDeclarations.join("\n") || "None detected."}`,
+    "Other edited modules can change helper behavior even when callback text is unchanged.",
+  ].join("\n\n")
 }
 
 /** @param {import('../render/check-contract.js').CheckReport['results'][number]} result */

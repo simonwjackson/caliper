@@ -105,7 +105,8 @@ function setup(root) {
     store,
     engine: () => ({ models, model: faux.getModel(), reasoning: "high" }),
     renderFor: (take, subject) => async request => {
-      renders.push({ take, ...request })
+      const { signal: _signal, ...selection } = request
+      renders.push({ take, ...selection })
       return [{ part: request.part ?? subject.context?.part ?? subject.part, state: request.state, device: request.devices[0] ?? "", take, viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }]
     },
     onChange: () => { for (const resolve of waiting.splice(0)) resolve() },

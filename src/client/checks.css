@@ -80,6 +80,7 @@
 .cal-check-list { padding-block: var(--cal-space-3); }
 .cal-check-finding { border-top: 1px solid var(--cal-line); }
 .cal-check-finding summary { cursor: pointer; padding-block: var(--cal-space-2); }
+.cal-check-run-source,
 .cal-check-finding pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow: auto; margin: 0 0 var(--cal-space-3); }
 .cal-check-finding pre:focus-visible { outline: 2px solid var(--cal-accent); outline-offset: 1px; }
 .cal-check-images { display: grid; grid-template-columns: repeat(var(--checks-columns, 1), minmax(0, 1fr)); gap: var(--cal-space-3); }

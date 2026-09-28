@@ -10,11 +10,16 @@ export const CheckRequestSchema = Type.Object({
 export const ApproveCheckSchema = Type.Object({
   id, index: Type.Integer({ minimum: 0 }), reviewed: Type.Literal(true),
 }, { additionalProperties: false })
+export const CancelCheckSchema = Type.Object({ id }, { additionalProperties: false })
+export const CheckProgressSchema = Type.Object({
+  phase: text, completed: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false })
 export const ChecksViewSchema = Type.Union([
   Type.Object({ _tag: Type.Literal("Idle") }, { additionalProperties: false }),
-  Type.Object({ _tag: Type.Literal("Running"), id, request: CheckRequestSchema, startedAt: Type.String(), total: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+  Type.Object({ _tag: Type.Literal("Running"), id, request: CheckRequestSchema, startedAt: Type.String(), total: Type.Integer({ minimum: 1 }), progress: Type.Optional(CheckProgressSchema), stopping: Type.Optional(Type.Boolean()) }, { additionalProperties: false }),
   Type.Object({ _tag: Type.Literal("Ready"), id, request: CheckRequestSchema, report: CheckReportSchema, stale: Type.Boolean(), approved: Type.Array(Type.Integer({ minimum: 0 }), { uniqueItems: true }) }, { additionalProperties: false }),
   Type.Object({ _tag: Type.Literal("Failed"), id, request: CheckRequestSchema, reason: Type.String() }, { additionalProperties: false }),
+  Type.Object({ _tag: Type.Literal("Cancelled"), id, request: CheckRequestSchema, reason: Type.String() }, { additionalProperties: false }),
 ])
 
 /** @typedef {import("typebox").Static<typeof CheckRequestSchema>} CheckRequest */

@@ -1,6 +1,7 @@
 // @ts-check
 import { expect, test } from "bun:test"
 import { createServer } from "node:http"
+import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -8,6 +9,7 @@ import { Check } from "typebox/value"
 import { createChecksApi } from "../src/checks/api.js"
 import { ApproveCheckSchema, CheckRequestSchema, ChecksViewSchema } from "../src/checks/contract.js"
 import { compareRenders } from "../src/render/checks.js"
+import { CheckReportSchema } from "../src/render/check-contract.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { manifest, withProject } from "./project-server.js"
 
@@ -36,6 +38,29 @@ async function savedRun({ project, jobs, out, baselines }) {
   const reportPath = join(out, "report.json")
   writeFileSync(reportPath, JSON.stringify(report))
   return { report, reportPath, results: first.map((item, index) => ({ ...item, checks: report.results[index]?.checks ?? [], checkReport: reportPath })) }
+}
+
+/** Saved v2 evidence independent of browser execution.
+ * @param {Parameters<typeof savedRun>[0]} input
+ * @param {import('../src/authored/contract.js').CheckRun['termination']} [termination]
+ */
+async function savedAuthoredRun(input, termination = "Completed") {
+  const saved = await savedRun(input)
+  const image = join(input.out, "interaction.png")
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
+  writeFileSync(image, png)
+  /** @type {import('../src/render/check-contract.js').CheckReport} */
+  const report = {
+    ...saved.report, version: 2,
+    run: { id: "authored-run", termination, source: { epoch: "server", generation: 3, fingerprint: "revision" }, stale: termination === "SourceChanged" },
+    results: saved.report.results.map(item => ({ ...item, authored: {
+      status: "Failed", reason: "Assertion", provenance: { kind: "Original", files: [], changedDeclarations: [] },
+      checks: [{ name: "Retry", source: { file: part, line: 2 }, status: "Failed", reason: "Assertion", detail: "Not visible", durationMs: 15, errors: [], image, imageSha256: createHash("sha256").update(png).digest("hex") }],
+    } })),
+  }
+  if (!Check(CheckReportSchema, report)) throw new Error("Invalid fixture report")
+  writeFileSync(saved.reportPath, JSON.stringify(report))
+  return { ...saved, report }
 }
 
 /** @param {(f: Awaited<ReturnType<typeof setup>>) => Promise<void>} run */
@@ -315,4 +340,129 @@ test("Vite wires the checks API and sends its snapshot on the shared SSE stream 
     }
     expect(text).toContain('event: checks\ndata: {"_tag":"Idle"}')
   } finally { await reader?.cancel() }
+}))
+
+test("Stop aborts the runner, reports progress and preserves a distinct cancelled outcome", () => fixture(async f => {
+  let aborted = false
+  f.runner.run = async input => {
+    input.onProgress?.({ phase: "First render", completed: 0, total: 2 })
+    await new Promise((_resolve, reject) => {
+      input.signal?.addEventListener("abort", () => { aborted = true; reject(Object.assign(new Error("Stopped by user"), { name: "AbortError" })) }, { once: true })
+    })
+    return savedRun(input)
+  }
+  const running = await (await f.post("/checks/run", request)).json()
+  expect(f.api.snapshot()).toMatchObject({ _tag: "Running", progress: { phase: "First render", completed: 0, total: 2 } })
+  expect((await f.get("/checks/cancel")).status).toBe(405)
+  expect((await f.post("/checks/cancel", { id: running.id }, { origin: "https://evil.test" })).status).toBe(403)
+  expect((await f.post("/checks/cancel", { id: crypto.randomUUID() })).status).toBe(400)
+  expect((await f.post("/checks/cancel", { id: running.id, path: "/tmp" })).status).toBe(400)
+  expect((await f.post("/checks/cancel", { id: running.id })).status).toBe(202)
+  await new Promise(resolve => setTimeout(resolve, 5))
+  expect(aborted).toBe(true)
+  expect(f.api.snapshot()).toMatchObject({ _tag: "Cancelled", id: running.id })
+  expect(Check(ChecksViewSchema, f.api.snapshot())).toBe(true)
+  expect((await f.get(`/checks/report?id=${running.id}`)).status).toBe(404)
+}))
+
+test("shutdown aborts before waiting for runner cleanup", () => fixture(async f => {
+  let aborted = false
+  f.runner.run = async input => {
+    await new Promise((_resolve, reject) => {
+      input.signal?.addEventListener("abort", () => { aborted = true; reject(Object.assign(new Error("Shutdown"), { name: "AbortError" })) }, { once: true })
+    })
+    return savedRun(input)
+  }
+  await f.post("/checks/run", request)
+  await f.api.close()
+  expect(aborted).toBe(true)
+}))
+
+test("saved v1 reports remain readable and eligible for initial-image approval", () => fixture(async f => {
+  f.runner.run = async input => {
+    const saved = await savedRun(input)
+    const legacy = { ...saved.report, version: 1, results: saved.report.results.map(result => ({ ...result, authored: undefined })) }
+    writeFileSync(saved.reportPath, JSON.stringify(legacy))
+    return saved
+  }
+  const ready = await f.start()
+  expect(ready.report.version).toBe(1)
+  expect(ready.report.results.every(result => result.authored === undefined)).toBe(true)
+  expect((await f.post("/checks/approve", { id: ready.id, index: 0, reviewed: true })).status).toBe(200)
+}))
+
+test("v2 serves hashed interaction PNGs separately and approves only the initial image", () => fixture(async f => {
+  f.runner.run = savedAuthoredRun
+  const ready = await f.start()
+  expect(ready.report.version).toBe(2)
+  expect(Check(ChecksViewSchema, ready)).toBe(true)
+  const imageUrl = `/checks/image?id=${ready.id}&index=0&kind=authored&check=0`
+  const image = await f.get(imageUrl)
+  expect(image.status).toBe(200)
+  expect(image.headers.get("content-type")).toBe("image/png")
+  expect((await image.arrayBuffer()).byteLength).toBeGreaterThan(8)
+  for (const check of ["-1", "0.0", "999", "../../secret"]) expect((await f.get(`/checks/image?id=${ready.id}&index=0&kind=authored&check=${check}`)).status).toBe(404)
+  expect((await f.post("/checks/approve", { id: ready.id, index: 0, reviewed: true, check: 0 })).status).toBe(400)
+  expect((await f.post("/checks/approve", { id: ready.id, index: 0, reviewed: true })).status).toBe(200)
+  const directory = join(f.root, ".caliper/baselines")
+  const baseline = readdirSync(directory).find(name => name.endsWith(".png"))
+  expect(readFileSync(join(directory, baseline ?? "missing"), "utf8")).toBe("image:default:rg353m")
+  const path = ready.report.results[0]?.authored?.checks[0]?.image
+  if (!path) throw new Error("Missing interaction image")
+  writeFileSync(path, "tampered")
+  expect((await f.get(imageUrl)).status).toBe(400)
+}))
+
+test("Stop retains completed observations from an interrupted partial v2 report", () => fixture(async f => {
+  f.runner.run = async input => {
+    const saved = await savedAuthoredRun(input, "Cancelled")
+    saved.report.results = saved.report.results.slice(0, 1)
+    writeFileSync(saved.reportPath, JSON.stringify(saved.report))
+    await new Promise(resolve => input.signal?.addEventListener("abort", () => resolve(undefined), { once: true }))
+    return saved
+  }
+  const running = await (await f.post("/checks/run", request)).json()
+  expect((await f.post("/checks/cancel", { id: running.id })).status).toBe(202)
+  const ready = await f.ready()
+  expect(ready.report).toMatchObject({ version: 2, run: { termination: "Cancelled", stale: false } })
+  expect(ready.report.results).toHaveLength(1)
+  expect(ready.report.results[0]?.authored?.checks[0]?.status).toBe("Failed")
+  expect((await f.get(`/checks/image?id=${ready.id}&index=0&kind=first`)).status).toBe(200)
+}))
+
+test("source-invalidated reports retain stale provenance and cannot approve images", () => fixture(async f => {
+  f.runner.run = input => savedAuthoredRun(input, "SourceChanged")
+  const ready = await f.start()
+  expect(ready.stale).toBe(true)
+  expect(ready.report).toMatchObject({ version: 2, run: { termination: "SourceChanged", stale: true } })
+  expect((await f.post("/checks/approve", { id: ready.id, index: 0, reviewed: true })).status).toBe(400)
+}))
+
+test("interaction evidence rejects untrusted paths, missing hashes and non-PNG files", () => fixture(async f => {
+  for (const kind of ["outside", "symlink", "hash", "missing", "not-png"]) {
+    f.runner.run = async input => {
+      const saved = await savedAuthoredRun(input)
+      /** @type {import('../src/authored/contract.js').AuthoredCase | undefined} */
+      const check = saved.report.results[0]?.authored?.checks[0]
+      if (!check?.image) throw new Error("Missing interaction image")
+      if (kind === "hash") check.imageSha256 = "0".repeat(64)
+      if (kind === "missing") delete check.imageSha256
+      if (kind === "outside" || kind === "symlink") {
+        const external = join(f.root, "external.png")
+        writeFileSync(external, readFileSync(check.image))
+        if (kind === "outside") check.image = external
+        else { rmSync(check.image); symlinkSync(external, check.image) }
+      }
+      if (kind === "not-png") {
+        writeFileSync(check.image, "not a PNG")
+        check.imageSha256 = createHash("sha256").update("not a PNG").digest("hex")
+      }
+      writeFileSync(saved.reportPath, JSON.stringify(saved.report))
+      return saved
+    }
+    const running = await (await f.post("/checks/run", request)).json()
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(f.api.snapshot()).toMatchObject({ _tag: "Failed" })
+    expect((await f.get(`/checks/image?id=${running.id}&index=0&kind=authored&check=0`)).status).toBe(404)
+  }
 }))

@@ -1,6 +1,6 @@
 // @ts-check
 import { h } from "./dom.js"
-import { canApproveImage, checkDetail, exceptionCountLabel, planChecks, reconcileChecks, summarizeChecks } from "./checks-view.js"
+import { authoredDetail, canApproveImage, checkDetail, exceptionCountLabel, planChecks, provenanceDetail, reconcileChecks, summarizeReport, summarizeResult } from "./checks-view.js"
 
 /** @typedef {import('../checks/contract.js').ChecksView} ChecksView */
 /** @typedef {{part: string, state: string, take?: string, label: string}} Target */
@@ -96,7 +96,7 @@ export function createChecksPanel({ container, target, changed }) {
   const resultRow = (ready, index) => {
     const result = ready.report.results[index]
     if (!result) return h("div")
-    const summary = summarizeChecks(result.checks)
+    const summary = summarizeResult(result)
     const row = h("details", { class: "cal-check-result", "data-index": String(index) },
       h("summary", {},
         h("span", { class: "cal-check-result-name" }, h("strong", {}, result.part), h("span", {}, `${result.state} · ${result.device}${result.take ? ` · Take ${result.take}` : " · Real files"}`)),
@@ -113,6 +113,28 @@ export function createChecksPanel({ container, target, changed }) {
         detail.open = check.status === "Failed" || check.status === "Inconclusive"
         list.append(detail)
       }
+      const authored = result.authored
+      if (authored) {
+        list.append(h("h4", {}, "Authored interactions"),
+          h("p", {}, `${authored.status === "NotRun" ? "Not run" : authored.status}: ${authored.reason}`),
+          h("details", { class: "cal-check-finding" }, h("summary", {}, "Expectation provenance"),
+            h("pre", { tabindex: "0" }, provenanceDetail(authored.provenance))))
+        for (const [checkIndex, check] of authored.checks.entries()) {
+          const detail = h("details", { class: "cal-check-finding" },
+            h("summary", {}, check.name, h("span", { class: "cal-check-badge", "data-status": check.status }, check.status === "NotRun" ? "Not run" : check.status)),
+            h("pre", { tabindex: "0", "aria-label": `${check.name} details` }, authoredDetail(check)))
+          detail.open = check.status === "Failed" || check.status === "Inconclusive"
+          if (check.image && check.imageSha256) {
+            const src = `checks/image?id=${encodeURIComponent(ready.id)}&index=${index}&kind=authored&check=${checkIndex}`
+            const caption = h("figcaption", {}, "Interaction evidence. Not a baseline image.")
+            const image = h("img", { src, alt: `${check.name}: interaction evidence`, loading: "lazy" })
+            image.addEventListener("error", () => caption.append(h("span", { role: "alert" }, "Interaction image unavailable.")))
+            detail.append(h("div", { class: "cal-check-images" }, h("figure", {},
+              h("a", { href: src, target: "_blank", rel: "noopener", "aria-label": `Open interaction image for ${check.name}` }, image), caption)))
+          }
+          list.append(detail)
+        }
+      } else list.append(h("p", { class: "cal-note" }, "This saved report has no authored interaction coverage."))
       const images = h("div", { class: "cal-check-images" })
       const reviewed = h("input", { type: "checkbox", disabled: true })
       const approved = ready.approved.includes(index)
@@ -164,20 +186,31 @@ export function createChecksPanel({ container, target, changed }) {
       h("section", { class: "cal-check-controls", "aria-label": "Run checks" },
         h("p", {}, current ? current.label : "No preview selected."),
         h("div", { class: "cal-check-actions" }, button("Check selected preview", runSelected, running || !current), button(current?.take ? "Check all states with this take" : "Check all states", runAll, running || !current)),
-        h("p", { class: "cal-note" }, "Both device sizes. Reports problems without blocking Replace. Checks render twice and do not prove interactions.")),
+        h("p", { class: "cal-note" }, "Both device sizes. Renders twice, then runs declared interaction checks. Covers named scenarios only. Does not block Replace.")),
     )
     if (error) body.append(h("p", { class: "cal-check-error", role: "alert" }, error))
     if (notice) body.append(h("p", { class: "cal-check-notice", role: "status" }, notice))
     if (connecting) body.append(h("p", { role: "status" }, "Loading checks…"))
     if (view._tag === "Idle") body.append(h("div", { class: "cal-check-empty" }, h("h3", {}, "No checks run yet"), h("p", {}, "Run checks to see rendering, browser errors, overflow, accessibility, repeat renders and accepted-image comparisons.")))
-    else if (view._tag === "Running") body.append(h("p", { role: "status", class: "cal-check-progress" }, `Checking ${view.total} state/device renders twice… You can close this window while checks run.`))
+    else if (view._tag === "Running") {
+      const runningView = view
+      const progress = view.progress ? `${view.progress.phase}: ${view.progress.completed} of ${view.progress.total}.` : `Checking ${view.total} state/device results…`
+      body.append(h("div", { class: "cal-check-actions" },
+        h("p", { role: "status", class: "cal-check-progress" }, view.stopping ? "Stopping checks and closing browser work…" : progress),
+        button(view.stopping ? "Stopping…" : "Stop checks", () => { void post("cancel", { id: runningView.id }) }, view.stopping)),
+      h("p", { class: "cal-note" }, "You can close this window while checks run. Close does not stop checks."))
+    }
+    else if (view._tag === "Cancelled") body.append(h("div", { class: "cal-check-warning", role: "status" }, h("h3", {}, "Checks stopped"), h("p", {}, view.reason), h("p", {}, "No complete visual report was produced. Run checks again to collect evidence.")))
     else if (view._tag === "Failed") body.append(h("div", { class: "cal-check-error", role: "alert" }, h("h3", {}, "Checks could not finish"), h("p", {}, view.reason), h("p", {}, "Fix the reported setup problem, then run checks again. No passing report was produced.")))
     else {
       const ready = view
-      const summary = summarizeChecks(ready.report.results.flatMap(result => result.checks))
+      const summary = summarizeReport(ready.report)
       body.append(h("section", { class: "cal-check-summary", "aria-label": "Check results" },
         h("h3", { role: "status" }, ready.stale ? "Results are out of date" : summary.label),
         h("p", {}, summary.detail),
+        ready.report.version === 2 ? h("details", {}, h("summary", {}, `Run: ${ready.report.run.termination}`),
+          h("pre", { class: "cal-check-run-source" }, `Run ${ready.report.run.id}\nServer ${ready.report.run.source.epoch}\nSource generation ${ready.report.run.source.generation}\nFingerprint ${ready.report.run.source.fingerprint}`)) : null,
+        ready.report.version === 2 && ready.report.run.termination !== "Completed" ? h("p", { class: "cal-check-warning", role: "status" }, `Run ended: ${ready.report.run.termination}. These are partial observations, not a completed pass.`) : null,
         h("p", { class: "cal-note" }, `${ready.report.results.length} state/device results · ${ready.request.take ? `Take ${ready.request.take}` : "Real files"} · ${new Date(ready.report.createdAt).toLocaleString()}`),
         ready.stale ? h("p", { class: "cal-check-warning", role: "status" }, "Source files changed during or after this run. These are historical observations. Run checks again before approving images.") : null,
         h("details", {}, h("summary", {}, "Coverage and limits"), h("p", {}, ready.report.coverage), h("p", {}, "Only the latest UI run is kept during this server session. Closing this window or reloading the page keeps it; restarting Vite clears it. Accepted baselines stay on disk.")),
@@ -201,10 +234,10 @@ export function createChecksPanel({ container, target, changed }) {
     if (view._tag !== "Ready") return null
     const results = view.report.results.filter(result => result.part === part && result.state === state && result.take === take)
     if (!results.length) return null
-    const summary = summarizeChecks(results.flatMap(result => result.checks))
+    const summary = summarizeReport(view.report, results)
     return h("span", { class: "cal-check-badge", "data-status": view.stale ? "Stale" : summary.status, title: summary.detail }, view.stale ? "Out of date" : summary.label)
   }
-  const status = () => view._tag === "Ready" ? view.stale ? "Out of date" : summarizeChecks(view.report.results.flatMap(result => result.checks)).label : view._tag === "Running" ? "Running" : view._tag === "Failed" ? "Could not finish" : "Not checked"
+  const status = () => view._tag === "Ready" ? view.stale ? "Out of date" : summarizeReport(view.report).label : view._tag === "Running" ? "Running" : view._tag === "Failed" ? "Could not finish" : view._tag === "Cancelled" ? "Stopped" : "Not checked"
   return { open, receive, badge, status }
 }
 

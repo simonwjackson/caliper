@@ -5,6 +5,7 @@ import { basename, join, relative } from "node:path"
 import ts from "typescript"
 import { readComposition, validateCompositions } from "./composition.js"
 import { readExpectations } from "./expectations.js"
+import { readAuthoredChecks } from "./authored-checks.js"
 
 /**
  * @typedef {import("../types").Part} Part
@@ -87,7 +88,7 @@ export function readPart(root, file, source = readFileSync(join(root, file), "ut
   const note = stringExport(source, "note")
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const states = [DEFAULT_STATE, ...namedStates(tree)]
-  return { file, name, ...(note === undefined ? {} : { note }), states, ...partLayer(file, tree), ...readComposition(file, source), ...readExpectations(file, source, states) }
+  return { file, name, ...(note === undefined ? {} : { note }), states, ...partLayer(file, tree), ...readComposition(file, source), ...readExpectations(file, source, states), ...readAuthoredChecks(file, source, states) }
 }
 
 /**

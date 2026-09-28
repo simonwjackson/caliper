@@ -41,6 +41,26 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
   const integration = createIntegrationReview(store)
+  /** @type {Map<string, AbortController>} */
+  const controllers = new Map()
+  /** @type {Map<string, Promise<void>>} */
+  const pending = new Map()
+  let closed = false
+  const assertOpen = () => { if (closed) throw new Error("The takes API is closed.") }
+
+  /** @param {string} take @param {string} prompt */
+  const launch = (take, prompt) => {
+    const controller = new AbortController()
+    controllers.set(take, controller)
+    const task = send(take, prompt, controller.signal)
+    pending.set(take, task)
+    void task.finally(() => {
+      if (pending.get(take) === task) {
+        pending.delete(take)
+        controllers.delete(take)
+      }
+    })
+  }
 
   /**
    * Start a new take of a part and give its agent the first prompt.
@@ -49,8 +69,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
    * @returns {string} the take number
    */
   const start = ({ prompt, ...ask }) => {
+    assertOpen()
     const take = store.create({ ...ask, ...(ask.direction ? { name: ask.direction.title } : {}) })
-    void send(take, prompt)
+    launch(take, prompt)
     return take
   }
 
@@ -62,9 +83,10 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
    * @param {string} prompt
    */
   const follow = (take, prompt) => {
+    assertOpen()
     if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
-    void send(take, prompt)
+    launch(take, prompt)
   }
 
   /**
@@ -91,8 +113,16 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   }
 
   /** @param {string} take */
-  const stop = take => {
+  const stop = async take => {
+    controllers.get(take)?.abort(new Error("The take was stopped."))
     live.get(take)?.agent?.abort()
+    // SDK abort alone does not cover the render before the first model prompt.
+    await pending.get(take)
+  }
+
+  const close = async () => {
+    closed = true
+    await Promise.all([...pending.keys()].map(stop))
   }
 
   /** @param {string} take */
@@ -105,9 +135,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     return changed
   }
 
-  /** @param {string} take */
+  /** @param {string} take @returns {void | Promise<void>} */
   const discard = take => {
-    live.get(take)?.agent?.abort()
+    if (live.get(take)?.run._tag === "Running") return stop(take).then(() => discard(take))
     live.delete(take)
     store.discard(take)
     onChange()
@@ -138,8 +168,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
   /**
    * @param {string} take
    * @param {string} prompt
+   * @param {AbortSignal} signal
    */
-  const send = async (take, prompt) => {
+  const send = async (take, prompt, signal) => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     /** @type {Live} */
     const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [], edited: new Set() }
@@ -150,18 +181,28 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     const edited = [...entry.edited]
     entry.edited.clear()
     try {
-      const render = renderFor(take, record)
+      const renderTake = renderFor(take, record)
+      /** @type {RenderTake} */
+      const render = request => {
+        // Existing agent tools survive follow-up prompts; read this run's controller.
+        const active = controllers.get(take)?.signal
+        const signals = [active, request.signal].filter(signal => signal !== undefined)
+        const signal = AbortSignal.any(signals)
+        signal.throwIfAborted()
+        return renderTake({ ...request, signal })
+      }
       const first = entry.agent === null
       const agent = entry.agent ?? createAgent(take, record, render, entry)
       entry.agent = agent
       const content = first
         ? await firstMessage(record, `${handNote(edited, true)}${prompt}`, render, store, take)
         : `${handNote(edited, false)}${prompt}`
-      // Discarded while Caliper rendered the part for the first message.
+      signal.throwIfAborted()
       if (live.get(take) !== entry) return
       await (typeof content === "string"
         ? agent.prompt(content)
         : agent.prompt({ role: "user", content, timestamp: Date.now() }))
+      signal.throwIfAborted()
       const last = agent.state.messages.at(-1)
       entry.run = last?.role === "assistant" && last.stopReason === "error"
         ? { _tag: "Failed", reason: last.errorMessage ?? "The model request failed." }
@@ -214,9 +255,10 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
 
   /** Prepare separately so the original experiment remains available for replacement. @param {string} source */
   const alternate = source => {
+    assertOpen()
     assertIdle(source)
     const take = integration.begin(source)
-    void send(take, INTEGRATION_PROMPT)
+    launch(take, INTEGRATION_PROMPT)
     return take
   }
 
@@ -229,7 +271,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange }) {
     return files
   }
 
-  return { start, editByHand, follow, stop, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**

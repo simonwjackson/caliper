@@ -1,10 +1,22 @@
 #!/usr/bin/env node
 // @ts-check
 import { parseArgs } from "node:util"
+import { writeSync } from "node:fs"
 import { DEVICES } from "../src/client/device-frame.js"
 import { planRenders } from "../src/render/plan.js"
 import { renderJobs } from "../src/render/render.js"
 import { approveBaselines, checkJobs } from "../src/render/checks.js"
+
+const interruption = new AbortController()
+let interruptedExit = 0
+/** @param {"SIGINT" | "SIGTERM"} signal */
+const interrupt = signal => {
+  if (interruption.signal.aborted) return
+  interruptedExit = signal === "SIGINT" ? 130 : 143
+  interruption.abort(new Error(`Interrupted by ${signal}.`))
+}
+process.on("SIGINT", () => interrupt("SIGINT"))
+process.on("SIGTERM", () => interrupt("SIGTERM"))
 
 const HELP = `caliper-render: render a part of a running project and report what it shows.
 
@@ -28,9 +40,11 @@ Options:
              replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
   --chromium Chromium executable. Default: the CHROMIUM environment variable
-  --list     Print every part with states, composition, expectations and problems, and devices, as JSON
-  --check    Report render, browser, spill, axe, repeat-render and baseline checks.
-             Uses two fresh renders; writes report.json and both sets of images under --out.
+  --list     Print states, composition, expectations, authoredChecks, authoredCheckProblems,
+             and devices as JSON. --take selects take-aware discovery.
+  --check    Report render, browser, spill, axe, repeat-render, baseline and authored checks.
+             Uses two fresh renders and one isolated browser context per named authored check.
+             Writes report.json, initial-state images and separate interaction images under --out.
   --baselines Directory of accepted images for this project. Without it, baseline checks are NotRun.
   --approve  Approve images from this saved check report after inspecting them. Requires --baselines.
              Does not rerender. Rejects changed images, unstable/broken renders and takes.
@@ -51,13 +65,18 @@ the spill is measured and the PNG is taken. A looping animation keeps running.
 Exit status: 0 when every frame is Rendered, 1 when a frame is Empty or Failed,
 2 when the request is invalid or the dev server or browser is not reachable.
 With --check, exit 0 means the report was written, NOT that checks passed.
+SIGINT and SIGTERM cancel browser work and await cleanup; they exit 130 and 143.
 Check statuses: Passed, Accepted, Failed, Review, Inconclusive, NotRun.
 Product-owned expectations can pass intended empty states and accept narrowly scoped
 spill or axe findings, with evidence, reasons and counts retained. Accepted is not a
 clean pass. Undeclared emptiness, spill and changed/missing baselines need Review.
 Invalid expectations fail; unused exceptions need Review. None blocks Replace.
 Approval records visual intent only. It does not hide accessibility or other findings.
-Checks cover listed states only, not interactions or every possible consumer.`
+Authored checks report Passed, Failed, Inconclusive or NotRun separately. Missing
+checks are NotRun, not interaction coverage; expectations cannot waive their failures.
+Reports include source/take provenance, termination and stale state. Source changes
+stop queued checks and retain historical observations, not a current pass.
+Checks cover listed states and declared interactions only, not every possible consumer.`
 
 /** @param {unknown} value */
 function print(value) {
@@ -69,8 +88,8 @@ function print(value) {
  * @returns {never}
  */
 function stop(reason) {
-  print({ error: reason })
-  process.exit(2)
+  writeSync(process.stdout.fd, `${JSON.stringify({ error: interruption.signal.aborted ? `Interrupted: ${reason}` : reason }, null, 2)}\n`)
+  process.exit(interruptedExit || 2)
 }
 
 const { values: args } = (() => {
@@ -111,8 +130,10 @@ if (args.list && args.check) stop("Use --list or --check, not both.")
 if (!args.url) stop("Pass --url, the origin of the project's Vite dev server. Run with --help.")
 const url = /** @type {string} */ (args.url)
 
+const discoveryUrl = new URL("/__caliper/project.json", url)
+if (args.take !== undefined) discoveryUrl.searchParams.set("take", args.take)
 /** @type {import("../src/types").Project} */
-const project = await fetch(new URL("/__caliper/project.json", url))
+const project = await fetch(discoveryUrl, { signal: interruption.signal })
   .then(response => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     return response.json()
@@ -128,6 +149,8 @@ if (args.list) {
       ...(part.compositionProblems === undefined ? {} : { compositionProblems: part.compositionProblems }),
       ...(part.expectations === undefined ? {} : { expectations: part.expectations }),
       ...(part.expectationProblems === undefined ? {} : { expectationProblems: part.expectationProblems }),
+      authoredChecks: part.authoredChecks ?? {},
+      authoredCheckProblems: part.authoredCheckProblems ?? [],
     })),
     devices: DEVICES.map(device => ({ id: device.id, name: device.name, cssWidth: device.cssWidth, cssHeight: device.cssHeight, widthMm: device.widthMm })),
   })
@@ -148,10 +171,10 @@ if (!executablePath) stop("Set CHROMIUM, or pass --chromium, to a Chromium execu
 
 if (args.check) {
   try {
-    const checked = await checkJobs({ url, project: project.name, jobs: plan.jobs, out: args.out, executablePath, ...(args.baselines === undefined ? {} : { baselines: args.baselines }) })
+    const checked = await checkJobs({ url, project: project.name, jobs: plan.jobs, out: args.out, executablePath, signal: interruption.signal, ...(args.baselines === undefined ? {} : { baselines: args.baselines }) })
     await print(checked)
   } catch (error) { stop(`Checks could not finish: ${error instanceof Error ? error.message : String(error)}`) }
-  process.exit(0)
+  process.exit(interruptedExit)
 }
 
 const results = await renderJobs({
@@ -159,7 +182,8 @@ const results = await renderJobs({
   jobs: plan._tag === "Planned" ? plan.jobs : [],
   out: /** @type {string} */ (args.out),
   executablePath: /** @type {string} */ (executablePath),
+  signal: interruption.signal,
 }).catch(error => stop(`The browser failed: ${error instanceof Error ? error.message : String(error)}`))
 
 await print({ results })
-process.exit(results.every(result => result.frame === "Rendered") ? 0 : 1)
+process.exit(interruptedExit || (results.every(result => result.frame === "Rendered") ? 0 : 1))

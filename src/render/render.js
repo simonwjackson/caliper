@@ -2,7 +2,8 @@
 import { mkdirSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { join } from "node:path"
-import { chromium } from "playwright-core"
+import { aborted, bounded, openBrowserSession } from "./browser-session.js"
+import { runNodeWorker } from "./node-worker.js"
 import { DEVICES } from "../client/device-frame.js"
 import { FRAME_WATCHDOG_MS } from "../pages.js"
 import { auditAccessibility, axeVersion } from "./accessibility.js"
@@ -24,7 +25,9 @@ import { auditAccessibility, axeVersion } from "./accessibility.js"
  *   accessibility?: import("./check-contract.js").Accessibility,
  *   environment?: string,
  *   checks?: import("./check-contract.js").CheckResult[],
+ *   authored?: import('../authored/contract.js').AuthoredResult,
  *   checkReport?: string,
+ *   checkRun?: import('../authored/contract.js').CheckRun,
  *   expectations?: import('../expectation-contract.js').StateExpectations,
  *   expectationProblems?: readonly string[],
  * }} RenderResult
@@ -52,49 +55,75 @@ const SPILL_ELEMENTS = 5
 /** Frames rendered at the same time. Each one loads the project's CSS and React. */
 const CONCURRENCY = 4
 
+/** Completed samples survive cancellation without inventing results for other jobs. */
+export class RenderInterrupted extends Error {
+  /** @param {unknown} cause @param {RenderResult[]} completedRenders */
+  constructor(cause, completedRenders) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause })
+    this.name = cause instanceof Error ? cause.name : "Error"
+    this.completedRenders = completedRenders
+  }
+}
+
 /**
  * Render each job in a headless Chromium, one page per job, at the device's
  * CSS viewport and a device pixel ratio of 1. Loads the same frame page that
  * the chrome shows, from the project's running Vite server.
  *
- * @param {{ url: string, jobs: readonly RenderJob[], out: string, executablePath: string, audit?: boolean }} input
+ * @param {{ url: string, jobs: readonly RenderJob[], out: string, executablePath: string, audit?: boolean, signal?: AbortSignal }} input
  *   `url` is the dev server's origin. `out` is the folder for the PNG files.
  * @returns {Promise<RenderResult[]>} in job order
  */
-export async function renderJobs({ url, jobs, out, executablePath, audit = false }) {
+export async function renderJobs({ url, jobs, out, executablePath, audit = false, signal }) {
+  if (process.versions.bun) {
+    const result = await runNodeWorker({ type: "render", input: { url, jobs: [...jobs], out, executablePath, audit } }, { signal })
+    if (result.type !== "render") throw new Error("Browser worker returned the wrong operation.")
+    return result.results
+  }
   mkdirSync(out, { recursive: true })
-  const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
+  const session = await openBrowserSession(executablePath, signal)
+  const group = new AbortController()
+  const combined = AbortSignal.any([group.signal, ...(signal ? [signal] : [])])
+  /** @type {RenderResult[]} */
+  const results = new Array(jobs.length)
   try {
-    /** @type {RenderResult[]} */
-    const results = new Array(jobs.length)
     let next = 0
     const worker = async () => {
       while (next < jobs.length) {
         const index = next++
-        results[index] = await renderOne(browser, url, /** @type {RenderJob} */ (jobs[index]), out, audit)
+        if (combined.aborted) throw aborted(combined.reason)
+        try { results[index] = await renderOne(session, url, /** @type {RenderJob} */ (jobs[index]), out, audit, combined) }
+        catch (error) { group.abort(error); throw error }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker))
+    const outcomes = await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker))
+    const failed = outcomes.find(outcome => outcome.status === "rejected")
+    if (failed?.status === "rejected") throw failed.reason
     return results
-  } finally {
-    await browser.close()
+  } catch (error) { throw new RenderInterrupted(error, results.filter(Boolean)) }
+  finally {
+    try { await session.close() }
+    catch (error) { throw new RenderInterrupted(error, results.filter(Boolean)) }
   }
 }
 
 /**
- * @param {import("playwright-core").Browser} browser
+ * @param {Awaited<ReturnType<typeof openBrowserSession>>} session
  * @param {string} url
  * @param {RenderJob} job
  * @param {string} out
  * @param {boolean} audit
+ * @param {AbortSignal} [signal]
  * @returns {Promise<RenderResult>}
  */
-async function renderOne(browser, url, job, out, audit) {
+async function renderOne(session, url, job, out, audit, signal) {
+  const { browser } = session
   const device = DEVICES.find(candidate => candidate.id === job.device)
   if (device === undefined) throw new Error(`Unknown device ${job.device}`)
   const viewport = { width: device.cssWidth, height: device.cssHeight }
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 })
+  const context = await bounded(() => browser.newContext({ viewport, deviceScaleFactor: 1 }), { signal })
   try {
+    return await bounded(async () => {
     const page = await context.newPage()
     /** @type {string[]} */
     const consoleErrors = []
@@ -206,8 +235,9 @@ async function renderOne(browser, url, job, out, audit) {
         environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:2`,
       }),
     }
+    }, { signal })
   } finally {
-    await context.close()
+    await session.closeContext(context)
   }
 }
 

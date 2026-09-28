@@ -101,6 +101,10 @@ export type Part = {
   /** Static per-state intent. It changes check classification, not product rendering. */
   readonly expectations?: import("./expectation-contract.js").Expectations
   readonly expectationProblems?: readonly string[]
+  /** Named browser checks, read from literal callback declarations without executing them. */
+  readonly authoredChecks?: Record<string, readonly import("./authored/contract.js").CheckDeclaration[]>
+  /** Invalid declarations supply no runnable checks. */
+  readonly authoredCheckProblems?: readonly string[]
 }
 
 /**
