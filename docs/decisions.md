@@ -247,6 +247,11 @@ When Vite runs under Bun, Caliper runs browser work in a fixed trusted Node work
 with schema-validated jobs, progress, cancellation, and results over IPC. Product
 modules still run only in Chromium. Node-hosted Vite uses the driver directly.
 This costs one Node process per run under Bun and requires `node` on PATH.
+`node` must be real Node. `bunx --bun` and `bun --bun` put Bun on PATH as `node`;
+the worker then ran under Bun, forked itself again, and on 2026-09-28 reached 154
+processes and exhausted a 31 GiB machine three times. The worker now exits at
+once with a clear error when it runs under Bun, so the chain is one level deep.
+A server started with `--bun` cannot render; it fails fast instead.
 It does not create another Vite server or import take code into Node. CDP ownership
 setup is bounded and cancellable. No private Playwright fields are used.
 

@@ -820,7 +820,10 @@ Chromium process. Caliper obtains that process identity through Chromium's publi
 SystemInfo protocol, not private Playwright fields. Interrupted input skips image
 capture so cleanup can start immediately. Browser execution uses Node. If Vite
 runs under Bun, a trusted Node worker receives validated jobs and returns progress
-and results; `node` must be on PATH. This avoids intermittent Playwright transport
+and results; `node` must be on PATH, and it must be real Node. Do not start the
+dev server with `bunx --bun` or `bun --bun`: they make `node` mean Bun, and
+every render then fails with "The browser worker started under Bun, not Node".
+This avoids intermittent Playwright transport
 stalls observed under Bun. The worker never imports product or take code.
 
 | Authored status | Meaning |

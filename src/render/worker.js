@@ -5,6 +5,17 @@ import { WorkerRequestSchema, WorkerReplySchema } from "./worker-contract.js"
 import { renderJobs } from "./render.js"
 import { checkJobs } from "./checks.js"
 
+// The worker exists to run Playwright in real Node. If "node" on PATH is
+// Bun (for example under `bunx --bun`), renderJobs would fork this worker
+// again, and again. Stop here, so the chain is one level deep at most.
+if (process.versions.bun) {
+  process.stderr.write(
+    "The browser worker started under Bun, not Node. Something put Bun on PATH as `node` " +
+    "(bunx --bun or bun --bun does this). Start the dev server without --bun.\n",
+  )
+  process.exit(1)
+}
+
 const controller = new AbortController()
 let started = false
 const cancel = () => controller.abort(new DOMException("Browser work was cancelled.", "AbortError"))
