@@ -238,7 +238,8 @@ export type TakeRun =
 
 /** One line of a take's conversation, as the chrome shows it. */
 export type TakeLogEntry =
-  | { readonly _tag: "User"; readonly text: string }
+  /** `images` are the files of `TakeView.images` this prompt attached. */
+  | { readonly _tag: "User"; readonly text: string; readonly images?: readonly string[] }
   | { readonly _tag: "Assistant"; readonly text: string }
   | {
       readonly _tag: "Tool"
@@ -268,6 +269,15 @@ export type TakePlan = {
   readonly note?: string
 }
 
+/** An image you attached to a prompt of a take. It is reference material, never a project file. */
+export type TakeImage = {
+  /** The file in the take's image folder, for example "1.png". */
+  readonly file: string
+  /** The name the image had when you attached it. */
+  readonly name: string
+  readonly mimeType: import("./client/images.js").ImageType
+}
+
 /** One take, as the chrome shows it. */
 export type TakeView = {
   readonly take: string
@@ -288,6 +298,8 @@ export type TakeView = {
   readonly run: TakeRun
   /** The files the take changes, root-relative. */
   readonly files: readonly string[]
+  /** Every image attached to the take's prompts, oldest first. */
+  readonly images: readonly TakeImage[]
   readonly log: readonly TakeLogEntry[]
 }
 

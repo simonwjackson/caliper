@@ -66,6 +66,7 @@ const CLIENT_FILES = new Map([
   ["device-frame.js", "text/javascript"],
   ["scenarios.js", "text/javascript"],
   ["dom.js", "text/javascript"],
+  ["images.js", "text/javascript"],
   ["layout.js", "text/javascript"],
   ["frame.js", "text/javascript"],
   ["frame.css", "text/css"],

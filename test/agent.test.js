@@ -79,6 +79,8 @@ describe("resolveAgent", () => {
 })
 
 const ask = { part: "src/Chip.part.tsx", state: "default", device: "rg353m" }
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7])
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 8])
 const projectFiles = {
   "src/Chip.part.tsx": "export default function Part() { return null }\n",
   "src/chip.css": ".chip { color: blue }\n",
@@ -230,6 +232,55 @@ describe("a take's agent", () => {
       expect(kinds).toEqual(["text", "text", "image"])
       expect(user.content[0].text).toContain("export default function Part()")
       expect(seen.options.reasoning).toBe("high")
+    })
+  })
+
+  test("gives the model the images attached to each prompt, labelled apart from the render", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      /** @type {any[]} */
+      const seen = []
+      faux.setResponses([
+        context => { seen.push(context.messages.at(-1)); return fauxAssistantMessage([fauxText("ok")]) },
+        context => { seen.push(context.messages.at(-1)); return fauxAssistantMessage([fauxText("ok")]) },
+      ])
+      const mock = { name: "mock.png", mimeType: /** @type {const} */ ("image/png"), bytes: PNG_BYTES }
+      const take = agents.start({ ...ask, prompt: "Match this", images: [mock] })
+      await settled(take)
+      const first = seen[0].content
+      expect(first.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image", "text", "image"])
+      expect(first[3].text).toBe("Images I attached to this prompt: mock.png. They are reference material, not the part as it renders now.")
+      expect(first[4]).toEqual({ type: "image", data: PNG_BYTES.toString("base64"), mimeType: "image/png" })
+      agents.follow(take, "And this", [{ name: "second.jpg", mimeType: "image/jpeg", bytes: JPEG_BYTES }])
+      const view = await settled(take)
+      const next = seen[1].content
+      expect(next.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image"])
+      expect(next[0].text).toBe("And this")
+      expect(next[1].text).toBe("Images I attached to this prompt: second.jpg. They are reference material, not the part as it renders now.")
+      expect(next[2].data).toBe(JPEG_BYTES.toString("base64"))
+      expect(view.log.filter(entry => entry._tag === "User")).toEqual([
+        { _tag: "User", text: "Match this", images: ["1.png"] },
+        { _tag: "User", text: "And this", images: ["2.jpg"] },
+      ])
+    })
+  })
+
+  test("after a restart, the agent's first message carries every image of the take", async () => {
+    await inFolder(projectFiles, async root => {
+      const before = setup(root)
+      before.faux.setResponses([fauxAssistantMessage([fauxText("ok")])])
+      const take = before.agents.start({ ...ask, prompt: "Match this", images: [{ name: "mock.png", mimeType: "image/png", bytes: PNG_BYTES }] })
+      await before.settled(take)
+      const { faux, agents, settled } = setup(root)
+      /** @type {any} */
+      let seen = null
+      faux.setResponses([context => { seen = context.messages.at(-1); return fauxAssistantMessage([fauxText("ok")]) }])
+      agents.follow(take, "Go on")
+      await settled(take)
+      // The render comes first, then the image from the earlier prompt.
+      expect(seen.content.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image", "text", "image"])
+      expect(seen.content[3].text).toBe("Images I attached to earlier prompts in this take: mock.png. They are reference material, not the part as it renders now.")
+      expect(seen.content[4].data).toBe(PNG_BYTES.toString("base64"))
     })
   })
 

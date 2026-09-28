@@ -45,6 +45,20 @@ describe("the planner", () => {
     expect(seen.options.reasoning).toBe("medium")
   })
 
+  test("shows the model the images attached to the prompt, after the part", async () => {
+    /** @type {any} */
+    let seen = null
+    const engine = engineWith([context => {
+      seen = context.messages.find(message => message.role === "user")
+      return fauxAssistantMessage([fauxToolCall("propose_directions", { directions: [{ title: "A", brief: "one" }, { title: "B", brief: "two" }] })], { stopReason: "toolUse" })
+    }])
+    const images = [{ name: "mock.png", mimeType: /** @type {const} */ ("image/png"), bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) }]
+    await planDirections({ engine, ...input, images })
+    expect(seen.content.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "text", "image"])
+    expect(seen.content[2].text).toBe("Images I attached to this prompt: mock.png. They are reference material, not the part as it renders now.")
+    expect(seen.content[3]).toEqual({ type: "image", data: "iVBORw==", mimeType: "image/png" })
+  })
+
   test("may return fewer directions than asked for, with a reason", async () => {
     const engine = engineWith([fauxAssistantMessage([fauxToolCall("propose_directions", {
       directions: [{ title: "Use the fixtures", brief: "The one sensible answer." }],

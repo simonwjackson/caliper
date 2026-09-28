@@ -251,6 +251,67 @@ describe("declared preview scenarios", () => {
   })
 })
 
+/** The smallest bytes each image type starts with; the server checks them. */
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 4, 5])
+
+/** @param {string} name @param {string} mimeType @param {Buffer} bytes */
+const image = (name, mimeType, bytes) => ({ name, mimeType, data: bytes.toString("base64") })
+
+describe("images attached to a prompt", () => {
+  test("a new take keeps its images beside the take, serves them, and discard removes them", async () => {
+    await withProject({ files }, async ({ url, get, root }) => {
+      const images = [image("mock.png", "image/png", PNG), image("photo.jpg", "image/jpeg", JPEG)]
+      const created = await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Like this", images })
+      expect(created.status).toBe(201)
+      const { take } = await created.json()
+      const view = await settledTake(get, take)
+      expect(view.images).toEqual([
+        { file: "1.png", name: "mock.png", mimeType: "image/png" },
+        { file: "2.jpg", name: "photo.jpg", mimeType: "image/jpeg" },
+      ])
+      // Images are not edits: accept must never copy them into the project.
+      expect(view.files).toEqual([])
+      const served = await get(`/__caliper/takes/${take}/images/1.png`)
+      expect(served.status).toBe(200)
+      expect(served.headers.get("content-type")).toBe("image/png")
+      expect(Buffer.from(await served.arrayBuffer())).toEqual(PNG)
+      expect((await get(`/__caliper/takes/${take}/images/9.png`)).status).toBe(404)
+      await post(url, `/__caliper/takes/${take}/discard`, {})
+      expect(existsSync(join(root, ".caliper/takes", `${take}.images`))).toBe(false)
+      expect((await get(`/__caliper/takes/${take}/images/1.png`)).status).toBe(404)
+    })
+  })
+
+  test("names the problem with an image before any take starts", async () => {
+    await withProject({ files }, async ({ url, get }) => {
+      const ask = { part: "src/Chip.part.tsx", prompt: "Like this" }
+      /** @param {unknown} images */
+      const error = async images => (await (await post(url, "/__caliper/takes", { ...ask, images })).json()).error
+      expect(await error([image("a.svg", "image/svg+xml", PNG)])).toBe('"a.svg" is not a PNG, JPEG, WebP or GIF image.')
+      expect(await error([image("fake.png", "image/png", JPEG)])).toBe('"fake.png" is not a PNG image. Its bytes do not match its type.')
+      expect(await error(Array.from({ length: 5 }, (_, index) => image(`${index}.png`, "image/png", PNG)))).toBe("A prompt can carry at most 4 images.")
+      expect(await error([{ name: "a.png", mimeType: "image/png" }])).toBe("Each image needs a name, a type and base64 data.")
+      expect(await error([image("big.png", "image/png", Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('"big.png" is larger than 5 MB.')
+      /** @type {import("../src/types").TakesSnapshot} */
+      const snapshot = await (await get("/__caliper/takes.json")).json()
+      expect(snapshot.takes).toEqual([])
+    })
+  })
+
+  test("a follow-up prompt adds its images to the take", async () => {
+    await withProject({ files }, async ({ url, get }) => {
+      const { take } = await (await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red" })).json()
+      await settledTake(get, take)
+      const followed = await post(url, `/__caliper/takes/${take}/prompt`, { prompt: "Like this", images: [image("ref.png", "image/png", PNG)] })
+      expect(followed.status).toBe(200)
+      const view = await settledTake(get, take)
+      expect(view.images).toEqual([{ file: "1.png", name: "ref.png", mimeType: "image/png" }])
+      expect(view.log.find(entry => entry._tag === "User" && entry.text === "Like this")).toEqual({ _tag: "User", text: "Like this", images: ["1.png"] })
+    })
+  })
+})
+
 describe("the plan endpoint", () => {
   test("names the problem when the agent is off, or the count is wrong", async () => {
     await withProject({ files }, async ({ url }) => {

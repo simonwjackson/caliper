@@ -1,6 +1,7 @@
 // @ts-check
 import { Type } from "typebox"
 import { plannerSkillNote } from "./skills.js"
+import { imageContent } from "./images.js"
 
 /**
  * The planner turns one prompt into several different directions, so the
@@ -39,15 +40,17 @@ const planTool = {
  *   state: string,
  *   device: string,
  *   context: Content[],
+ *   images?: readonly import("./images.js").AttachedImage[],
  *   preview?: import("../types").StateRef,
  *   skills?: import("./skills.js").SkillCatalog,
  *   signal?: AbortSignal,
  * }} input
  *   `context` is what the planner sees of the part: its source and how it renders now.
  *   `skills` are the skills the take agents can load; a brief can name one.
+ *   `images` are what you attached to the prompt, as reference material.
  * @returns {Promise<TakePlan>}
  */
-export async function planDirections({ engine, prompt, count, part, state, device, context, preview, skills, signal }) {
+export async function planDirections({ engine, prompt, count, part, state, device, context, images = [], preview, skills, signal }) {
   const { models, model, reasoning } = engine
   const message = await models.completeSimple(model, {
     systemPrompt: `${systemPrompt(count)}${skills ? plannerSkillNote(skills) : ""}`,
@@ -58,6 +61,7 @@ export async function planDirections({ engine, prompt, count, part, state, devic
       content: [
         { type: "text", text: `The user's request: ${prompt}\n\nPropose up to ${count} directions. The editing subject is ${part}, state "${state}". The preview is ${preview?.part ?? part}, state "${preview?.state ?? state}", on ${device}.${preview ? " This is a product-owned composed scenario. Plan changes to the subject, not a replacement of the page with its standalone fixture." : ""}` },
         ...context,
+        ...imageContent(images, "this prompt"),
       ],
     }],
   }, {

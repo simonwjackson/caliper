@@ -281,6 +281,29 @@ ones. Existing takes without a context remain isolated.
 conversation lives only in the dev server: after a restart, the take's files
 remain, and its next prompt starts a new conversation.
 
+### Attach reference images
+
+A prompt can carry up to 4 images: a mockup, a screenshot of a product you
+like, or a photo of the device. Use **Add image**, paste into the prompt box,
+or drop files on the composer. Caliper takes PNG, JPEG, WebP and GIF, up to
+5 MB each. It refuses SVG and other types, because model APIs do not read
+them. The server checks each image's bytes, not only the type the browser
+sends.
+
+The images go to the planner, to every take a plan starts, and to the take's
+agent. The model gets them after the part's source and its current render,
+with a line that names them as reference material. A follow-up prompt can
+carry its own images.
+
+Caliper keeps a take's images in `.caliper/takes/<n>.images/`, beside the
+take's folder and not in it. Replace never copies an image into the project.
+Discard and Replace delete the images. After a restart, the take's next
+prompt gives the new conversation every earlier image again. The conversation
+shows each prompt's images as thumbnails that open the full image.
+
+Cost: the model reads every image of a prompt once for each take. Four
+images on a plan of four takes are 16 image inputs, plus the planner's 4.
+
 ### Give the agent skills
 
 The agent uses [Agent Skills](https://agentskills.io): folders that hold a

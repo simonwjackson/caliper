@@ -17,6 +17,7 @@ import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { skillsStatus } from "./skills.js"
+import { MAX_IMAGES_BODY, readImages } from "./images.js"
 import { Type } from "typebox"
 
 /**
@@ -185,7 +186,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     } catch (error) {
       context.push({ type: "text", text: `Caliper could not render the part: ${error instanceof Error ? error.message : String(error)}` })
     }
-    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, skills: skills(), ...(ask.context === undefined ? {} : { preview: ask.context }) })
+    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, images: ask.images, skills: skills(), ...(ask.context === undefined ? {} : { preview: ask.context }) })
   }
 
   /** @returns {TakesSnapshot} */
@@ -203,14 +204,20 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return true
     }
     if (path !== "/takes" && !path.startsWith("/takes/")) return false
+    const shown = /^\/takes\/([^/]+)\/images\/([^/]+)$/.exec(path)
+    if (shown !== null && request.method === "GET") {
+      serveImage(shown[1] ?? "", shown[2] ?? "", response)
+      return true
+    }
     const refusal = refuse(request)
     if (refusal !== null) {
       json(response, 403, { error: refusal })
       return true
     }
     try {
-      // A save to a take carries a whole file.
-      const body = await readJson(request, path.endsWith("/file") ? MAX_FILE_BODY : MAX_BODY)
+      // A save to a take carries a whole file; a prompt can carry images.
+      const carriesImages = path === "/takes" || path === "/takes/plan" || path.endsWith("/prompt")
+      const body = await readJson(request, path.endsWith("/file") ? MAX_FILE_BODY : carriesImages ? MAX_IMAGES_BODY : MAX_BODY)
       shutdown.signal.throwIfAborted()
       if (path === "/takes") {
         const ask = await validAsk(body)
@@ -246,7 +253,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         json(response, 200, { take, files: agents.editByHand(take, file, content) })
       } else if (action === "prompt") {
         validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
-        agents.follow(take, validPrompt(body))
+        agents.follow(take, validPrompt(body), readImages(body))
         json(response, 200, { take })
       } else if (action === "stop") {
         await agents.stop(take)
@@ -269,7 +276,31 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
   /** @param {unknown} body */
   const validAsk = async body => {
     const prompt = validPrompt(body)
-    return { ...(await validTarget(body)), prompt }
+    const target = await validTarget(body)
+    return { ...target, prompt, images: readImages(body) }
+  }
+
+  /**
+   * Send one image of a take. Take numbers are reused after a discard, so the
+   * browser must not keep a copy.
+   *
+   * @param {string} take
+   * @param {string} file
+   * @param {ServerResponse} response
+   */
+  const serveImage = (take, file, response) => {
+    const kept = isTakeId(take) ? store.image(take, file) : null
+    if (kept === null) {
+      json(response, 404, { error: `Take ${take} has no image "${file}".` })
+      return
+    }
+    response.writeHead(200, {
+      "content-type": kept.image.mimeType,
+      "content-length": String(kept.bytes.length),
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    })
+    response.end(kept.bytes)
   }
 
   /**

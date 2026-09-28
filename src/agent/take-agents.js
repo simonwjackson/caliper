@@ -6,6 +6,7 @@ import { takeTools } from "./tools.js"
 import { metadataTools } from "./metadata-tools.js"
 import { createIntegrationReview } from "../takes/integration.js"
 import { skillPrompt, skillSession } from "./skills.js"
+import { imageContent } from "./images.js"
 
 /**
  * @typedef {import("./model.js").Engine} Engine
@@ -17,6 +18,7 @@ import { skillPrompt, skillSession } from "./skills.js"
  * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
  *   `direction` is the planner's way for this take to answer the prompt;
  *   `others` are the titles of the directions its sibling takes got.
+ * @typedef {import("./images.js").AttachedImage} AttachedImage
  * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
  * @typedef {ReturnType<typeof skillSession>} SkillSession
  * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string>, skills?: SkillSession }} Live
@@ -58,11 +60,13 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   let closed = false
   const assertOpen = () => { if (closed) throw new Error("The takes API is closed.") }
 
-  /** @param {string} take @param {string} prompt */
-  const launch = (take, prompt) => {
+  /** @param {string} take @param {string} prompt @param {readonly AttachedImage[]} [images] */
+  const launch = (take, prompt, images = []) => {
+    // Keep the images before the run starts, so the take shows them even if the model fails.
+    const attached = store.addImages(take, images).map((kept, index) => ({ ...kept, bytes: /** @type {AttachedImage} */ (images[index]).bytes }))
     const controller = new AbortController()
     controllers.set(take, controller)
-    const task = send(take, prompt, controller.signal)
+    const task = send(take, prompt, attached, controller.signal)
     pending.set(take, task)
     void task.finally(() => {
       if (pending.get(take) === task) {
@@ -75,13 +79,13 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   /**
    * Start a new take of a part and give its agent the first prompt.
    *
-   * @param {TakeAsk & { prompt: string }} input
+   * @param {TakeAsk & { prompt: string, images?: readonly AttachedImage[] }} input
    * @returns {string} the take number
    */
-  const start = ({ prompt, ...ask }) => {
+  const start = ({ prompt, images = [], ...ask }) => {
     assertOpen()
     const take = store.create({ ...ask, ...(ask.direction ? { name: ask.direction.title } : {}) })
-    launch(take, prompt)
+    launch(take, prompt, images)
     return take
   }
 
@@ -91,12 +95,13 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    *
    * @param {string} take
    * @param {string} prompt
+   * @param {readonly AttachedImage[]} [images]
    */
-  const follow = (take, prompt) => {
+  const follow = (take, prompt, images = []) => {
     assertOpen()
     if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
-    launch(take, prompt)
+    launch(take, prompt, images)
   }
 
   /**
@@ -171,6 +176,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       ...(record.integration ? { integration: integration.summary(take) } : {}),
       run: state?.run ?? { _tag: "Idle" },
       files: store.files(take),
+      images: record.images ?? [],
       log: state?.log ?? [],
     }]
   })
@@ -178,14 +184,15 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   /**
    * @param {string} take
    * @param {string} prompt
+   * @param {ReadonlyArray<AttachedImage & { file: string }>} images attached to this prompt, already kept
    * @param {AbortSignal} signal
    */
-  const send = async (take, prompt, signal) => {
+  const send = async (take, prompt, images, signal) => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     /** @type {Live} */
     const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [], edited: new Set() }
     entry.run = { _tag: "Running" }
-    entry.log.push({ _tag: "User", text: prompt })
+    entry.log.push({ _tag: "User", text: prompt, ...(images.length ? { images: images.map(image => image.file) } : {}) })
     live.set(take, entry)
     onChange()
     const edited = [...entry.edited]
@@ -206,9 +213,17 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       entry.agent = agent
       const named = namedSkills(entry, prompt)
       if (named.length > 0) onChange()
+      const attached = imageContent(images, "this prompt")
       const content = first
-        ? await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take)
-        : `${named}${handNote(edited, false)}${prompt}`
+        ? [
+          ...await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take),
+          // A new agent in an old take, after a restart, has not seen the take's earlier images.
+          ...imageContent(earlierImages(store, take, images), "earlier prompts in this take"),
+          ...attached,
+        ]
+        : attached.length > 0
+          ? [{ type: /** @type {const} */ ("text"), text: `${named}${handNote(edited, false)}${prompt}` }, ...attached]
+          : `${named}${handNote(edited, false)}${prompt}`
       signal.throwIfAborted()
       if (live.get(take) !== entry) return
       await (typeof content === "string"
@@ -304,6 +319,24 @@ function namedSkills(entry, prompt) {
     entry.log.push({ _tag: "Tool", id: `named-${skill.name}-${entry.log.length}`, name: "activate_skill", subject: skill.name, outcome: "Done", detail: `Loaded because the prompt names /${skill.name}.` })
   }
   return loaded.map(skill => `${skill.text}\n\n`).join("")
+}
+
+/**
+ * The take's images from before this prompt, with their bytes. An image
+ * whose file is gone is left out.
+ *
+ * @param {TakeStore} store
+ * @param {string} take
+ * @param {ReadonlyArray<{ file: string }>} now the images of this prompt
+ * @returns {AttachedImage[]}
+ */
+function earlierImages(store, take, now) {
+  const current = new Set(now.map(image => image.file))
+  return (store.record(take)?.images ?? []).flatMap(known => {
+    if (current.has(known.file)) return []
+    const kept = store.image(take, known.file)
+    return kept === null ? [] : [{ name: known.name, mimeType: known.mimeType, bytes: kept.bytes }]
+  })
 }
 
 /**

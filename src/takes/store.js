@@ -2,6 +2,7 @@
 import { execFileSync } from "node:child_process"
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path"
+import { IMAGE_TYPES } from "../client/images.js"
 
 /**
  * Where takes live, and what an agent may read and write.
@@ -11,6 +12,10 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
  *
  *   <root>/.caliper/takes/<n>/<path of the real file>
  *   <root>/.caliper/takes/<n>.json   what the take was asked to do
+ *   <root>/.caliper/takes/<n>.images/<k>.<ext>   images you attached to its prompts
+ *
+ * Images sit beside the take's folder, not in it, so accept can never copy
+ * one into the project.
  *
  * `.caliper/` holds a `.gitignore` that ignores the whole folder, so the
  * project needs no change to keep takes out of Git.
@@ -19,7 +24,8 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
  *   `file` is root-relative, with forward slashes.
  * @typedef {{ title: string, brief: string }} Direction
  *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
- * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration }} TakeRecord
+ * @typedef {import("../types").TakeImage} TakeImage
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[] }} TakeRecord
  *   `part` and `state` identify the editing subject. Optional `context` identifies a declared
  *   composed preview. It does not restrict edits beyond the existing take-folder fence.
  *   Names, planner directions, and integration review metadata remain independent of that context.
@@ -112,6 +118,9 @@ export function createTakeStore(root) {
   /** @param {string} take */
   const recordFile = take => safeTakePath(`${folder(take)}.json`)
 
+  /** @param {string} take */
+  const imageFolder = take => safeTakePath(`${folder(take)}.images`)
+
   /**
    * @param {string} file what the agent asked for
    * @returns {string} the root-relative file
@@ -145,8 +154,10 @@ export function createTakeStore(root) {
     const used = readdirSync(takesDir).map(name => Number.parseInt(name, 10)).filter(Number.isFinite)
     const take = String(Math.max(0, ...used) + 1)
     mkdirSync(folder(take), { recursive: true })
+    // A new take starts with no images, even when it copies another take's record.
+    const { images: _images, ...rest } = /** @type {Omit<TakeRecord, "created">} */ (ask)
     /** @type {TakeRecord} */
-    const record = { ...ask, created: Date.now() }
+    const record = { ...rest, created: Date.now() }
     writeFileSync(recordFile(take), `${JSON.stringify(record, null, 2)}\n`)
     return take
   }
@@ -165,6 +176,42 @@ export function createTakeStore(root) {
     const current = record(take)
     if (current === null) throw new Error(`Take ${take} does not exist.`)
     writeFileSync(recordFile(take), `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`)
+  }
+
+  /**
+   * Keep images you attached to a prompt of the take.
+   *
+   * @param {string} take
+   * @param {ReadonlyArray<{ name: string, mimeType: TakeImage["mimeType"], bytes: Uint8Array }>} attached
+   * @returns {TakeImage[]} the images added, in order
+   */
+  const addImages = (take, attached) => {
+    if (attached.length === 0) return []
+    const current = record(take)
+    if (current === null) throw new Error(`Take ${take} does not exist.`)
+    const kept = current.images ?? []
+    mkdirSync(imageFolder(take), { recursive: true })
+    const added = attached.map((image, index) => {
+      const file = `${kept.length + index + 1}.${IMAGE_TYPES[image.mimeType].extension}`
+      writeFileSync(safeTakePath(join(imageFolder(take), file)), image.bytes)
+      return { file, name: image.name, mimeType: image.mimeType }
+    })
+    update(take, { images: [...kept, ...added] })
+    return added
+  }
+
+  /**
+   * The bytes of one image of the take, or null when the take has no such image.
+   *
+   * @param {string} take
+   * @param {string} file as `TakeImage.file` names it
+   * @returns {{ image: TakeImage, bytes: Buffer } | null}
+   */
+  const image = (take, file) => {
+    const known = record(take)?.images?.find(candidate => candidate.file === file)
+    if (known === undefined) return null
+    const path = safeTakePath(join(imageFolder(take), known.file))
+    return existsSync(path) ? { image: known, bytes: readFileSync(path) } : null
   }
 
   /** @param {string} file @returns {string | null} */
@@ -256,6 +303,7 @@ export function createTakeStore(root) {
   const discard = take => {
     const metadata = recordFile(take)
     rmSync(folder(take), { recursive: true, force: true })
+    rmSync(imageFolder(take), { recursive: true, force: true })
     rmSync(metadata, { force: true })
   }
 
@@ -276,7 +324,7 @@ export function createTakeStore(root) {
       .sort()
   }
 
-  return { root, list, create, record, update, original, reset, read, write, files, listFiles, accept, discard }
+  return { root, list, create, record, update, addImages, image, original, reset, read, write, files, listFiles, accept, discard }
 }
 
 /** @typedef {ReturnType<typeof createTakeStore>} TakeStore */

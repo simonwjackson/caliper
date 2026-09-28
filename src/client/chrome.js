@@ -3,6 +3,7 @@ import { createCodePane } from "./code-pane.js"
 import { createChecksPanel } from "./checks-panel.js"
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
 import { h } from "./dom.js"
+import { IMAGE_TYPES, imageName, imageProblem, MAX_IMAGE_BYTES, MAX_IMAGES } from "./images.js"
 import { fitBar, planLayout } from "./layout.js"
 import { createIntegrationPanel } from "./integration-review.js"
 import { createKnobsPanel } from "./knobs-panel.js"
@@ -40,7 +41,11 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").Direction} Direction
  * @typedef {import("../types").StateRef} StateRef
- * @typedef {{ part: string, state: string, device: string, prompt: string, context?: StateRef }} TakeAsk
+ * @typedef {{ name: string, mimeType: string, data: string }} WireImage
+ *   An attached image as the takes API reads it; `data` is base64.
+ * @typedef {WireImage & { id: number, url: string }} Attachment
+ *   An image in the composer. `url` is an object URL for its thumbnail.
+ * @typedef {{ part: string, state: string, device: string, prompt: string, context?: StateRef, images?: WireImage[] }} TakeAsk
  * @typedef {{ _tag: "None" }
  *   | { _tag: "Planning", ask: TakeAsk, count: number, id: number }
  *   | { _tag: "Review", ask: TakeAsk, directions: Array<{ title: string, brief: string }>, note?: string }} Plan
@@ -126,6 +131,10 @@ const state = {
   takeError: null,
   /** @type {Plan} */
   plan: { _tag: "None" },
+  /** Images the next prompt carries. @type {Attachment[]} */
+  attachments: [],
+  /** Why the last image you tried to attach was refused. @type {string | null} */
+  attachProblem: null,
   /** Whether the Takes panel is open. null: not chosen yet, so it follows the agent. @type {boolean | null} */
   takesOpen: localStorage.getItem(STORAGE_TAKES_OPEN) === null ? null : localStorage.getItem(STORAGE_TAKES_OPEN) === "true",
   /** Whether the code pane is open. */
@@ -289,13 +298,39 @@ app.append(
           event.preventDefault()
           void startTakes()
         },
+        onDragover: event => {
+          const drag = /** @type {DragEvent} */ (event)
+          if (!drag.dataTransfer?.types.includes("Files") || !canAttach()) return
+          drag.preventDefault()
+          drag.dataTransfer.dropEffect = "copy"
+          $(".cal-composer").dataset.dropping = "true"
+        },
+        onDragleave: event => {
+          const composer = $(".cal-composer")
+          if (!composer.contains(/** @type {DragEvent} */ (event).relatedTarget instanceof Node ? /** @type {Node} */ (/** @type {DragEvent} */ (event).relatedTarget) : null)) delete composer.dataset.dropping
+        },
+        onDrop: event => {
+          const drag = /** @type {DragEvent} */ (event)
+          delete $(".cal-composer").dataset.dropping
+          if (!drag.dataTransfer?.files.length) return
+          drag.preventDefault()
+          void attachFiles([...drag.dataTransfer.files])
+        },
       },
         h("div", { class: "cal-plan", "aria-live": "polite" }),
+        h("ul", { class: "cal-attachments", "aria-label": "Attached images" }),
         h("textarea", {
           class: "cal-prompt",
           rows: "3",
-          placeholder: "Describe a change to this part",
+          placeholder: "Describe a change to this part. Paste or drop reference images.",
           "aria-label": "Prompt",
+          onPaste: event => {
+            const files = [.../** @type {ClipboardEvent} */ (event).clipboardData?.files ?? []]
+            if (files.length === 0) return
+            // Pasted text still goes in the box; a pasted image becomes an attachment.
+            event.preventDefault()
+            void attachFiles(files)
+          },
           onKeydown: event => {
             const key = /** @type {KeyboardEvent} */ (event)
             if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) {
@@ -307,6 +342,24 @@ app.append(
         }),
         h("p", { class: "cal-composer-note" }),
         h("div", { class: "cal-composer-actions" },
+          h("input", {
+            type: "file",
+            class: "cal-attach-input",
+            accept: Object.keys(IMAGE_TYPES).join(","),
+            multiple: true,
+            hidden: true,
+            onChange: event => {
+              const input = /** @type {HTMLInputElement} */ (event.target)
+              void attachFiles([...input.files ?? []])
+              input.value = ""
+            },
+          }),
+          h("button", {
+            type: "button",
+            class: "cal-attach",
+            title: `Attach up to ${MAX_IMAGES} reference images: PNG, JPEG, WebP or GIF, up to ${MAX_IMAGE_BYTES / 1024 / 1024} MB each. You can also paste or drop them.`,
+            onClick: () => /** @type {HTMLInputElement} */ ($(".cal-attach-input")).click(),
+          }, "Add image"),
           h("label", { class: "cal-parallel" },
             h("span", {}, "Takes"),
             h("select", {
@@ -1426,7 +1479,8 @@ async function startTakes() {
   if (!part || !prompt) return
   const subject = subjectRef()
   if (!subject) return
-  const ask = { ...subject, device: state.device.id, prompt, ...(state.context ? { context: state.context } : {}) }
+  const images = wireImages()
+  const ask = { ...subject, device: state.device.id, prompt, ...(state.context ? { context: state.context } : {}), ...(images.length ? { images } : {}) }
   if (state.parallel === 1) return launch(ask, [undefined])
   // Several takes: ask the planner for one different direction per take first.
   const id = Date.now()
@@ -1462,6 +1516,7 @@ async function launch(ask, directions) {
   const started = results.filter(Boolean).map(result => /** @type {string} */ (result.take))
   if (started.length === 0) return
   promptBox().value = ""
+  clearAttachments()
   state.plan = { _tag: "None" }
   state.part = ask.part
   state.take = started[0] ?? null
@@ -1483,10 +1538,92 @@ async function followTake() {
   if (!take || !prompt || state.sending) return
   // The agent reads the take's files: save what you typed first.
   await code.flush()
-  if (await postTakes(`/takes/${take.take}/prompt`, { prompt })) {
+  const images = wireImages()
+  if (await postTakes(`/takes/${take.take}/prompt`, { prompt, ...(images.length ? { images } : {}) })) {
     promptBox().value = ""
+    clearAttachments()
     renderComposer()
   }
+}
+
+/** Whether the composer takes images now: the agent is ready and no plan is open. */
+function canAttach() {
+  return state.takes?.agent._tag === "Ready" && state.plan._tag === "None"
+}
+
+/**
+ * Attach the images among `files` to the next prompt. A file that is not a
+ * usable image, or one past the limit, is refused with a note; the others
+ * are still attached.
+ *
+ * @param {File[]} files
+ */
+async function attachFiles(files) {
+  if (!canAttach()) return
+  /** @type {string[]} */
+  const refused = []
+  for (const file of files) {
+    const name = imageName(file.name)
+    const problem = imageProblem({ name, type: file.type, size: file.size })
+    if (problem !== null) refused.push(problem)
+    else if (state.attachments.length >= MAX_IMAGES) refused.push(`A prompt can carry at most ${MAX_IMAGES} images. "${name}" was not attached.`)
+    else state.attachments.push({ id: nextAttachment++, name, mimeType: file.type, data: await base64(file), url: URL.createObjectURL(file) })
+  }
+  state.attachProblem = refused.length ? refused.join(" ") : null
+  renderComposer()
+}
+
+let nextAttachment = 1
+
+/** @param {Blob} file @returns {Promise<string>} */
+function base64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).slice(String(reader.result).indexOf(",") + 1))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+/** @returns {WireImage[]} */
+function wireImages() {
+  return state.attachments.map(({ name, mimeType, data }) => ({ name, mimeType, data }))
+}
+
+/** @param {number} id */
+function removeAttachment(id) {
+  const gone = state.attachments.find(attachment => attachment.id === id)
+  if (gone) URL.revokeObjectURL(gone.url)
+  state.attachments = state.attachments.filter(attachment => attachment.id !== id)
+  state.attachProblem = null
+  renderComposer()
+  // Keep focus in the tray, or give it back to the prompt.
+  const next = /** @type {HTMLElement | null} */ ($(".cal-attachments").querySelector(".cal-attachment-remove"))
+  ;(next ?? promptBox()).focus()
+}
+
+function clearAttachments() {
+  for (const attachment of state.attachments) URL.revokeObjectURL(attachment.url)
+  state.attachments = []
+  state.attachProblem = null
+}
+
+/** The images waiting for the next prompt. Rebuilt only when they change, so a thumbnail does not flicker. */
+function renderAttachments() {
+  const tray = $(".cal-attachments")
+  const locked = !canAttach()
+  const shape = `${state.attachments.map(attachment => attachment.id).join(",")}:${locked}`
+  if (tray.dataset.shape === shape) return
+  tray.dataset.shape = shape
+  tray.replaceChildren(...state.attachments.map(attachment => h("li", { class: "cal-attachment", title: attachment.name },
+    h("img", { src: attachment.url, alt: attachment.name }),
+    h("button", {
+      type: "button",
+      class: "cal-attachment-remove",
+      "aria-label": `Remove ${attachment.name}`,
+      disabled: locked,
+      onClick: () => removeAttachment(attachment.id),
+    }, "×"))))
 }
 
 /** @param {TakeView} take */
@@ -1636,7 +1773,7 @@ function renderLog() {
     ...(!takeAvailable(take) ? [h("p", { class: "cal-agent-failed", role: "alert" }, "The editing state or its recorded context is unavailable. Restore the declaration or discard this take.")] : []),
     ...(take.direction ? [h("div", { class: "cal-log-direction" }, h("strong", {}, take.direction.title), " ", take.direction.brief)] : []),
     ...entries.map(entry => {
-      if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text)
+      if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text, ...(entry.images?.length ? [loggedImages(take, entry.images)] : []))
       if (entry._tag === "Assistant") return h("div", { class: "cal-log-assistant" }, entry.text)
       if (entry._tag === "Edit") return h("div", { class: "cal-log-edit" }, "You edited ", h("code", {}, entry.file))
       return h("div", { class: "cal-log-tool", "data-outcome": entry.outcome, title: entry.detail },
@@ -1648,6 +1785,20 @@ function renderLog() {
   )
   if (focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true })
   if (pinned) log.scrollTop = log.scrollHeight
+}
+
+/**
+ * The images a prompt carried, as small links to the full images.
+ *
+ * @param {TakeView} take
+ * @param {readonly string[]} files
+ */
+function loggedImages(take, files) {
+  return h("span", { class: "cal-log-images" }, ...files.map(file => {
+    const name = take.images.find(image => image.file === file)?.name ?? file
+    const src = `takes/${take.take}/images/${encodeURIComponent(file)}`
+    return h("a", { href: src, target: "_blank", rel: "noopener", title: name }, h("img", { src, alt: name, loading: "lazy" }))
+  }))
 }
 
 function renderComposer() {
@@ -1664,6 +1815,8 @@ function renderComposer() {
   const reviewed = plan._tag === "Review" ? plan.directions.filter(direction => direction.title.trim() && direction.brief.trim()).length : 0
   promptBox().disabled = !ready || planning
   $(".cal-parallel").hidden = planning
+  ;/** @type {HTMLButtonElement} */ ($(".cal-attach")).disabled = !canAttach() || state.attachments.length >= MAX_IMAGES
+  renderAttachments()
   back.hidden = !planning
   back.textContent = plan._tag === "Planning" ? "Cancel" : "Back"
   start.disabled = plan._tag === "Planning" || state.sending || (plan._tag === "Review" ? reviewed === 0 : !ready || !part || !subjectRef() || !stateExists(currentProject()?.parts ?? [], /** @type {StateRef} */ (subjectRef())) || !text)
@@ -1674,8 +1827,9 @@ function renderComposer() {
   follow.disabled = !ready || !text || state.sending || take?.run._tag === "Running" || (take !== null && !takeAvailable(take))
   follow.textContent = take ? `Send to take ${take.take}` : ""
   const note = $(".cal-composer-note")
-  note.className = state.takeError ? "cal-composer-note cal-agent-failed" : "cal-composer-note"
-  note.textContent = state.takeError
+  const problem = state.takeError ?? state.attachProblem
+  note.className = problem ? "cal-composer-note cal-agent-failed" : "cal-composer-note"
+  note.textContent = problem
     ?? (plan._tag === "Planning" ? `Asking ${state.takes?.agent._tag === "Ready" ? state.takes.agent.model : "the model"} for ${plan.count} different directions…`
       : plan._tag === "Review" ? "Edit or remove directions. Each take follows one, and knows what the others try."
       : ready && part && !subjectRef() ? "Choose one state before starting a take."
