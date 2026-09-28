@@ -1,10 +1,12 @@
 // @ts-check
 import { h } from "./dom.js"
 import {
-  animatedProperties, applyLive, declarationsOf, initialComputed, knockout, observeSheets, projectSheets,
+  animatedProperties, applyLive, containersOf, declarationsOf, initialComputed, knockout, observeSheets, projectSheets,
   registrations, sample, summarize,
 } from "./knob-cssom.js"
-import { clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, scrub, sentinelFor } from "./knob-values.js"
+import {
+  clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, replaceThreshold, scrub, sentinelFor, thresholdsOf,
+} from "./knob-values.js"
 
 /**
  * The Knobs panel: the design inputs of the part on the stage, found in its
@@ -23,8 +25,12 @@ import { clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, s
  * @typedef {Extract<KnobSource, { _tag: "Located" }>} Located
  * @typedef {{ take: string | null, label: string }} Variant
  * @typedef {{ iframe: HTMLIFrameElement, document: Document, window: Window }} Frame
+ * @typedef {{ _tag: "Property", registration: Registration }
+ *   | { _tag: "Threshold", index: number, condition: string }} Origin
+ *   What a knob edits: a registered property's declaration, or one length in
+ *   a `@container` condition, which is `condition` as the file writes it.
  * @typedef {{
- *   key: string, name: string, registration: Registration, site: Site, source: Located,
+ *   key: string, name: string, origin: Origin, site: Site, source: Located,
  *   control: Exclude<Control, { _tag: "Skip" }>, label: string, where: string, note: string,
  *   problems: string[], elements: Element[], document: Document,
  * }} Knob
@@ -97,9 +103,31 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
     })
   }
 
+  /**
+   * The text a knob's site shows for `value`. A threshold's site is its whole
+   * condition, with every live threshold of that rule in it.
+   *
+   * @param {Knob} knob
+   * @param {string} value
+   */
+  const siteText = (knob, value) => {
+    if (knob.origin._tag !== "Threshold") return value
+    let condition = knob.origin.condition
+    const site = siteKey(knob.site)
+    for (const { knob: other, value: shown } of live.values()) {
+      if (other.key !== knob.key && other.origin._tag === "Threshold" && siteKey(other.site) === site) condition = replaceThreshold(condition, other.origin.index, shown)
+    }
+    return replaceThreshold(condition, knob.origin.index, value)
+  }
+
+  /** Show a knob's value in every frame of the variant. @param {Knob} knob @param {string} value */
+  const showEverywhere = (knob, value) => {
+    for (const { document } of variantFrames()) applyLive(document, knob.site, siteText(knob, value))
+  }
+
   /** Put every live value back into a frame, after Vite replaced a stylesheet's text. @param {Document} document */
   const reapply = document => {
-    for (const { knob, value } of live.values()) applyLive(document, knob.site, value)
+    for (const { knob, value } of live.values()) applyLive(document, knob.site, siteText(knob, value))
   }
 
   /** @param {Frame[]} list */
@@ -171,7 +199,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
           knobs.length === 0
             ? h("div", { class: "cal-knobs-note" },
               h("p", {}, skipped.length === 0
-                ? "This part's CSS registers no design inputs. Register one with @property to get a knob:"
+                ? "Caliper found no design inputs in this part's CSS. Register one with @property to get a knob:"
                 : "No registered property here is a knob. The list below says why."),
               skipped.length === 0 ? h("pre", {}, '@property --gap {\n  syntax: "<length>";\n  inherits: true;\n  initial-value: 8px;\n}') : null)
             : h("ul", { class: "cal-knob-list" }, ...knobs.map(knobRow)),
@@ -197,7 +225,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
   const preview = (knob, value) => {
     live.set(knob.key, { knob, value, until: Infinity })
     statuses.delete(knob.key)
-    for (const { document } of variantFrames()) applyLive(document, knob.site, value)
+    showEverywhere(knob, value)
     rows.get(knob.key)?.(value)
   }
 
@@ -211,7 +239,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
     dragging = null
     if (value === knob.source.value) {
       live.delete(knob.key)
-      for (const { document } of variantFrames()) applyLive(document, knob.site, value)
+      showEverywhere(knob, value)
       return
     }
     preview(knob, value)
@@ -242,7 +270,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
       setTimeout(schedule, COMMIT_MS)
     } else {
       live.delete(knob.key)
-      for (const { document } of variantFrames()) applyLive(document, knob.site, knob.source.value)
+      showEverywhere(knob, knob.source.value)
       rows.get(knob.key)?.(knob.source.value)
     }
     setStatus(knob, status)
@@ -269,6 +297,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
       "data-knob": knob.key,
       "data-status": status?._tag ?? "Idle",
       "data-control": knob.control._tag,
+      "data-origin": knob.origin._tag,
     },
     h("div", { class: "cal-knob-head" }, control.label, control.field),
     control.extra,
@@ -388,7 +417,7 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
       case "Token": {
         const tokens = tokensOf(knob, control.token, control.namespace)
         const chosen = /^var\(\s*(--[\w-]+)\s*\)$/.exec(value)?.[1] ?? control.token
-        const isColor = /color/.test(knob.registration.syntax)
+        const isColor = knob.origin._tag === "Property" && /color/.test(knob.origin.registration.syntax)
         const expanded = palettes.has(knob.key)
         const toggle = h("button", {
           id,
@@ -581,9 +610,19 @@ async function discover(list, target) {
     }
   }
 
+  // The @container rules whose thresholds reach the part.
+  /** @type {Map<string, { site: Site, document: Document }>} */
+  const containers = new Map()
+  for (const { document } of list) {
+    for (const { sheetId, path, rule } of containersOf(document)) {
+      const site = { sheetId, path, property: "@container", name: "@container", selector: rule.conditionText }
+      if (!containers.has(siteKey(site))) containers.set(siteKey(site), { site, document })
+    }
+  }
+
   // Locate every site, and each registered property's @property rule for its hints.
   /** @type {Map<string, { site: Site, document: Document }>} */
-  const asks = new Map()
+  const asks = new Map(containers)
   for (const { site, document } of sites.values()) {
     asks.set(siteKey(site), { site, document })
     const registration = registered.get(site.name)
@@ -618,7 +657,7 @@ async function discover(list, target) {
     knobs.push({
       key,
       name: site.name,
-      registration,
+      origin: { _tag: "Property", registration },
       site: { ...site, syntax: registration.syntax, inherits: registration.inherits },
       source,
       control,
@@ -628,6 +667,41 @@ async function discover(list, target) {
       problems: [...new Set([...(fromProperty?.problems ?? []), ...(site.property === "initial-value" ? [] : source.problems)])],
       elements,
       document,
+    })
+  }
+  for (const [key, { site, document }] of containers) {
+    const source = located.get(key)
+    if (source === undefined || source._tag === "Refused") {
+      skipped.push({ name: "@container", where: site.selector, reason: source?.reason ?? "Caliper did not get an answer for it." })
+      continue
+    }
+    const thresholds = thresholdsOf(source.value)
+    if (thresholds.length === 0) {
+      skipped.push({ name: "@container", where: source.value, reason: "Its condition has no size threshold to change." })
+      continue
+    }
+    thresholds.forEach((threshold, index) => {
+      // A threshold below zero never holds, so the range starts at 0 unless a hint says otherwise.
+      const control = controlFor({ syntax: "<length>", value: threshold.text, hints: mergeHints({ min: 0 }, source.hints) })
+      if (control._tag === "Skip") {
+        skipped.push({ name: "@container", where: source.value, reason: control.reason })
+        return
+      }
+      const label = source.hints.label === undefined ? threshold.label : thresholds.length === 1 ? source.hints.label : `${source.hints.label} · ${threshold.label}`
+      knobs.push({
+        key: `${key}#${index}`,
+        name: "@container",
+        origin: { _tag: "Threshold", index, condition: source.value },
+        site,
+        source: { ...source, start: source.start + threshold.start, end: source.start + threshold.end, value: threshold.text },
+        control,
+        label,
+        where: source.value,
+        note: source.note,
+        problems: [...source.problems],
+        elements: [],
+        document,
+      })
     })
   }
   knobs.sort((left, right) => left.source.file.localeCompare(right.source.file) || left.source.start - right.source.start)

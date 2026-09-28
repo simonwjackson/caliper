@@ -413,7 +413,8 @@ frame shows the new value at once, and no file changes. When you let go,
 Caliper writes the value into that declaration, once, and Vite reloads the
 frames from the file.
 
-In this version, a knob is a custom property registered with `@property`:
+A knob is a custom property registered with `@property`, or a `@container`
+threshold:
 
 ```css
 /** How many virtual pixels the short side holds. @label Pixel rows @min 180 @max 720 @step 10 */
@@ -443,8 +444,29 @@ computed with a math function such as `calc()`, `max()` or `clamp()`, a value
 that combines tokens, a syntax with no control yet, and a declaration Caliper
 cannot place in its file.
 
+A `@container` threshold is a knob too. Each length in the condition of a
+`@container` rule that applies to the part is one knob:
+
+```css
+/** @label Narrow stage */
+@container stage (width < 45em) and (height >= 40em) {
+  .cart { display: none; }
+}
+```
+
+This rule gives two knobs, "Narrow stage · Stage width <" and "Narrow stage
+· Stage height >=". A rule applies to the part when a style rule inside it
+matches an element of the part, whether the condition holds now or not.
+Caliper reads the `min-width: 400px` form, the `width < 45em` form and a
+range such as `30em < width < 60em`. A length in a `style()` query is not a
+threshold. A threshold scrubs from 0 up, with no top, and a knob writes only
+its length, for example `45em` to `50em`. While you drag, Caliper deletes the
+rule in each frame and inserts it again with the new condition, because the
+browser does not let a script change a condition in place.
+
 A **hint** is a doc comment directly above the declaration or its `@property`
-rule. `@label` names the knob, `@min`, `@max` and `@step` shape its range, and
+rule, or above the `@container` rule. A hint above a `@container` rule applies
+to each threshold in it. `@label` names the knob, `@min`, `@max` and `@step` shape its range, and
 `@knob ignore` hides it. Only a comment that opens with `/**` holds hints, and
 Caliper reads them from the source file, because the browser drops comments.
 The prose of the comment above `@property` shows under the knob. The `knobs`
@@ -465,8 +487,8 @@ Caliper turns on Vite's `css.devSourcemap`, because a knob maps a rule in the
 browser to its source file through it. Served CSS is larger in development.
 
 Costs and limits: the Knobs and Takes panels never show at the same time.
-Knobs for `@container` thresholds, for plain custom properties and for
-promoting a literal to a token are not built yet. Caliper refuses a knob in
+Knobs for plain custom properties and for promoting a literal to a token are
+not built yet. The `knobs` option gives no hints to a `@container` threshold. Caliper refuses a knob in
 nested CSS, `@layer`, `@scope` and `@starting-style`, which are not tested.
 Tailwind, Sass and CSS modules are not tested. Only Chromium has run the
 panel. The code pane still saves over a change made elsewhere, so a pane save
@@ -827,11 +849,12 @@ CHROMIUM=/path/to/chromium node scripts/verify-knobs-product.mjs --root /path/to
 
 `scripts/verify-knobs.mjs` runs the Knobs panel on a temporary project shaped
 like Pico's tokens: discovery and its refusals, a live drag that writes the
-file once on release, the token picker, a take's copy, a save to the same file
-during a drag, and five window sizes. Screenshots go to
+file once on release, a `@container` threshold, the token picker, a take's
+copy, a save to the same file during a drag, and five window sizes. Screenshots go to
 `/tmp/caliper-verify-knobs`. `scripts/verify-knobs-product.mjs` copies a real
 project to a temporary folder, prints every knob and refusal Caliper finds for
-one part, and drags the first number knob. `--with ../../contracts` copies a
+one part, and drags the first number knob of a property and the first
+`@container` threshold. `--with ../../contracts` copies a
 folder the project imports from, at the same place. The real project never
 changes.
 

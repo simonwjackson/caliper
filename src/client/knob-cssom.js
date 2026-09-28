@@ -14,7 +14,10 @@
  *   One style rule that declares a property.
  * @typedef {{ sheetId: string, path: number[], property: string, name: string, selector: string, syntax?: string, inherits?: boolean }} Site
  *   The declaration a knob edits: a custom property in a style rule, or
- *   `initial-value` in the `@property` rule of `name`.
+ *   `initial-value` in the `@property` rule of `name`. For the `@container`
+ *   property, the condition of the `@container` rule at `path`; `selector`
+ *   then holds the condition as the browser read it from the file.
+ * @typedef {{ sheetId: string, path: number[], rule: CSSContainerRule }} ContainerSite
  */
 
 /** The CSSOM interfaces, by the at-rule each stands for. */
@@ -237,9 +240,67 @@ export function initialComputed(document, property) {
 }
 
 /**
+ * The `@container` rules that apply to the rendered part: a rule counts when
+ * a style rule inside it matches an element in `#caliper-host`, whether the
+ * condition holds now or not. States a selector names, such as `:hover`, and
+ * pseudo-elements are left out of the match.
+ *
+ * @param {Document} document
+ * @returns {ContainerSite[]}
+ */
+export function containersOf(document) {
+  const host = document.getElementById("caliper-host")
+  if (host === null) return []
+  /** @type {ContainerSite[]} */
+  const found = []
+  for (const { id, sheet } of projectSheets(document)) {
+    for (const { rule, path } of walk(sheet.cssRules)) {
+      if (kindOf(rule) !== "container") continue
+      const container = /** @type {CSSContainerRule} */ (rule)
+      const used = [...walk(container.cssRules)].some(({ rule: inner }) => {
+        if (kindOf(inner) !== "style") return false
+        const selector = /** @type {CSSStyleRule} */ (inner).selectorText
+          .replace(/::?(?:before|after|marker|placeholder|selection|backdrop|first-line|first-letter|file-selector-button)\b/gi, "")
+          .replace(/:(?:hover|active|focus|focus-visible|focus-within|visited|target)\b/gi, "")
+        try {
+          return selector.trim() !== "" && (host.querySelector(selector) !== null || host.matches(selector))
+        } catch {
+          return false
+        }
+      })
+      if (used) found.push({ sheetId: id, path, rule: container })
+    }
+  }
+  return found
+}
+
+/**
+ * A `@container` condition as the browser writes it, or null when the
+ * browser cannot read it. It parses the rule in a sheet of its own.
+ *
+ * @param {Document} document
+ * @param {string} condition
+ */
+export function readCondition(document, condition) {
+  const View = /** @type {typeof CSSStyleSheet} */ (/** @type {any} */ (document.defaultView)?.CSSStyleSheet ?? CSSStyleSheet)
+  const sheet = new View()
+  try {
+    sheet.replaceSync(`@container ${condition} {}`)
+  } catch {
+    return null
+  }
+  const rule = sheet.cssRules[0]
+  return rule && kindOf(rule) === "container" ? /** @type {CSSContainerRule} */ (rule).conditionText : null
+}
+
+/** Rules a live edit inserted, so a later edit may replace them again. */
+const inserted = new WeakSet()
+
+/**
  * Show `value` for a site in the frame's live CSSOM, without writing a file.
- * An `@property` rule's initial value is read-only, so that rule is deleted
- * and inserted again. False when the rule is not where the site says.
+ * An `@property` rule's initial value and a `@container` rule's condition are
+ * read-only, so those rules are deleted and inserted again. False when the
+ * rule is not where the site says.
  *
  * @param {Document} document
  * @param {Site} site
@@ -251,7 +312,30 @@ export function applyLive(document, site, value) {
     if (id !== site.sheetId) continue
     const rule = ruleAt(sheet, site.path)
     if (rule === null) continue
-    if (site.property === "initial-value") {
+    if (site.property === "@container") {
+      if (kindOf(rule) !== "container") continue
+      const container = /** @type {CSSContainerRule} */ (rule)
+      const wanted = readCondition(document, value)
+      if (wanted === null) continue
+      if (container.conditionText === wanted) {
+        applied = true
+        continue
+      }
+      // Vite reloaded the sheet with another condition: the file changed, and this is not the rule any more.
+      if (container.conditionText !== site.selector && !inserted.has(container)) continue
+      const parent = container.parentRule ?? container.parentStyleSheet
+      const index = site.path.at(-1) ?? 0
+      if (parent === null || !("insertRule" in parent)) continue
+      const before = container.cssText
+      parent.deleteRule(index)
+      try {
+        parent.insertRule(`@container ${value} ${before.slice(before.indexOf("{"))}`, index)
+        inserted.add(/** @type {CSSRule} */ (parent.cssRules[index]))
+        applied = true
+      } catch {
+        parent.insertRule(before, index)
+      }
+    } else if (site.property === "initial-value") {
       if (kindOf(rule) !== "property" || /** @type {CSSPropertyRule} */ (rule).name !== site.name) continue
       const property = /** @type {CSSPropertyRule} */ (rule)
       if (property.initialValue?.trim() === value) {

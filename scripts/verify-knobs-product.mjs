@@ -10,8 +10,9 @@
  *
  * `--with` copies another folder the project imports from, at the same place
  * relative to the root. The script prints every knob and every refusal, then
- * drags the first number knob and checks that every frame changed during the
- * drag and that the file changed once, on release.
+ * drags the first number knob of a property and the first `@container`
+ * threshold, and checks for each that every frame changed during the drag and
+ * that the file changed once, on release.
  */
 import assert from "node:assert/strict"
 import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs"
@@ -70,17 +71,32 @@ try {
   console.log("\nNot knobs:")
   for (const line of skipped) console.log(`  ${line}`)
 
-  const row = page.locator(".cal-knob[data-control='Number']").first()
-  if ((await row.count()) === 0) {
-    console.log("\nNo number knob to drag.")
-  } else {
+  /**
+   * What each frame shows for a knob: a property's value on the part's first
+   * element, or the conditions of every `@container` rule.
+   *
+   * @param {string} origin
+   * @param {string} name
+   */
+  const shown = (origin, name) => page.evaluate(([origin, name]) => [...document.querySelectorAll("iframe.cal-frame[src]")].map(iframe => {
+    const frame = /** @type {HTMLIFrameElement} */ (iframe)
+    if (origin === "Threshold") {
+      return [...(frame.contentDocument?.styleSheets ?? [])].flatMap(sheet => [...sheet.cssRules].flatMap(rule => ("conditionText" in rule && rule.constructor.name === "CSSContainerRule" ? [String(rule.conditionText)] : []))).join(" | ")
+    }
+    const element = frame.contentDocument?.querySelector("#caliper-host *")
+    return element ? frame.contentWindow?.getComputedStyle(element).getPropertyValue(name) : null
+  }), [origin, name])
+
+  for (const origin of ["Property", "Threshold"]) {
+    const row = page.locator(`.cal-knob[data-control='Number'][data-origin='${origin}']`).first()
+    if ((await row.count()) === 0) {
+      console.log(`\nNo ${origin === "Property" ? "property" : "threshold"} knob to drag.`)
+      continue
+    }
+    writes.length = 0
     const site = /** @type {string} */ (await row.locator(".cal-knob-site code").textContent())
     const file = await row.locator(".cal-knob-file").textContent()
-    const before = await page.evaluate(name => [...document.querySelectorAll("iframe.cal-frame[src]")].map(iframe => {
-      const frame = /** @type {HTMLIFrameElement} */ (iframe)
-      const element = frame.contentDocument?.querySelector("#caliper-host *")
-      return element ? frame.contentWindow?.getComputedStyle(element).getPropertyValue(name) : null
-    }), site)
+    const before = await shown(origin, site)
     const label = row.locator(".cal-knob-label")
     const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await label.boundingBox())
     const y = box.y + box.height / 2
@@ -90,21 +106,21 @@ try {
       await page.mouse.move(box.x + 5 + dx, y)
       await page.waitForTimeout(16)
     }
-    const during = await page.evaluate(name => [...document.querySelectorAll("iframe.cal-frame[src]")].map(iframe => {
-      const frame = /** @type {HTMLIFrameElement} */ (iframe)
-      const element = frame.contentDocument?.querySelector("#caliper-host *")
-      return element ? frame.contentWindow?.getComputedStyle(element).getPropertyValue(name) : null
-    }), site)
+    const during = await shown(origin, site)
     assert.equal(writes.length, 0, "no write during the drag")
     await page.mouse.up()
     await page.waitForTimeout(1500)
-    console.log(`\nDragged ${site} (${file}): ${before.join(", ")} -> ${during.join(", ")} in ${during.length} frames; ${writes.length} write on release.`)
+    console.log(origin === "Property"
+      ? `\nDragged ${site} (${file}): ${before.join(", ")} -> ${during.join(", ")} in ${during.length} frames; ${writes.length} write on release.`
+      : `\nDragged a threshold (${file}) in ${during.length} frames; ${writes.length} write on release.\n  before: ${before[0]}\n  during: ${during[0]}`)
     assert(during.every((value, index) => value !== before[index]), "every frame changed during the drag")
     assert.equal(writes.length, 1, "one write, on release")
     const body = JSON.parse(writes[0] ?? "{}")
     const text = readFileSync(join(root, body.file), "utf8")
     assert.equal(text.slice(body.start, body.start + body.value.length), body.value, "the file holds the value")
     console.log(`Wrote ${body.value} into ${body.file} at offset ${body.start}; the real project is untouched.`)
+    // Let the panel find the knobs again after the write, before the next drag.
+    await page.waitForTimeout(3500)
   }
   await page.screenshot({ path: "/tmp/caliper-verify-knobs-product.png" })
   assert.deepEqual(errors, [], "the chrome threw no errors")

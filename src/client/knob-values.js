@@ -176,6 +176,68 @@ export function namespaceOf(token) {
   return first === undefined ? "--" : `--${first}-`
 }
 
+const SIZE_FEATURE = /^(?:(min|max)-)?(width|height|inline-size|block-size)$/i
+const LENGTH = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?[a-z]+$/i
+const COMPARISON = /^(?:<=|>=|<|>|=)$/
+/** `30em < width` reads `width > 30em`. @type {Record<string, string>} */
+const FLIPPED = { "<": ">", ">": "<", "<=": ">=", ">=": "<=", "=": "=" }
+const NOT_A_NAME = /^(?:not|and|or|none)$/i
+
+/**
+ * The thresholds of a `@container` condition (decision 26): each length in a
+ * size feature, with its place in the condition and a label. Lengths in a
+ * `style()` or `scroll-state()` query are not thresholds, and neither is a
+ * ratio or a unitless zero.
+ *
+ * @param {string} condition as written after `@container`
+ * @returns {Array<{ start: number, end: number, text: string, label: string }>}
+ */
+export function thresholdsOf(condition) {
+  const name = /^\s*([A-Za-z_-][\w-]*)\s+/.exec(condition)?.[1]
+  const container = name === undefined || NOT_A_NAME.test(name) ? "Container" : labelFor(`--${name}`)
+  /** @type {Array<{ start: number, end: number, text: string, label: string }>} */
+  const found = []
+  for (const group of condition.matchAll(/\(([^()]*)\)/g)) {
+    const open = group.index ?? 0
+    // A function's own parentheses, as in style(--gap: 10px), hold no size feature.
+    if (/[\w-]/.test(condition.charAt(open - 1))) continue
+    const tokens = [...(group[1] ?? "").matchAll(/<=|>=|<|>|=|:|[^\s<>=:]+/g)]
+      .map(token => ({ text: token[0], start: open + 1 + (token.index ?? 0) }))
+    const texts = tokens.map(token => token.text)
+    if (texts.length === 3 && texts[1] === ":") {
+      const feature = SIZE_FEATURE.exec(texts[0] ?? "")
+      const value = /** @type {{ text: string, start: number }} */ (tokens[2])
+      if (feature === null || !LENGTH.test(value.text)) continue
+      const comparison = feature[1] === undefined ? "=" : feature[1].toLowerCase() === "min" ? ">=" : "<="
+      found.push({ start: value.start, end: value.start + value.text.length, text: value.text, label: `${container} ${feature[2]?.toLowerCase()} ${comparison}` })
+      continue
+    }
+    // A range: operands with a comparison between each pair.
+    if (texts.length < 3 || texts.length % 2 === 0 || !texts.every((text, index) => (index % 2 === 1) === COMPARISON.test(text))) continue
+    const at = texts.findIndex((text, index) => index % 2 === 0 && /^(width|height|inline-size|block-size)$/i.test(text))
+    if (at === -1) continue
+    const feature = (texts[at] ?? "").toLowerCase()
+    tokens.forEach((token, index) => {
+      if (index % 2 === 1 || index === at || !LENGTH.test(token.text)) return
+      const comparison = index < at ? FLIPPED[texts[index + 1] ?? "="] : texts[index - 1]
+      found.push({ start: token.start, end: token.start + token.text.length, text: token.text, label: `${container} ${feature} ${comparison}` })
+    })
+  }
+  return found
+}
+
+/**
+ * The condition with one threshold's length replaced, the rest as written.
+ *
+ * @param {string} condition
+ * @param {number} index
+ * @param {string} value
+ */
+export function replaceThreshold(condition, index, value) {
+  const found = thresholdsOf(condition)[index]
+  return found === undefined ? condition : `${condition.slice(0, found.start)}${value}${condition.slice(found.end)}`
+}
+
 /**
  * @param {...(KnobHints | undefined)} layers lowest first
  * @returns {KnobHints}

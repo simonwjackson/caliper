@@ -1,6 +1,6 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
-import { controlFor, formatNumber, labelFor, mergeHints, namespaceOf, parseSyntax, scrub, sentinelFor } from "../src/client/knob-values.js"
+import { controlFor, formatNumber, labelFor, mergeHints, namespaceOf, parseSyntax, replaceThreshold, scrub, sentinelFor, thresholdsOf } from "../src/client/knob-values.js"
 
 describe("the control a registered property gets", () => {
   test("a length or a number scrubs, with a step from its written precision and no range", () => {
@@ -91,5 +91,36 @@ describe("names", () => {
 
   test("later hints win over earlier ones", () => {
     expect(mergeHints({ label: "A", min: 1 }, undefined, { label: "B" })).toEqual({ label: "B", min: 1 })
+  })
+})
+
+describe("container thresholds", () => {
+  test("each length in a size feature is a threshold, with its place in the condition", () => {
+    const condition = "pico-stage (width < 45em) and (height >= 40em)"
+    expect(thresholdsOf(condition)).toEqual([
+      { start: 20, end: 24, text: "45em", label: "Stage width <" },
+      { start: 41, end: 45, text: "40em", label: "Stage height >=" },
+    ])
+    expect(condition.slice(20, 24)).toBe("45em")
+  })
+
+  test("reads the min- and max- forms, a length before the feature, and a range with two lengths", () => {
+    expect(thresholdsOf("(min-width: 400px)")).toEqual([{ start: 12, end: 17, text: "400px", label: "Container width >=" }])
+    expect(thresholdsOf("card (max-inline-size:30rem)").map(found => found.label)).toEqual(["Card inline-size <="])
+    expect(thresholdsOf("(45em <= width)").map(found => found.label)).toEqual(["Container width >="])
+    expect(thresholdsOf("(30em < block-size < 60.5em)").map(found => [found.text, found.label])).toEqual([["30em", "Container block-size >"], ["60.5em", "Container block-size <"]])
+    expect(thresholdsOf("pico-stage (height < 16em) or ((width < 45em) and (height < 40em))").map(found => found.text)).toEqual(["16em", "45em", "40em"])
+  })
+
+  test("a style query, a ratio, an orientation and a unitless zero are not thresholds", () => {
+    expect(thresholdsOf("style(--gap: 10px) and (aspect-ratio > 16 / 9)")).toEqual([])
+    expect(thresholdsOf("scroll-state(stuck: top) and (orientation: portrait)")).toEqual([])
+    expect(thresholdsOf("(width > 0)")).toEqual([])
+  })
+
+  test("a new length replaces one threshold and leaves the rest of the condition as written", () => {
+    const condition = "pico-stage (width < 45em) and (height >= 40em)"
+    expect(replaceThreshold(condition, 1, "36.5em")).toBe("pico-stage (width < 45em) and (height >= 36.5em)")
+    expect(replaceThreshold(condition, 0, "100em")).toBe("pico-stage (width < 100em) and (height >= 40em)")
   })
 })

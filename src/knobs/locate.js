@@ -20,7 +20,8 @@ import { parseComment } from "./hints.js"
  *   One CSSOM rule. `kind` is `style` or the at-rule's name (`media`,
  *   `container`, `property`, ...); `path` is its index at each level.
  * @typedef {{ path: number[], property: string }} Target
- *   A declaration in one rule: a custom property, or `initial-value` in `@property`.
+ *   A declaration in one rule: a custom property, or `initial-value` in
+ *   `@property`. `@container` names the condition of a `@container` rule.
  * @typedef {{ _tag: "Found", file: string, source: string, start: number, end: number, value: string, hints: import("./hints.js").ParsedComment }
  *   | { _tag: "Refused", reason: string }} Found
  *   `file` is absolute, `source` the text the sourcemap maps into.
@@ -57,9 +58,11 @@ export function locateDeclarations({ css, from, rules, targets }) {
     const summary = byPath.get(key(target.path))
     const node = paired.get(key(target.path))
     if (summary === undefined || node === undefined) return refused("Caliper could not match this rule to the served CSS.")
-    if (target.property === "initial-value" ? summary.kind !== "property" : summary.kind !== "style") {
-      return refused(`A ${target.property} knob needs ${target.property === "initial-value" ? "an @property rule" : "a style rule"}.`)
+    const needs = target.property === "initial-value" ? "property" : target.property === "@container" ? "container" : "style"
+    if (summary.kind !== needs) {
+      return refused(`A ${target.property} knob needs ${needs === "property" ? "an @property rule" : needs === "container" ? "a @container rule" : "a style rule"}.`)
     }
+    if (needs === "container") return locateCondition(root, node, sources)
     const served = lastDeclaration(node, target.property)
     if (served === undefined) return refused(`The rule has no ${target.property} declaration in the served CSS.`)
     const start = served.source?.start
@@ -83,6 +86,52 @@ export function locateDeclarations({ css, from, rules, targets }) {
       : { hints: {}, note: "", problems: [] }
     return { _tag: "Found", file: origin.file, source: origin.source, ...span, hints }
   })
+}
+
+/**
+ * The condition of a `@container` rule, as written in its source file: the
+ * text between `@container` and `{`.
+ *
+ * @param {Root} root the served CSS
+ * @param {ChildNode} node the served `@container` rule
+ * @param {Map<string, Root | null>} sources parsed source files, by path
+ * @returns {Found}
+ */
+function locateCondition(root, node, sources) {
+  if (node.type !== "atrule") return refused("Caliper could not match this rule to the served CSS.")
+  const start = node.source?.start
+  const origin = start ? root.source?.input.origin(start.line, start.column) : false
+  if (!origin) return refused("The served CSS has no source map for this rule. Caliper turns on css.devSourcemap; another CSS pipeline may drop it.")
+  if (origin.file === undefined || origin.source === undefined) return refused("The source map does not include the source file's text.")
+  const offset = offsetOf(origin.source, origin.line, origin.column)
+  if (!sources.has(origin.file)) sources.set(origin.file, parseSource(origin.source, origin.file))
+  const sourceRoot = sources.get(origin.file) ?? null
+  /** @type {import("postcss").AtRule | undefined} */
+  let rule
+  sourceRoot?.walkAtRules(candidate => {
+    if (candidate.source?.start?.offset !== offset) return undefined
+    rule = candidate
+    return false
+  })
+  if (rule === undefined || rule.name.toLowerCase() !== "container") return refused("The source map does not point at this rule in the source file.")
+  const raw = paramsOf(rule)
+  const from = offset + 1 + rule.name.length + (rule.raws.afterName ?? "").length
+  if (origin.source.slice(from, from + raw.length) !== raw || normal(raw) !== normal(paramsOf(node))) {
+    return refused("The source rule's condition differs from the served CSS.")
+  }
+  const lead = raw.length - raw.trimStart().length
+  const value = raw.trim()
+  const commentNode = rule.prev()
+  const hints = commentNode?.type === "comment"
+    ? parseComment(commentNode.text, origin.source.startsWith("/**", commentNode.source?.start?.offset ?? -1))
+    : { hints: {}, note: "", problems: [] }
+  return { _tag: "Found", file: origin.file, source: origin.source, start: from + lead, end: from + lead + value.length, value, hints }
+}
+
+/** An at-rule's condition as written, comments included. @param {import("postcss").AtRule} rule */
+function paramsOf(rule) {
+  const raws = /** @type {{ params?: { raw: string } }} */ (rule.raws)
+  return raws.params?.raw ?? rule.params
 }
 
 /** @param {string} reason @returns {Found} */

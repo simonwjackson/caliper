@@ -182,6 +182,42 @@ describe("locating a knob's declaration", () => {
     })
   })
 
+  test("maps a @container rule to its condition as written in the source file, with the hints above it", async () => {
+    const stage = [
+      ".stage {",
+      "  container: stage / size;",
+      '  background: url("./dot.png");',
+      "}",
+      "",
+      "/** Narrow stages stack the carts. @label Narrow @max 80 */",
+      "@container stage (width < 45em)   and (height>=40em) {",
+      "  .cart { display: none; }",
+      "}",
+      "",
+    ].join("\n")
+    await withProject({ files: { ...files, "src/stage.css": stage, "src/index.ts": 'import "./stage.css"\n' } }, async ({ get, url, root }) => {
+      const css = await served(get, "/src/stage.css")
+      expect(css).not.toContain('url("./dot.png")')
+      const { results } = await (await post(url, "/__caliper/knobs/locate", {
+        sheet: join(root, "src/stage.css"),
+        take: null,
+        css,
+        rules: [
+          { path: [0], kind: "style", selector: ".stage" },
+          { path: [1], kind: "container" },
+          { path: [1, 0], kind: "style", selector: ".cart" },
+        ],
+        targets: [{ path: [1], property: "@container" }, { path: [0], property: "@container" }],
+      })).json()
+      const condition = "stage (width < 45em)   and (height>=40em)"
+      expect(results[0]).toMatchObject({
+        _tag: "Located", file: "src/stage.css", line: 7, value: condition, ...at(root, "src/stage.css", condition),
+        hints: { label: "Narrow", max: 80 }, note: "Narrow stages stack the carts.",
+      })
+      expect(results[1]).toEqual({ _tag: "Refused", reason: "A @container knob needs a @container rule." })
+    })
+  })
+
   test("gives the hints caliper({ knobs }) names for the properties asked about, and says when the option is not valid", async () => {
     const options = { knobs: { "--gap": { label: "Gap", max: 12 }, "--other": { label: "Other" } } }
     await withProject({ files, options }, async ({ get, url, root }) => {

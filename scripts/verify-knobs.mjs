@@ -92,6 +92,33 @@ const tokens = [
   "",
 ].join("\n")
 
+const card = [
+  ".card {",
+  "  background: var(--bg);",
+  "  color: var(--accent);",
+  "  width: calc(var(--rows) * 1px);",
+  "  height: 40px;",
+  "  animation: cycle 1s paused;",
+  "  opacity: var(--hidden);",
+  "}",
+  "",
+  ".stage {",
+  "  container: stage / inline-size;",
+  "  width: 300px;",
+  "}",
+  "",
+  "/** @label Narrow stage */",
+  "@container stage (width < 280px) {",
+  "  .card { height: 80px; }",
+  "}",
+  "",
+  "/* A rule for a part that is not on the stage. */",
+  "@container stage (width < 100px) {",
+  "  .absent { height: 80px; }",
+  "}",
+  "",
+].join("\n")
+
 const files = {
   "package.json": JSON.stringify({ name: "knobs-consumer", type: "module", exports: { ".": "./src/index.ts" } }),
   "tsconfig.json": JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }),
@@ -99,8 +126,8 @@ const files = {
   "src/App.tsx": "export const App = () => <main className=\"theme\" />\n",
   "src/palette.css": ".theme {\n  --p8-black: #000000;\n  --p8-navy: #1d2b53;\n  --p8-pink: #ff77a8;\n}\n",
   "src/tokens.css": tokens,
-  "src/card.css": ".card {\n  background: var(--bg);\n  color: var(--accent);\n  width: calc(var(--rows) * 1px);\n  height: 40px;\n  animation: cycle 1s paused;\n  opacity: var(--hidden);\n}\n",
-  "src/Card.tsx": 'import "./card.css"\nexport const Card = ({ label }: { label: string }) => <div className="card">{label}</div>\n',
+  "src/card.css": card,
+  "src/Card.tsx": 'import "./card.css"\nexport const Card = ({ label }: { label: string }) => <div className="stage"><div className="card">{label}</div></div>\n',
   "src/Card.part.tsx": 'import { Card } from "./Card"\nexport default function Part() { return <Card label="Hello" /> }\nexport const Loud = () => <Card label="HELLO" />\n',
 }
 for (const [file, code] of Object.entries(files)) write(file, code)
@@ -164,8 +191,8 @@ try {
     await page.getByRole("button", { name: "Knobs" }).click()
     await page.locator(".cal-knob").nth(2).waitFor()
     const labels = await page.locator(".cal-knob-label").allInnerTexts()
-    // In source order.
-    assert.deepEqual(labels, ["Pixel rows", "Bg", "Accent"])
+    // In source order, by file. The threshold of a rule for no element on the stage is not a knob.
+    assert.deepEqual(labels, ["Narrow stage", "Pixel rows", "Bg", "Accent"])
     const box = await page.locator(".cal-knobs").boundingBox()
     const stage = await page.locator(".cal-stage").boundingBox()
     assert(box && stage && box.x >= stage.x + stage.width - 1, "the panel sits right of the stage")
@@ -208,6 +235,33 @@ try {
     assert.equal(await page.locator(".cal-knob", { hasText: "Pixel rows" }).locator(".cal-knob-number").inputValue(), "560")
     await page.waitForTimeout(2000)
     assert.equal(await page.locator(".cal-knob", { hasText: "Pixel rows" }).locator(".cal-knob-status").textContent(), "", "Saved goes away")
+  })
+
+  await step("a @container threshold previews live by replacing its rule, and writes the one length on release", async () => {
+    const cardHeight = async () => (await frame()).evaluate(() => getComputedStyle(/** @type {Element} */ (document.querySelector(".card"))).height)
+    const row = page.locator(".cal-knob", { hasText: "Narrow stage" })
+    assert.match(await row.locator(".cal-knob-site").innerText(), /@container stage \(width < 280px\) · card\.css:16/)
+    assert.equal(await row.locator(".cal-knob-number").inputValue(), "280")
+    assert.equal(await row.locator(".cal-knob-unit").innerText(), "px")
+    assert.equal(await cardHeight(), "40px", "the stage is wider than the threshold")
+    const label = row.locator(".cal-knob-label")
+    const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await label.boundingBox())
+    const y = box.y + box.height / 2
+    await page.mouse.move(box.x + 10, y)
+    await page.mouse.down()
+    for (let dx = 4; dx <= 60; dx += 4) await page.mouse.move(box.x + 10 + dx, y)
+    await page.waitForTimeout(100)
+    assert.equal(await cardHeight(), "80px", "the 300px stage is now narrower than the threshold")
+    assert.equal(read("src/card.css"), card, "no write during the drag")
+    await page.mouse.up()
+    for (let attempt = 0; attempt < 50 && read("src/card.css") === card; attempt++) await page.waitForTimeout(100)
+    assert.equal(read("src/card.css"), card.replace("(width < 280px)", "(width < 310px)"), "only the one length changed")
+    await page.waitForTimeout(800)
+    assert.equal(await cardHeight(), "80px", "the reloaded stylesheet holds the threshold")
+    const conditions = await (await frame()).evaluate(() => [...document.styleSheets]
+      .filter(sheet => /** @type {Element | null} */ (sheet.ownerNode)?.getAttribute("data-vite-dev-id")?.endsWith("card.css"))
+      .flatMap(sheet => [...sheet.cssRules].flatMap(rule => ("conditionText" in rule ? [String(rule.conditionText)] : []))))
+    assert.deepEqual(conditions, ["stage (width < 310px)", "stage (width < 100px)"], "one rule per condition, in its place")
   })
 
   await step("the token picker offers the sibling tokens and writes a reference, never a raw colour", async () => {
