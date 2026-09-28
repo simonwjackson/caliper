@@ -38,11 +38,13 @@ It does not run the app to do this.
 `vite build` never includes Caliper. The plugin sets `apply: "serve"`.
 
 Caliper fits the window it has, including a phone. In a wide window, the part
-list, the stage, the code pane and the Takes panel sit side by side. In a
+list, the stage, the code pane and the Takes panel sit side by side. The
+Knobs panel takes the Takes panel's place when you choose **Knobs**. In a
 small window, **Parts** opens the part list over the stage, and **Preview**,
-**Code** and **Takes** switch the one pane that fills the rest. Controls that
-do not fit the bar, such as the devices and **Calibrate**, move into the **⋯**
-menu. Nothing is removed at any size.
+**Code** and **Takes** switch the one pane that fills the rest; **Knobs**
+keeps the preview and shows the knobs under it. Controls that do not fit the
+bar, such as the devices and **Calibrate**, move into the **⋯** menu. Nothing
+is removed at any size.
 
 ## What Caliper finds by itself
 
@@ -158,6 +160,11 @@ caliper({
 ```
 
 `wrap: false` renders parts with no wrapper.
+
+`knobs` gives [knob hints](#tune-design-inputs-with-knobs) by custom property
+name, for CSS the project cannot annotate:
+`knobs: { "--pico-pixel-rows": { label: "Pixel rows", min: 180, max: 720, step: 10 } }`.
+A hint comment in the CSS wins over it.
 
 `css` replaces the derived global stylesheet list, in the order given. Paths
 are relative to the Vite root. `css: []` injects no global styles, but components
@@ -396,6 +403,74 @@ The pane uses CodeMirror 6. Caliper serves its packages from Caliper's own
 `node_modules` through an import map, so the project's Vite never loads them.
 The first open loads 355 KB with gzip; the browser then caches it. The
 pane has no type checking or completion from the project's types yet.
+
+## Tune design inputs with knobs
+
+The **Knobs** button opens a panel of the design inputs that the part on the
+stage uses. Caliper finds them in the project's CSS; there is nothing to set
+up. A knob is one declaration in a source file. While you drag a knob, every
+frame shows the new value at once, and no file changes. When you let go,
+Caliper writes the value into that declaration, once, and Vite reloads the
+frames from the file.
+
+In this version, a knob is a custom property registered with `@property`:
+
+```css
+/** How many virtual pixels the short side holds. @label Pixel rows @min 180 @max 720 @step 10 */
+@property --pico-pixel-rows {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 360;
+}
+```
+
+The knob edits the declaration that sets the property on the part. Caliper
+finds it by trying a test value in each declaration and seeing which elements
+change, so the browser decides the cascade, `@container` and `@media`
+included. When no rule sets the property on the part, the knob edits the
+`initial-value` of its `@property` rule.
+
+| Registered syntax and value | Control |
+|---|---|
+| `<length>`, `<number>`, `<integer>`, `<percentage>` and other numbers | Drag the label sideways, or type a value. Shift moves ten steps. With `@min` and `@max`, a slider too. |
+| `<color>` with a raw colour | A colour field and its text. |
+| Any syntax, with a value of `var(--p8-black)` | The sibling tokens: the `--p8-` properties declared beside `--p8-black`. The knob writes `var(--p8-navy)`, never the colour itself. |
+| An ident list, such as `small \| medium \| large` | A select. |
+
+Some registered properties are not knobs. The panel lists each one under
+**not knobs** with the reason: a value that `@keyframes` animates, a value
+computed with a math function such as `calc()`, `max()` or `clamp()`, a value
+that combines tokens, a syntax with no control yet, and a declaration Caliper
+cannot place in its file.
+
+A **hint** is a doc comment directly above the declaration or its `@property`
+rule. `@label` names the knob, `@min`, `@max` and `@step` shape its range, and
+`@knob ignore` hides it. Only a comment that opens with `/**` holds hints, and
+Caliper reads them from the source file, because the browser drops comments.
+The prose of the comment above `@property` shows under the knob. The `knobs`
+[option](#options) gives the same hints from `vite.config`.
+
+Select a take in the takes view to tune the take instead: its knobs write the
+take's copy of the file, and the real file does not change until Replace. The
+panel's header says which files it edits. The agent's next prompt names the
+file, as for any edit by hand.
+
+A write names the version of the file the knob read. If the file changed in
+the meantime, for example from your editor or the code pane, Caliper does not
+write, says so, and the knob shows the file's value. A save to the same file
+during a drag does not lose the dragged value in the frames. Click the file
+name under a knob to open that file in the code pane.
+
+Caliper turns on Vite's `css.devSourcemap`, because a knob maps a rule in the
+browser to its source file through it. Served CSS is larger in development.
+
+Costs and limits: the Knobs and Takes panels never show at the same time.
+Knobs for `@container` thresholds, for plain custom properties and for
+promoting a literal to a token are not built yet. Caliper refuses a knob in
+nested CSS, `@layer`, `@scope` and `@starting-style`, which are not tested.
+Tailwind, Sass and CSS modules are not tested. Only Chromium has run the
+panel. The code pane still saves over a change made elsewhere, so a pane save
+after a knob's write replaces it.
 
 ## How a part renders
 
@@ -746,7 +821,19 @@ CHROMIUM=/path/to/chromium node scripts/verify-authored-ui.mjs --modules /path/t
 CHROMIUM=/path/to/chromium node scripts/verify-authored-package.mjs
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 CHROMIUM=/path/to/chromium node scripts/verify-fast-saves.mjs
+CHROMIUM=/path/to/chromium node scripts/verify-knobs.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-knobs-product.mjs --root /path/to/project --part src/Button.part.tsx
 ```
+
+`scripts/verify-knobs.mjs` runs the Knobs panel on a temporary project shaped
+like Pico's tokens: discovery and its refusals, a live drag that writes the
+file once on release, the token picker, a take's copy, a save to the same file
+during a drag, and five window sizes. Screenshots go to
+`/tmp/caliper-verify-knobs`. `scripts/verify-knobs-product.mjs` copies a real
+project to a temporary folder, prints every knob and refusal Caliper finds for
+one part, and drags the first number knob. `--with ../../contracts` copies a
+folder the project imports from, at the same place. The real project never
+changes.
 
 `scripts/verify-fast-saves.mjs` checks that a page shows the last of two saves
 made 20 ms apart, before and after a reload. Vite's own watcher drops the second

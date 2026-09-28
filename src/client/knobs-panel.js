@@ -337,7 +337,8 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
         })
         return {
           label,
-          field: h("span", { class: "cal-knob-field" }, input, control.unit ? h("span", { class: "cal-knob-unit" }, control.unit) : null),
+          // The unit keeps its room when empty, so number fields line up.
+          field: h("span", { class: "cal-knob-field" }, input, h("span", { class: "cal-knob-unit" }, control.unit)),
           extra: range,
         }
       }

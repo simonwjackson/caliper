@@ -1936,6 +1936,7 @@ button:disabled {
 }
 
 .cal-knob-unit {
+  min-width: 3ch;
   color: var(--cal-muted);
   font-size: var(--cal-text-sm);
 }

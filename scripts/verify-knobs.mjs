@@ -277,6 +277,7 @@ try {
   await step("every size keeps the knobs one tap away, and the tabs keep the preview above them", async () => {
     await page.goto(`${url}__caliper/#part=src/Card.part.tsx&state=default`)
     const before = read("src/tokens.css")
+    /** @type {string[]} */
     const writes = []
     page.on("request", request => { if (request.url().includes("/knobs/write")) writes.push(request.url()) })
     for (const [width, height] of [[1600, 1000], [1030, 572], [800, 900], [1280, 300], [412, 660]]) {
