@@ -10,7 +10,8 @@
  *     [--state MissingArt --context-part src/Home.page.part.tsx --context-state NoArtwork]
  *
  * It types the prompt in the chrome, starts the takes, waits until every
- * agent is done, checks that each take frame renders, and takes screenshots
+ * agent is done, checks that a plan of 3 or more takes marks one strange
+ * direction or says why it has none (decision 32), checks that each take frame renders, and takes screenshots
  * of the chrome at three window sizes. It discards the takes at the end, so
  * the project's files do not change.
  */
@@ -78,12 +79,16 @@ try {
       directions: [...document.querySelectorAll(".cal-direction")].map(row => ({
         title: /** @type {HTMLInputElement} */ (row.querySelector(".cal-direction-title")).value,
         brief: /** @type {HTMLTextAreaElement} */ (row.querySelector(".cal-direction-brief")).value,
+        strange: /** @type {HTMLElement} */ (row).dataset.strange === "true",
       })),
     }))
     console.log(`planned in ${Math.round((Date.now() - started) / 1000)} s: ${JSON.stringify(planned, null, 1)}`)
     await page.screenshot({ path: join(out, "plan.png") })
     startedTakes = planned.directions.length
     assert(startedTakes >= 1 && startedTakes <= count, "the planner proposes 1 to count directions")
+    const strange = planned.directions.filter(direction => direction.strange).length
+    if (count >= 3) assert(strange === 1 || (strange === 0 && planned.note !== null), "a plan of 3 or more takes has one strange direction, or a note that says why not")
+    else assert.equal(strange, 0, "a plan of 2 takes has no strange direction")
     await page.locator(".cal-start").click()
   }
   await page.waitForFunction(n => document.querySelectorAll(".cal-take").length >= n, before.size + startedTakes)
@@ -99,6 +104,7 @@ try {
   const takes = await page.locator(".cal-take").evaluateAll(rows => rows.map(row => ({
     name: row.querySelector("strong")?.textContent,
     status: row.querySelector(".cal-take-status")?.textContent,
+    label: row.querySelector(".cal-take-direction")?.textContent,
     run: /** @type {HTMLElement} */ (row).dataset.run,
   })))
   console.log(JSON.stringify(takes))

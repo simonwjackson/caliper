@@ -1875,6 +1875,24 @@ button:disabled {
   min-height: 2rem;
 }
 
+/* The strange direction leaves the usual line on purpose, so its border does too. */
+.cal-direction[data-strange="true"] {
+  border-style: dashed;
+  border-color: var(--cal-accent);
+}
+
+.cal-strange-note {
+  grid-column: 1 / -1;
+  display: block;
+  margin: 0;
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-log-direction[data-strange="true"] {
+  border-left-style: dashed;
+}
+
 .cal-take-direction {
   display: block;
   color: var(--cal-muted);

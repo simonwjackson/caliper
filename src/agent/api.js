@@ -425,7 +425,7 @@ function validDirection(body) {
   if (title === "" || brief === "") throw new Error("A direction needs a title and a brief.")
   if (title.length > 80 || brief.length > MAX_PROMPT) throw new Error("The direction is too long.")
   const siblings = Array.isArray(others) ? others.filter(other => typeof other === "string" && other.trim() !== "").map(other => other.trim().slice(0, 80)).slice(0, MAX_TAKES) : []
-  return { direction: { title, brief }, others: siblings }
+  return { direction: direction.strange === true ? { title, brief, strange: true } : { title, brief }, others: siblings }
 }
 
 /** @param {unknown} body */

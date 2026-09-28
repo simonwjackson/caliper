@@ -259,6 +259,13 @@ takes start. Each take's agent follows one direction and knows the titles of
 the others. The planner returns fewer directions when the prompt has only one
 sensible answer, and says why. It costs one model call of about 10 s.
 
+When you ask for three or more takes, one direction is the **strange
+direction**. It is still a real answer to the prompt, but it breaks the part's
+current pattern on purpose, so the most probable answer is not the only one
+you see. It uses one of the takes, not an extra one. The Review step gives it a
+dashed border, and its take card says "strange". Remove it there if you do not
+want it. For a precise fix, the planner can leave it out and says why.
+
 A take belongs to the selected **editing state**. Its optional **context** is
 the complete scenario used to preview it. The state list nests takes under their
 editing state. Selecting a take restores its recorded context; changing Preview

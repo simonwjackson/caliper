@@ -70,6 +70,40 @@ describe("the planner", () => {
     })
   })
 
+  test("with 3 or more takes, asks for one strange direction and keeps its mark", async () => {
+    /** @type {any} */
+    let seen = null
+    const engine = engineWith([context => {
+      seen = context
+      return fauxAssistantMessage([fauxToolCall("propose_directions", {
+        directions: [
+          { title: "Shared fixtures", brief: "Use the fixture catalog." },
+          { title: "Hard cases", brief: "Long titles and no art." },
+          { title: "Shelf as a timeline", brief: "Order the games by last play on one line.", strange: true },
+        ],
+      })], { stopReason: "toolUse" })
+    }])
+    const plan = await planDirections({ engine, ...input })
+    expect(plan.directions[2]).toEqual({ title: "Shelf as a timeline", brief: "Order the games by last play on one line.", strange: true })
+    expect(plan.directions.filter(direction => direction.strange)).toHaveLength(1)
+    const system = JSON.stringify(seen.messages.find((/** @type {any} */ message) => message.role === "system") ?? seen.systemPrompt)
+    expect(system).toContain("strange direction")
+  })
+
+  test("with 2 takes, does not ask for a strange direction", async () => {
+    /** @type {any} */
+    let seen = null
+    const engine = engineWith([context => {
+      seen = context
+      return fauxAssistantMessage([fauxToolCall("propose_directions", {
+        directions: [{ title: "A", brief: "one" }, { title: "B", brief: "two" }],
+      })], { stopReason: "toolUse" })
+    }])
+    await planDirections({ engine, ...input, count: 2 })
+    const system = JSON.stringify(seen.messages.find((/** @type {any} */ message) => message.role === "system") ?? seen.systemPrompt)
+    expect(system).not.toContain("strange direction")
+  })
+
   test("fails visibly when the model answers without proposing, or the request fails", async () => {
     await expect(planDirections({ engine: engineWith([fauxAssistantMessage([fauxText("Here are some ideas.")])]), ...input }))
       .rejects.toThrow("The planner did not propose any directions.")
@@ -90,5 +124,27 @@ describe("the planner", () => {
       note: "ignored when the count is met",
     }, 2)).toEqual({ directions: [{ title: "A", brief: "one" }, { title: "C", brief: "three" }] })
     expect(() => cleanPlan({ directions: [] }, 2)).toThrow("no usable directions")
+  })
+
+  test("cleanPlan keeps one strange mark, and none below 3 takes", () => {
+    const three = [
+      { title: "A", brief: "one", strange: true },
+      { title: "B", brief: "two", strange: true },
+      { title: "C", brief: "three", strange: "yes" },
+    ]
+    expect(cleanPlan({ directions: three }, 3)).toEqual({
+      directions: [{ title: "A", brief: "one", strange: true }, { title: "B", brief: "two" }, { title: "C", brief: "three" }],
+    })
+    expect(cleanPlan({ directions: three.slice(0, 2) }, 2)).toEqual({
+      directions: [{ title: "A", brief: "one" }, { title: "B", brief: "two" }],
+    })
+  })
+
+  test("cleanPlan keeps the note that says why no direction is strange", () => {
+    const plain = [{ title: "A", brief: "one" }, { title: "B", brief: "two" }, { title: "C", brief: "three" }]
+    expect(cleanPlan({ directions: plain, note: "A precise fix has no strange answer." }, 3))
+      .toEqual({ directions: plain, note: "A precise fix has no strange answer." })
+    expect(cleanPlan({ directions: [...plain.slice(0, 2), { ...plain[2], strange: true }], note: "Not needed." }, 3))
+      .toEqual({ directions: [...plain.slice(0, 2), { ...plain[2], strange: true }] })
   })
 })

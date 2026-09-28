@@ -344,6 +344,24 @@ describe("a take's agent", () => {
       expect(text).toContain("This take's direction: Shared fixtures. Use the project's fixture catalog.")
       expect(text).toContain('Other takes of this prompt try: "Hard cases", "New layout"')
       expect(view.direction).toEqual(direction)
+      expect(text).not.toContain("strange direction")
+    })
+  })
+
+  test("a take that follows the strange direction is told not to drift back to the usual pattern", async () => {
+    await inFolder(projectFiles, async root => {
+      const { faux, agents, settled } = setup(root)
+      /** @type {any} */
+      let seen = null
+      faux.setResponses([context => {
+        seen = context
+        return fauxAssistantMessage([fauxText("ok")])
+      }])
+      const direction = { title: "Shelf as a timeline", brief: "Order by last play.", strange: /** @type {const} */ (true) }
+      const view = await settled(agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases"] }))
+      const text = seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text
+      expect(text).toContain("This is the strange direction")
+      expect(view.direction).toEqual(direction)
     })
   })
 

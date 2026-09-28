@@ -478,7 +478,10 @@ function directionText(ask) {
   const others = ask.others?.length
     ? `\nOther takes of this prompt try: ${ask.others.map(title => `"${title}"`).join(", ")}. Stay clearly apart from them; the user compares the takes side by side.`
     : ""
-  return `\n\nThis take's direction: ${ask.direction.title}. ${ask.direction.brief}${others}\nFollow this direction, even where another answer would be more obvious. If it cannot work, say why in your summary.`
+  const strange = ask.direction.strange
+    ? "\nThis is the strange direction: it breaks the part's current pattern on purpose. Do not drift back to the usual pattern, and keep it a real answer that works on the device."
+    : ""
+  return `\n\nThis take's direction: ${ask.direction.title}. ${ask.direction.brief}${others}${strange}\nFollow this direction, even where another answer would be more obvious. If it cannot work, say why in your summary.`
 }
 
 /**

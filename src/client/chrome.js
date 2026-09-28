@@ -48,7 +48,7 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
  * @typedef {{ part: string, state: string, device: string, prompt: string, context?: StateRef, images?: WireImage[] }} TakeAsk
  * @typedef {{ _tag: "None" }
  *   | { _tag: "Planning", ask: TakeAsk, count: number, id: number }
- *   | { _tag: "Review", ask: TakeAsk, directions: Array<{ title: string, brief: string }>, note?: string }} Plan
+ *   | { _tag: "Review", ask: TakeAsk, directions: Array<{ title: string, brief: string, strange?: true }>, note?: string }} Plan
  *   The composer's plan. Several takes start from a plan: the planner proposes
  *   one direction per take, and you edit them before the takes start.
  * @typedef {{ key: string, label: string, title: string, src: string, select: () => void, status?: string }} Cell
@@ -1742,7 +1742,7 @@ function renderTakeList() {
         onClick: () => selectTake(take.take),
       },
         h("strong", {}, takeName(take)), " ", h("span", { class: "cal-take-status" }, status),
-        h("span", { class: "cal-take-direction" }, `Take ${take.take}${take.integration ? " · alternate proposal" : ""}`)),
+        h("span", { class: "cal-take-direction" }, `Take ${take.take}${take.direction?.strange ? " · strange" : ""}${take.integration ? " · alternate proposal" : ""}`)),
       ...(take.nameIssue ? [h("p", { class: "cal-note" }, take.nameIssue)] : []),
       h("div", { class: "cal-take-actions" },
         running
@@ -1771,7 +1771,9 @@ function renderLog() {
     ...(take.integration ? [integrationPanel(take)] : []),
     h("p", { class: "cal-note" }, take.context ? `Created in ${refLabel(take.context)}. Shared source edits can affect other states.` : "Created in isolation. Shared source edits can affect other states."),
     ...(!takeAvailable(take) ? [h("p", { class: "cal-agent-failed", role: "alert" }, "The editing state or its recorded context is unavailable. Restore the declaration or discard this take.")] : []),
-    ...(take.direction ? [h("div", { class: "cal-log-direction" }, h("strong", {}, take.direction.title), " ", take.direction.brief)] : []),
+    ...(take.direction ? [h("div", { class: "cal-log-direction", "data-strange": take.direction.strange ? "true" : false },
+      h("strong", {}, take.direction.title), " ", take.direction.brief,
+      take.direction.strange ? h("span", { class: "cal-strange-note" }, STRANGE_NOTE) : null)] : []),
     ...entries.map(entry => {
       if (entry._tag === "User") return h("div", { class: "cal-log-user" }, entry.text, ...(entry.images?.length ? [loggedImages(take, entry.images)] : []))
       if (entry._tag === "Assistant") return h("div", { class: "cal-log-assistant" }, entry.text)
@@ -1838,6 +1840,9 @@ function renderComposer() {
   renderPlan()
 }
 
+/** How the chrome explains the planner's strange direction (decision 32). */
+const STRANGE_NOTE = "Strange direction: it breaks this part's current pattern on purpose."
+
 /**
  * The plan's directions, as editable rows. Rebuilt only when the plan
  * changes shape, so typing in a row keeps its focus.
@@ -1855,7 +1860,7 @@ function renderPlan() {
   box.replaceChildren(
     h("p", { class: "cal-plan-prompt" }, plan.ask.prompt),
     ...(plan.note ? [h("p", { class: "cal-plan-note" }, plan.note)] : []),
-    ...plan.directions.map((direction, index) => h("div", { class: "cal-direction" },
+    ...plan.directions.map((direction, index) => h("div", { class: "cal-direction", "data-strange": direction.strange ? "true" : false },
       h("input", {
         class: "cal-direction-title",
         value: direction.title,
@@ -1876,6 +1881,7 @@ function renderPlan() {
           renderComposer()
         },
       }, "×"),
+      direction.strange ? h("p", { class: "cal-strange-note" }, STRANGE_NOTE) : null,
       textareaWith(direction.brief, `Direction ${index + 1} brief`, value => {
         direction.brief = value
         renderComposer()

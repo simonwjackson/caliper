@@ -22,7 +22,7 @@ import { IMAGE_TYPES } from "../client/images.js"
  *
  * @typedef {{ _tag: "Inside", file: string } | { _tag: "Outside", reason: string }} Fenced
  *   `file` is root-relative, with forward slashes.
- * @typedef {{ title: string, brief: string }} Direction
+ * @typedef {import("../types").Direction} Direction
  *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
  * @typedef {import("../types").TakeImage} TakeImage
  * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[] }} TakeRecord

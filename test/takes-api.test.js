@@ -330,6 +330,9 @@ describe("the plan endpoint", () => {
       expect((await settledTake(get, take)).direction).toEqual(direction)
       const bad = await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", direction: { title: "No brief" } })
       expect((await bad.json()).error).toBe("A direction needs a title and a brief.")
+      const strange = { title: "Chip as a stamp", brief: "Drop the pill shape.", strange: /** @type {const} */ (true) }
+      const started = await (await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", direction: strange, others: [] })).json()
+      expect((await settledTake(get, started.take)).direction).toEqual(strange)
     })
   })
 })

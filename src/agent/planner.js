@@ -9,6 +9,12 @@ import { imageContent } from "./images.js"
  * follows one direction. The planner may return fewer directions than asked
  * for when the prompt has one sensible answer; it says why in `note`.
  *
+ * With `STRANGE_FROM` or more takes, one direction is the strange one: a
+ * real answer to the request that breaks the part's current pattern on
+ * purpose, so the most probable answer is not the only one on the board.
+ * It uses one of the takes, not an extra one. The planner may leave it out
+ * for a precise fix, and says why in `note`.
+ *
  * @typedef {import("./model.js").Engine} Engine
  * @typedef {import("../types").Direction} Direction
  * @typedef {import("../types").TakePlan} TakePlan
@@ -18,17 +24,32 @@ import { imageContent } from "./images.js"
 export const PLAN_TOOL = "propose_directions"
 const TITLE_LIMIT = 60
 const BRIEF_LIMIT = 600
+/** The smallest number of takes that has room for a strange direction. */
+export const STRANGE_FROM = 3
 
-const planTool = {
-  name: PLAN_TOOL,
-  description: "Propose the directions for the takes. Call it exactly once.",
-  parameters: Type.Object({
-    directions: Type.Array(Type.Object({
-      title: Type.String({ description: "Two to five words that name the direction" }),
-      brief: Type.String({ description: "One to three sentences: what this take changes, where, and how it differs from the others" }),
-    }), { minItems: 1 }),
-    note: Type.Optional(Type.String({ description: "Only when you return fewer directions than asked for: why" })),
-  }),
+const title = Type.String({ description: "Two to five words that name the direction" })
+const brief = Type.String({ description: "One to three sentences: what this take changes, where, and how it differs from the others" })
+
+/**
+ * The tool the planner answers through. It offers the strange mark only
+ * when the plan has room for a strange direction.
+ *
+ * @param {number} count
+ */
+function planTool(count) {
+  const withStrange = count >= STRANGE_FROM
+  return {
+    name: PLAN_TOOL,
+    description: "Propose the directions for the takes. Call it exactly once.",
+    parameters: Type.Object({
+      directions: Type.Array(withStrange
+        ? Type.Object({ title, brief, strange: Type.Optional(Type.Boolean({ description: "True only on the one strange direction" })) })
+        : Type.Object({ title, brief }), { minItems: 1 }),
+      note: Type.Optional(Type.String({ description: withStrange
+        ? "Only when you return fewer directions than asked for, or no strange direction: why"
+        : "Only when you return fewer directions than asked for: why" })),
+    }),
+  }
 }
 
 /**
@@ -54,7 +75,7 @@ export async function planDirections({ engine, prompt, count, part, state, devic
   const { models, model, reasoning } = engine
   const message = await models.completeSimple(model, {
     systemPrompt: `${systemPrompt(count)}${skills ? plannerSkillNote(skills) : ""}`,
-    tools: [planTool],
+    tools: [planTool(count)],
     messages: [{
       role: "user",
       timestamp: Date.now(),
@@ -79,7 +100,10 @@ export async function planDirections({ engine, prompt, count, part, state, devic
 
 /**
  * Keep the planner's answer inside the contract: 1 to `count` directions,
- * each with a title and a brief, no two with the same title.
+ * each with a title and a brief, no two with the same title. At most one
+ * direction is strange, and none when `count` is below `STRANGE_FROM`. The
+ * note stays only when it explains something missing: fewer directions, or
+ * no strange direction when one was asked for.
  *
  * @param {unknown} raw
  * @param {number} count
@@ -90,18 +114,26 @@ export function cleanPlan(raw, count) {
   const seen = new Set()
   /** @type {Direction[]} */
   const directions = []
+  let strangeLeft = count >= STRANGE_FROM
   for (const item of Array.isArray(input.directions) ? input.directions : []) {
     const title = typeof item?.title === "string" ? item.title.trim().slice(0, TITLE_LIMIT) : ""
     const brief = typeof item?.brief === "string" ? item.brief.trim().slice(0, BRIEF_LIMIT) : ""
     if (title === "" || brief === "" || seen.has(title.toLowerCase())) continue
     seen.add(title.toLowerCase())
-    directions.push({ title, brief })
+    const strange = strangeLeft && item.strange === true
+    if (strange) strangeLeft = false
+    directions.push(strange ? { title, brief, strange: true } : { title, brief })
     if (directions.length === count) break
   }
   if (directions.length === 0) throw new Error("The planner proposed no usable directions.")
-  const note = typeof input.note === "string" && input.note.trim() !== "" && directions.length < count ? input.note.trim() : undefined
+  const missing = directions.length < count || strangeLeft
+  const note = typeof input.note === "string" && input.note.trim() !== "" && missing ? input.note.trim() : undefined
   return note === undefined ? { directions } : { directions, note }
 }
+
+const strangeRule = `
+Make one of the directions the strange direction, and set strange to true on it. The other directions are the answers a careful designer would expect. The strange direction is the answer they would not expect: it breaks the part's current pattern on purpose, for example a different structure, a different way to show the data, or a different interaction. It is still a real answer to the request that works on the device, never a joke or a strawman, and it keeps the rules above. It uses one of the takes, not an extra one. Leave it out only when the request has one sensible answer, and then say why in note.
+`
 
 /** @param {number} count */
 function systemPrompt(count) {
@@ -116,6 +148,6 @@ A good set of directions:
 - When the preview differs from the editing subject, preserve the preview's real composition and fixture data flow. The scenario is where changes are judged, not permission to change unrelated components.
 
 Return fewer directions when the request has only one or two sensible answers, for example a precise fix or a narrow data change. Never invent a direction only to fill the count. When you return fewer, say why in one sentence in note.
-
+${count >= STRANGE_FROM ? strangeRule : ""}
 You see the part's source and a screenshot. You cannot read other files; the agents will. Call ${PLAN_TOOL} exactly once, and write nothing else.`
 }
