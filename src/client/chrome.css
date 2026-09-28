@@ -1,3 +1,5 @@
+@import "./checks.css";
+
 /*
  * Caliper's chrome. Layout follows the chrome's own box: a container query on
  * the root decides between side-by-side and stacked, never the device.

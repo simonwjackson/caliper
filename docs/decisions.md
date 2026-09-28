@@ -112,10 +112,16 @@ https://mobbin.com/screens/e9bad011-d5c5-4e8d-b56f-4fba2ffde691.
 ## Automatic check reports
 
 The user chose reporting rather than a mandatory replacement gate. Phase 1
-adds opt-in automatic checks to `caliper-render --check` and the take agent's
-`render` tool with `checks: true`. Ordinary Replace and the existing reviewed
-alternate gate keep their behavior. No new scenario or authored-check export
-is introduced.
+adds automatic checks to the chrome's Checks window, `caliper-render --check`,
+and the take agent's `render` tool with `checks: true`. Ordinary Replace and the
+existing reviewed alternate gate keep their behavior. No new scenario or
+authored-check export is introduced.
+
+Corrected after user feedback: the first implementation exposed reports only
+through the CLI and agent. That was not the approved scope. Reporting instead
+of gating does not remove the UI. The chrome must let people run checks, read
+findings, compare saved images and approve reviewed real-file baselines without
+a terminal.
 
 Reports distinguish detected failures, human review, inconclusive evidence,
 checks not run, and passes. Empty content and spill need review because Caliper
@@ -138,6 +144,35 @@ need for review. Costs are two renders plus axe per check run, exact-image
 sensitivity to fonts and animation, manual image comparison, and stored images
 that need manual cleanup. Sources are not frozen during a report. These results
 cover only listed states, not all consumers, hermeticity or product behavior.
+
+### Checks in the chrome
+
+Checks opens a native dialog from the bar, or from More when space is limited.
+It runs the selected preview or all declared states on both devices. A selected
+take applies its overlay to that scope. The report names the take explicitly.
+A separate session-local API owns progress, findings, saved image access, source
+invalidation and approval. It needs no agent or model. The latest report survives
+page reloads but not a Vite restart. Accepted baselines remain on disk.
+
+Each state/device row expands into findings and the two saved renders. When a
+baseline exists, its image at check time appears alongside them. Approval needs
+an explicit review checkbox and applies only to that real-file result. It cannot
+approve a take, changed evidence, or an out-of-date UI report. Source changes
+mark the report stale without hiding the historical observations. Part-list
+badges describe only the latest run's coverage, not universal safety.
+
+The dialog follows the Caliper container, even inside a larger browser window.
+`planChecks(width, height)` chooses image columns and compact header spacing.
+Its controls stay reachable by scrolling; Close stays visible. The existing bar
+policy moves Checks into More as a whole group. The design keeps Caliper's tokens
+and uses compact status rows with expandable findings, as in the inspected
+[AirOps run log](https://mobbin.com/screens/6dadd86c-1a15-47ea-b654-a45132bb45d1).
+It does not add a separate workflow canvas or permanently shrink the preview.
+
+Costs: one active UI run at a time, latest-report-only navigation, conservative
+source invalidation, and evidence in `.caliper/checks` that needs manual cleanup.
+The modal blocks editing while open; close it while checks run to keep working.
+Checks still do not prove interactions or discover every affected consumer.
 
 ## Implementation choices
 

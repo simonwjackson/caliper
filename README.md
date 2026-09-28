@@ -380,9 +380,32 @@ the agent's skills folder.
 
 ## Report automatic checks
 
-Phase 1 reports problems through the CLI and the agent's render tool. It does
-not block **Replace**, change alternate acceptance, or add chrome status badges.
-It does not run authored interaction tests.
+Open **Checks** in Caliper's bar, or in **More controls** when the bar is narrow.
+**Check selected preview** checks the scenario on the stage. **Check all states**
+checks every declared state. Both commands use both built-in device sizes. When
+a take is selected, the commands check its overlay and name the take explicitly.
+They require no model connection.
+
+The window shows progress, then a status row for each state and device. Expand
+a row to read findings and compare its first render, repeat render, and accepted
+image. Open any image at full size. State rows in the part list show results
+from the latest run; no badge means that state was not in that report.
+
+To accept a visual baseline, expand a real-file result, inspect both images,
+select **I reviewed both renders**, then choose **Approve this image**. Approval
+uses the saved images, not a new render. It does not hide other findings. Take
+images cannot become baselines. Source changes mark a UI report **Out of date**
+and block its baseline approval until checks run again. This does not block
+**Replace**. The existing alternate acceptance rules also stay unchanged.
+
+You can close the Checks window while it runs. Its latest report survives page
+reloads during the same Vite session. Restarting Vite clears the displayed report;
+accepted baselines remain in `<project>/.caliper/baselines`. UI evidence stays in
+`<project>/.caliper/checks` until you remove it. **Download report** saves its JSON.
+The UI does not freeze files while checks run or discover every affected consumer.
+
+The same reporting engine is available through the CLI and the agent's render
+tool. It does not run authored interaction tests.
 
 ```sh
 CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
@@ -480,6 +503,7 @@ CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/t
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-checks-ui.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 ```
 
@@ -495,6 +519,11 @@ state-owned takes, composed CSS overrides, frame isolation, URL restoration,
 five container sizes, related renders, stale declarations, removed-state take
 recovery and retained preview errors. It makes no model
 calls and changes no supplied project files.
+
+`scripts/verify-checks-ui.mjs` exercises the Checks window through real Chromium:
+run progress, findings, saved-image approval, stale results, page reload, take
+selection, unchanged Replace, five size-ladder shapes, and a constrained Caliper
+container inside a larger browser window. It writes screenshots for review.
 
 `scripts/verify-checks.mjs` uses a temporary React consumer to check the public
 CLI, both device sizes, render errors, browser errors, empty states, spill,

@@ -9,6 +9,7 @@ import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { createTakesApi } from "./agent/api.js"
 import { codeChange, createCodeApi } from "./code/api.js"
+import { createChecksApi } from "./checks/api.js"
 import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code/modules.js"
 import { listeningOrigin } from "./server-origin.js"
 import { resolveAgent } from "./agent/config.js"
@@ -35,6 +36,9 @@ const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url))
 const CLIENT_FILES = new Map([
   ["chrome.js", "text/javascript"],
   ["integration-review.js", "text/javascript"],
+  ["checks-panel.js", "text/javascript"],
+  ["checks-view.js", "text/javascript"],
+  ["checks.css", "text/css"],
   ["chrome.css", "text/css"],
   ["code-pane.js", "text/javascript"],
   ["code-editor.js", "text/javascript"],
@@ -270,6 +274,19 @@ function createSession(server, root, options, env, overlay) {
     onChange: takesChanged,
   })
 
+  const checks = createChecksApi({
+    store,
+    project: async () => (await load()).project,
+    serverUrl: () => listeningOrigin(server),
+    chromium: env.CHROMIUM,
+    cacheDir: server.config.cacheDir,
+    onChange: () => {
+      const data = JSON.stringify(checks.snapshot())
+      for (const stream of streams) stream.write(`event: checks\ndata: ${data}\n\n`)
+    },
+  })
+  for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) server.watcher.on(event, checks.invalidate)
+
   /** @param {string} file root-relative */
   const fileUrl = file => {
     const absolute = resolvePath(root, file)
@@ -286,6 +303,7 @@ function createSession(server, root, options, env, overlay) {
     const path = url.pathname.slice(CALIPER_PATH.length)
     if (await takes.handle(path, request, response)) return undefined
     if (await code.handle(path, url, request, response)) return undefined
+    if (await checks.handle(path, url, request, response)) return undefined
     if (path.startsWith("/modules/")) {
       const gzip = /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))
       const served = serveModule(modules.packages, path.slice("/modules/".length), gzip, moduleCache)
@@ -373,6 +391,7 @@ function createSession(server, root, options, env, overlay) {
     })
     response.write(`event: project\ndata: ${json}\n\n`)
     response.write(`event: takes\ndata: ${JSON.stringify(takes.snapshot())}\n\n`)
+    response.write(`event: checks\ndata: ${JSON.stringify(checks.snapshot())}\n\n`)
     streams.add(response)
     response.on("close", () => streams.delete(response))
   }
@@ -383,6 +402,8 @@ function createSession(server, root, options, env, overlay) {
     clearTimeout(takesTimer)
     for (const stream of streams) stream.end()
     streams.clear()
+    for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) server.watcher.off(event, checks.invalidate)
+    await checks.close()
     // Vite awaits closeBundle before a test or caller removes the project root.
     // Await a derivation already in flight as well as cancelling queued work.
     await current?.catch(() => {})

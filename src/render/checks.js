@@ -119,9 +119,9 @@ function checkBaseline(project, environment, result, directory, stable) {
     if (baseline.project !== project || baseline.part !== result.part || baseline.state !== result.state || baseline.device !== result.device) throw new Error("Baseline identity does not match.")
     const png = join(directory, `${baseline.sha256}.png`)
     if (digest(readFileSync(png)) !== baseline.sha256) throw new Error("Baseline image changed.")
-    if (baseline.environment !== environment) return { name: "baseline", status: "Inconclusive", detail: `Baseline browser/platform/check version differs. Review a new baseline. Previous image: ${png}` }
+    if (baseline.environment !== environment) return { name: "baseline", status: "Inconclusive", image: png, detail: `Baseline browser/platform/check version differs. Review a new baseline. Previous image: ${png}` }
     const equal = baseline.sha256 === result.sha256 && baseline.frame === result.frame && JSON.stringify(baseline.viewport) === JSON.stringify(result.viewport)
-    return { name: "baseline", status: equal ? "Passed" : "Review", detail: equal ? `Matches accepted image: ${png}` : `Image or frame verdict changed. Review the accepted image: ${png}` }
+    return { name: "baseline", status: equal ? "Passed" : "Review", image: png, detail: equal ? `Matches accepted image: ${png}` : `Image or frame verdict changed. Review the accepted image: ${png}` }
   } catch (error) {
     return { name: "baseline", status: "Inconclusive", detail: `Cannot read baseline: ${error instanceof Error ? error.message : String(error)}` }
   }

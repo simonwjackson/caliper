@@ -5,6 +5,7 @@ export const CheckSchema = Type.Object({
   name: Type.Union([Type.Literal("render"), Type.Literal("browser"), Type.Literal("spill"), Type.Literal("accessibility"), Type.Literal("determinism"), Type.Literal("baseline")]),
   status: Type.Union([Type.Literal("Passed"), Type.Literal("Failed"), Type.Literal("Review"), Type.Literal("Inconclusive"), Type.Literal("NotRun")]),
   detail: Type.String(),
+  image: Type.Optional(Type.String()),
 })
 
 const Digest = Type.String({ pattern: "^[a-f0-9]{64}$" })

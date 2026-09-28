@@ -1,5 +1,6 @@
 // @ts-check
 import { createCodePane } from "./code-pane.js"
+import { createChecksPanel } from "./checks-panel.js"
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
 import { h } from "./dom.js"
 import { fitBar, planLayout } from "./layout.js"
@@ -57,7 +58,7 @@ const STORAGE_CODE_OPEN = "caliper:code-open"
 const STORAGE_CODE_SHARE = "caliper:code-share"
 const STORAGE_VIEW = "caliper:view"
 /** Bar groups move into the More menu in this order: the rarest action first. */
-const BAR_OVERFLOW = ["calibrate", "devices"]
+const BAR_OVERFLOW = ["calibrate", "devices", "checks"]
 /** The narrowest the bar's title gets while it shares a row with the controls. */
 const BAR_TITLE_MIN = 160
 /** The share of the work area the code pane takes, beside or under the stage. */
@@ -179,6 +180,7 @@ app.append(
         h("span", { class: "cal-part-file" })),
       h("div", { class: "cal-controls" },
         h("div", { class: "cal-devices", "data-group": "devices", role: "radiogroup", "aria-label": "Device" }),
+        h("button", { class: "cal-checks-toggle", "data-group": "checks", type: "button", "aria-label": "Checks", onClick: () => checks.open() }, "Checks"),
         h("button", { class: "cal-calibrate", "data-group": "calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate"),
         h("div", { class: "cal-views", "data-group": "views", role: "group", "aria-label": "Panes" },
           h("button", { class: "cal-preview-tab", type: "button", onClick: () => setView("preview") }, "Preview"),
@@ -312,6 +314,25 @@ const code = createCodePane($(".cal-code"), {
   // A lens in the part file selects its state, as the state's row in the list does.
   selectState: exportName => { if (state.part) selectPartState(state.part, exportName) },
   stopTake: take => void postTakes(`/takes/${take}/stop`),
+})
+
+const checks = createChecksPanel({
+  container: app,
+  target: () => {
+    const part = currentPart()
+    if (!part) return null
+    const base = previewRef() ?? { part: part.file, state: "*" }
+    const take = currentTake()
+    const preview = take ? takePreview(take, base) : base
+    return { ...preview, ...(take ? { take: take.take } : {}), label: `${preview.state === "*" ? `${part.name} · All states` : refLabel(preview)} · ${take ? takeName(take) : "Real files"}` }
+  },
+  changed: () => {
+    const status = checks.status()
+    $(".cal-checks-toggle").title = `Checks: ${status}`
+    $(".cal-checks-toggle").textContent = status === "Not checked" ? "Checks" : `Checks · ${status}`
+    renderParts()
+    fitBarToWidth()
+  },
 })
 
 // -------------------------------------------------------------------- actions
@@ -647,6 +668,7 @@ function renderMoreMenu() {
         "aria-checked": device.id === state.device.id ? "true" : "false",
         onClick: () => { close(); selectDevice(device) },
       }, device.name)))] : []),
+    ...(overflow.has("checks") ? [h("button", { type: "button", class: "cal-more-item", onClick: () => { close(); checks.open() } }, `Checks · ${checks.status()}`)] : []),
     ...(overflow.has("calibrate") ? [h("div", { class: "cal-more-group" },
       h("button", {
         type: "button",
@@ -810,7 +832,7 @@ function stateList(part) {
           title: stateSite(part, partState), "data-state": partState.export,
           "data-nav-key": `state:${part.file}:${partState.export}`,
           onClick: () => selectPartState(part.file, partState.export),
-        }, partState.label),
+        }, partState.label, checks.badge(part.file, partState.export)),
         takes.length ? h("div", { class: "cal-state-takes" },
           h("button", {
             type: "button", class: "cal-state", "data-state": `${TAKES_PREFIX}${partState.export}`,
@@ -830,7 +852,7 @@ function stateList(part) {
             "data-nav-key": `take:${take.take}`,
             "aria-current": state.take === take.take ? "true" : false,
             onClick: () => selectTake(take.take),
-          }, `${takeName(take)} · Take ${take.take}`))) : null)
+          }, `${takeName(take)} · Take ${take.take}`, checks.badge(part.file, partState.export, take.take)))) : null)
     }))
 }
 
@@ -1653,6 +1675,9 @@ function connect() {
     if (before && setupKey(before) !== setupKey(project)) {
       for (const iframe of stage.querySelectorAll("iframe[src]")) /** @type {HTMLIFrameElement} */ (iframe).contentWindow?.location.reload()
     }
+  })
+  events.addEventListener("checks", message => {
+    checks.receive(JSON.parse(/** @type {MessageEvent<string>} */ (message).data))
   })
   events.addEventListener("code", message => {
     code.diskChanged(JSON.parse(/** @type {MessageEvent<string>} */ (message).data))

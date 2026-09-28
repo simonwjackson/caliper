@@ -1,0 +1,93 @@
+/* Checks keep Caliper's own tokens. Findings are rows, not a second dashboard. */
+.cal-checks-dialog {
+  --checks-gap: var(--cal-space-4);
+  position: fixed;
+  inset: auto;
+  left: calc(var(--checks-left, 0px) + var(--checks-width, 100vw) / 2);
+  top: calc(var(--checks-top, 0px) + var(--checks-gap));
+  transform: translateX(-50%);
+  width: min(78rem, calc(var(--checks-width, 100vw) - 2 * var(--checks-gap)));
+  height: calc(var(--checks-height, 100vh) - 2 * var(--checks-gap));
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-panel);
+  color: var(--cal-ink);
+  font: inherit;
+  overflow: hidden;
+}
+.cal-checks-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.cal-checks-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.cal-checks-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cal-space-2);
+  padding: var(--cal-space-3) var(--cal-space-4);
+  border-bottom: 1px solid var(--cal-line);
+}
+.cal-checks-dialog[data-compact="true"] .cal-checks-head { padding-block: var(--cal-space-1); }
+.cal-checks-head h2 { margin: 0; font-size: var(--cal-text-md); }
+.cal-checks-body {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--cal-space-4);
+  overflow-wrap: anywhere;
+}
+.cal-checks-body p { margin-block: var(--cal-space-2); }
+.cal-checks-dialog button,
+.cal-checks-dialog summary,
+.cal-checks-dialog label,
+.cal-checks-dialog a { min-height: 2.75rem; }
+.cal-checks-dialog a { color: var(--cal-accent); display: inline-block; }
+.cal-checks-dialog button:disabled { opacity: 0.55; cursor: not-allowed; }
+.cal-check-controls { padding-bottom: var(--cal-space-3); border-bottom: 1px solid var(--cal-line); }
+.cal-check-actions { display: flex; flex-wrap: wrap; gap: var(--cal-space-2); }
+.cal-check-actions button { max-width: 100%; white-space: normal; text-align: left; }
+.cal-check-summary { padding-block: var(--cal-space-3); }
+.cal-check-summary h3 { margin-block: var(--cal-space-2); font-size: var(--cal-text-md); }
+.cal-check-empty { padding-block: var(--cal-space-4); color: var(--cal-muted); }
+.cal-check-error { color: var(--cal-bad); }
+.cal-check-warning { color: var(--cal-warn); }
+.cal-check-notice { color: var(--cal-good); }
+.cal-check-progress { color: var(--cal-accent); }
+.cal-check-badge {
+  display: inline-block;
+  margin-inline-start: var(--cal-space-2);
+  font-size: var(--cal-text-sm);
+  font-weight: 500;
+  white-space: normal;
+  color: var(--cal-muted);
+}
+.cal-check-badge[data-status="Passed"] { color: var(--cal-good); }
+.cal-check-badge[data-status="Failed"] { color: var(--cal-bad); }
+.cal-check-badge[data-status="Review"],
+.cal-check-badge[data-status="Inconclusive"],
+.cal-check-badge[data-status="Stale"] { color: var(--cal-warn); }
+.cal-check-result { border-top: 1px solid var(--cal-line); padding-block: var(--cal-space-2); }
+.cal-check-result > summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cal-space-2); cursor: pointer; }
+.cal-check-result > summary::before { content: "▸"; color: var(--cal-muted); }
+.cal-check-result[open] > summary::before { content: "▾"; }
+.cal-check-result-name { flex: 1 1 14rem; min-width: 0; display: grid; }
+.cal-check-result-name strong { font-size: var(--cal-text-sm); font-weight: 600; }
+.cal-check-result-name > span { font-size: var(--cal-text-sm); color: var(--cal-muted); }
+.cal-check-list { padding-block: var(--cal-space-3); }
+.cal-check-finding { border-top: 1px solid var(--cal-line); }
+.cal-check-finding summary { cursor: pointer; padding-block: var(--cal-space-2); }
+.cal-check-finding pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow: auto; margin: 0 0 var(--cal-space-3); }
+.cal-check-finding pre:focus-visible { outline: 2px solid var(--cal-accent); outline-offset: 1px; }
+.cal-check-images { display: grid; grid-template-columns: repeat(var(--checks-columns, 1), minmax(0, 1fr)); gap: var(--cal-space-3); }
+.cal-check-images figure { min-width: 0; margin: 0; }
+.cal-check-images a { display: block; }
+.cal-check-images img { display: block; width: 100%; height: auto; border: 1px solid var(--cal-line); background: var(--cal-stage); }
+.cal-check-images figcaption { padding-block: var(--cal-space-2); font-size: var(--cal-text-sm); }
+.cal-check-images figcaption span { display: block; color: var(--cal-muted); }
+.cal-check-approval { display: grid; justify-items: start; gap: var(--cal-space-2); padding-block: var(--cal-space-3); }
+.cal-check-approval label { display: flex; align-items: center; gap: var(--cal-space-2); }
+.cal-check-approval input { flex: none; width: 1.25rem; height: 1.25rem; }
+.cal-check-approval button { max-width: 100%; white-space: normal; }
