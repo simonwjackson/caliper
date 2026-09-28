@@ -5,6 +5,7 @@ import { join, resolve } from "node:path"
 import { Check } from "typebox/value"
 import { BaselineSchema, CheckReportSchema } from "./check-contract.js"
 import { renderJobs } from "./render.js"
+import { applyExpectations } from "./expectations.js"
 
 /** @typedef {import("./render.js").RenderResult} RenderResult */
 /** @typedef {import("./check-contract.js").CheckResult} CheckResult */
@@ -68,6 +69,7 @@ export function compareRenders({ project, first, second, baselines }) {
       { name: "determinism", status: broken || errors.length ? "Inconclusive" : stable ? "Passed" : "Inconclusive",
         detail: broken || errors.length ? "Broken renders cannot establish determinism." : stable ? "Two screenshot byte sequences and frame verdicts match. This is a sample, not proof of determinism." : "The two renders differ. Review both images; animation or changing data can cause this." },
     ]
+    applyExpectations(samples, checks, broken)
     const candidate = { part: result.part, state: result.state, device: result.device, frame: result.frame, viewport: result.viewport, sha256 }
     checks.push(checkBaseline(project, environment, candidate, baselines, checks.find(check => check.name === "determinism")?.status === "Passed"))
     return { ...candidate, ...(result.take === undefined ? {} : { take: result.take }), png: resolve(result.png), repeatPng: resolve(repeat.png), repeatSha256, checks }

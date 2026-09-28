@@ -420,7 +420,8 @@ check reports one of these statuses:
 | Status | Meaning |
 |---|---|
 | `Passed` | This check found no problem in these samples. |
-| `Failed` | A render problem, browser error, or axe violation was observed. |
+| `Accepted` | Every observed finding for this check matches a scoped product exception. Reasons and evidence remain visible. This is not a clean pass. |
+| `Failed` | A render problem, browser error, unmet empty expectation, invalid declaration, or unaccepted axe violation was observed. |
 | `Review` | Human judgement is needed, such as empty content, spill, an incomplete axe check, or a changed or missing image baseline. |
 | `Inconclusive` | The check cannot establish a result, such as differing repeat images, an unavailable audit, or an incompatible or damaged baseline. |
 | `NotRun` | No baseline directory was supplied. |
@@ -436,7 +437,64 @@ A/AA rules through WCAG 2.2. Document title and language belong to Caliper's
 frame and are excluded. Keyboard behavior, full-page semantics, and interactions
 still need product tests and manual review. Scrollable content can cause spill.
 Caliper reports it for review instead of guessing that scrolling is a defect.
-Empty states also need review instead of an unconditional failure.
+Empty states also need review instead of an unconditional failure, unless the product declares that emptiness is expected.
+
+### Declare product intent
+
+A part can export literal `expectations`, keyed by its state exports. Caliper reads
+this data without executing it. Only the named state receives these expectations;
+composition links do not inherit exceptions. Takes use their own part source.
+
+```tsx
+export const expectations = {
+  Empty: { empty: { reason: "The optional panel is absent when there are no results." } },
+  Ready: {
+    spill: [{
+      target: "#caliper-host > section:nth-of-type(1) > div:nth-of-type(1)",
+      edge: "bottom",
+      maxPixels: 240,
+      reason: "This content belongs to the vertical scroll area.",
+    }],
+    accessibility: [{
+      rule: "color-contrast",
+      target: [".caption"],
+      reason: "Recorded palette exception. This caption still fails WCAG contrast.",
+    }],
+  },
+} as const
+```
+
+Use real exported state names, including `default`. Copy targets from an actual
+check report rather than guessing them. An accessibility target must exactly match
+axe's target array. A spill target must exactly match the measured element path;
+it is not a selector filter. Spill also requires one edge and a positive maximum
+distance in CSS pixels. Each spilling element and edge needs coverage. Check runs
+measure all spilling elements, rather than the five examples in an ordinary render.
+
+An expected empty passes only when both samples are empty. Visible content fails
+that expectation. Matched spill and accessibility exceptions become `Accepted`,
+not `Passed`. The report retains raw observations, accepted reasons and counts,
+including when another finding keeps the check failed. Browser errors, failed
+renders, unavailable audits, and incomplete axe checks cannot be accepted.
+Unused exceptions need review and removal, so a fixed finding does not leave a
+silent waiver. Invalid declarations accept nothing and show a named error.
+
+Declarations must be direct literal const exports. Calls, imports, export aliases,
+spreads, computed keys, duplicate scopes, blank reasons, and unknown fields are
+rejected. A change between the two samples is inconclusive and applies no exceptions.
+The Checks window, CLI, and take agent share these rules. Replace and the reviewed
+alternate gate remain unchanged. Baseline approval does not create exceptions.
+
+Costs: exact targets need maintenance after markup changes. An exception can still
+hide a real defect inside its scope; a reason is an explanation, not proof that the
+design is accessible or that clipped content can be reached. Fix missing parent
+context through product composition instead of broadly accepting its findings.
+
+Frame verdicts now follow a React commit. Unresolved root suspension reaches the
+watchdog instead of becoming Empty. Later DOM changes update the verdict and remove
+stale empty warnings. A committed null Suspense fallback is still observed as empty;
+Caliper does not infer when all product data has settled. Checks version 2 changes
+the recorded environment, so older visual baselines need fresh review.
 
 ### Approve reviewed images
 
@@ -504,6 +562,8 @@ CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/t
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks-ui.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-expectations.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium node scripts/verify-frame-commit.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
 CHROMIUM=/path/to/chromium node scripts/verify-fast-saves.mjs
 ```

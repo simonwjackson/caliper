@@ -1,5 +1,5 @@
 // @ts-check
-import ts from "typescript"
+import { readLiteralExport } from "./literal-export.js"
 import { Check } from "typebox/value"
 import { CompositionSchema } from "../scenario-contract.js"
 import { sameState, stateExists, subjectsOf } from "../client/scenarios.js"
@@ -15,88 +15,13 @@ import { sameState, stateExists, subjectsOf } from "../client/scenarios.js"
  * @returns {Pick<Part, "composition" | "compositionProblems">}
  */
 export function readComposition(file, source) {
-  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-  /** @type {ts.VariableDeclaration[]} */
-  const declarations = []
-  /** @type {string[]} */
-  const problems = []
-  /** @param {ts.Node} node @param {string} reason */
-  const problem = (node, reason) => problems.push(`${file}:${tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1}: ${reason}`)
-  for (const statement of tree.statements) {
-    if (ts.isExportDeclaration(statement)) {
-      if (statement.isTypeOnly) continue
-      const clause = statement.exportClause
-      if (clause && ts.isNamedExports(clause)) {
-        for (const entry of clause.elements) {
-          if (!entry.isTypeOnly && entry.name.text === "composition") problem(entry, "Declare composition directly as export const composition = { ... }, not an export alias.")
-        }
-      } else if (clause && ts.isNamespaceExport(clause) && clause.name.text === "composition") {
-        problem(clause, "composition must be literal data, not a namespace export.")
-      }
-      continue
-    }
-    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : []
-    if (!modifiers.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue
-    if (!ts.isVariableStatement(statement)) {
-      if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement) || ts.isModuleDeclaration(statement)) && statement.name?.text === "composition") {
-        problem(statement, "composition must be an exported const with literal data.")
-      }
-      continue
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (!bindsComposition(declaration.name)) continue
-      if (!ts.isIdentifier(declaration.name)) {
-        problem(declaration, "composition must have a direct literal initializer, not a destructuring binding.")
-        continue
-      }
-      declarations.push(declaration)
-      if (!(statement.declarationList.flags & ts.NodeFlags.Const)) problem(declaration, "composition must be const.")
-    }
+  const parsed = readLiteralExport(file, source, "composition")
+  if (parsed._tag === "Absent") return {}
+  if (parsed._tag === "Invalid") return { compositionProblems: parsed.problems }
+  if (!Check(CompositionSchema, parsed.value)) return {
+    compositionProblems: [`${parsed.at}: composition must map state exports to arrays of { part: "root-relative.part.tsx", state: "export" } with no extra fields.`],
   }
-  if (declarations.length === 0 && problems.length === 0) return {}
-  if (declarations.length > 1) problem(declarations[1], "composition is declared more than once.")
-  const declaration = declarations[0]
-  if (problems.length > 0 || !declaration) return { compositionProblems: problems }
-  try {
-    if (!declaration.initializer) throw new Error("composition needs a literal initializer.")
-    const value = literal(declaration.initializer)
-    if (!Check(CompositionSchema, value)) {
-      throw new Error('composition must map state exports to arrays of { part: "root-relative.part.tsx", state: "export" } with no extra fields.')
-    }
-    return { composition: value }
-  } catch (error) {
-    problem(declaration, error instanceof Error ? error.message : String(error))
-    return { compositionProblems: problems }
-  }
-}
-
-/** @param {ts.BindingName} name @returns {boolean} */
-function bindsComposition(name) {
-  return ts.isIdentifier(name) ? name.text === "composition"
-    : name.elements.some(element => ts.isBindingElement(element) && bindsComposition(element.name))
-}
-
-/** @param {ts.Expression} expression @returns {unknown} */
-function literal(expression) {
-  if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression) || ts.isTypeAssertionExpression(expression)) {
-    return literal(expression.expression)
-  }
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text
-  if (ts.isArrayLiteralExpression(expression)) return expression.elements.map(literal)
-  if (ts.isObjectLiteralExpression(expression)) {
-    /** @type {Record<string, unknown>} */
-    const value = Object.create(null)
-    for (const property of expression.properties) {
-      if (!ts.isPropertyAssignment(property) || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) {
-        throw new Error("composition accepts only literal properties, arrays and strings. Spreads, computed names and shorthand properties are not supported.")
-      }
-      const name = property.name.text
-      if (Object.hasOwn(value, name)) throw new Error(`composition contains duplicate property "${name}".`)
-      value[name] = literal(property.initializer)
-    }
-    return value
-  }
-  throw new Error("composition accepts only literal properties, arrays and strings. Calls, identifiers and other dynamic expressions are not evaluated.")
+  return { composition: parsed.value }
 }
 
 /** @param {string} path */

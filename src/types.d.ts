@@ -98,6 +98,9 @@ export type Part = {
   readonly composition?: Readonly<Record<string, readonly StateRef[]>>
   /** Invalid declarations are reported instead of supplying inferred relationships. */
   readonly compositionProblems?: readonly string[]
+  /** Static per-state intent. It changes check classification, not product rendering. */
+  readonly expectations?: import("./expectation-contract.js").Expectations
+  readonly expectationProblems?: readonly string[]
 }
 
 /**
@@ -136,6 +139,8 @@ export type FrameConfig = {
   readonly css: readonly string[]
   /** Problems the server found while it prepared the frame. The frame shows them as warnings. */
   readonly warnings: readonly string[]
+  readonly expectations?: import("./expectation-contract.js").StateExpectations
+  readonly expectationProblems?: readonly string[]
   readonly wrapper: readonly WrapperElement[]
   /** URL of the module that re-exports the project's own React. */
   readonly react: string

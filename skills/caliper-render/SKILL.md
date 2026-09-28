@@ -41,6 +41,12 @@ checks the subject states and declared parent scenarios, not all consumers.
 Read each check's status and detail. `Failed` names a detected problem.
 `Review` means inspect empty content, spill, incomplete accessibility checks,
 and changed or missing baselines. `Inconclusive` and `NotRun` are not passes.
+`Accepted` means observed findings match product-owned exceptions, not a clean
+pass. Read `accepted` reasons and targets as well as raw evidence in `detail`.
+Report exception counts even when another finding leaves the check failed.
+Unused declarations appear in `unmatched` and need review. Do not add exceptions
+merely to make a report pass; product intent needs an explicit reason and scope.
+See README “Declare product intent” for the literal `expectations` contract.
 With `--check`, exit 0 only means the report was written. It does not mean all
 checks passed. Reports never block Replace.
 

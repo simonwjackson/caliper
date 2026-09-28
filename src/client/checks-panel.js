@@ -1,10 +1,10 @@
 // @ts-check
 import { h } from "./dom.js"
-import { canApproveImage, checkDetail, planChecks, reconcileChecks, summarizeChecks } from "./checks-view.js"
+import { canApproveImage, checkDetail, exceptionCountLabel, planChecks, reconcileChecks, summarizeChecks } from "./checks-view.js"
 
 /** @typedef {import('../checks/contract.js').ChecksView} ChecksView */
 /** @typedef {{part: string, state: string, take?: string, label: string}} Target */
-const NAMES = { render: "Rendering", browser: "Browser errors", spill: "Content outside the screen", accessibility: "Accessibility", determinism: "Repeat render", baseline: "Accepted image" }
+const NAMES = { render: "Rendering", browser: "Browser errors", spill: "Content outside the screen", accessibility: "Accessibility", determinism: "Repeat render", baseline: "Accepted image", expectations: "Product expectations" }
 
 /**
  * Owns run/review interactions, not source editing or take acceptance.
@@ -108,7 +108,7 @@ export function createChecksPanel({ container, target, changed }) {
       const list = h("div", { class: "cal-check-list" })
       for (const check of result.checks) {
         const detail = h("details", { class: "cal-check-finding" },
-          h("summary", {}, NAMES[check.name], h("span", { class: "cal-check-badge", "data-status": check.status }, check.status === "NotRun" ? "Not run" : check.status)),
+          h("summary", {}, NAMES[check.name], h("span", { class: "cal-check-badge", "data-status": check.status }, `${check.status === "NotRun" ? "Not run" : check.status}${check.accepted?.length ? ` · ${exceptionCountLabel(check.accepted.length)}` : ""}`)),
           h("pre", { tabindex: "0", "aria-label": `${NAMES[check.name]} details` }, checkDetail(check)))
         detail.open = check.status === "Failed" || check.status === "Inconclusive"
         list.append(detail)

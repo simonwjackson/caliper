@@ -29,14 +29,29 @@ export function summarizeChecks(checks) {
   const review = checks.filter(check => check.status === "Review").length
   const inconclusive = checks.filter(check => check.status === "Inconclusive").length
   const notRun = checks.filter(check => check.status === "NotRun").length
-  const status = failed ? "Failed" : inconclusive ? "Inconclusive" : review ? "Review" : notRun ? "NotRun" : checks.length ? "Passed" : "NotRun"
-  const label = failed ? `${failed} failed` : inconclusive ? `${inconclusive} inconclusive` : review ? `${review} to review` : notRun ? `${notRun} not run` : checks.length ? "Checks passed" : "Not checked"
-  const detail = `${failed} failed, ${review} need review, ${inconclusive} inconclusive, ${notRun} not run. Covers the listed checks only.`
+  const accepted = checks.filter(check => check.status === "Accepted").length
+  const exceptions = checks.reduce((count, check) => count + (check.accepted?.length ?? 0), 0)
+  const status = failed ? "Failed" : inconclusive ? "Inconclusive" : review ? "Review" : notRun ? "NotRun" : accepted ? "Accepted" : checks.length ? "Passed" : "NotRun"
+  const primary = failed ? `${failed} failed` : inconclusive ? `${inconclusive} inconclusive` : review ? `${review} to review` : notRun ? `${notRun} not run` : accepted ? "Accepted" : checks.length ? "Checks passed" : "Not checked"
+  const label = exceptions ? `${primary} · ${exceptionCountLabel(exceptions)}` : primary
+  const detail = `${failed} failed, ${review} need review, ${inconclusive} inconclusive, ${notRun} not run, ${exceptionCountLabel(exceptions)}. Accepted is not a clean pass. Covers the listed checks only.`
   return { status, label, detail }
+}
+
+/** @param {number} count */
+export function exceptionCountLabel(count) {
+  return `${count} accepted exception${count === 1 ? "" : "s"}`
 }
 
 /** Make structured findings readable; keep unexpected formats as text. @param {CheckResult} check */
 export function checkDetail(check) {
+  const accepted = (check.accepted ?? []).map(item => `Accepted exception: ${item.rule}\nTarget: ${item.target}\nReason: ${item.reason}`)
+  const unmatched = (check.unmatched ?? []).map(item => `Unused declaration. Review or remove it: ${item}`)
+  return [...accepted, ...unmatched, observedDetail(check)].join("\n\n")
+}
+
+/** @param {CheckResult} check */
+function observedDetail(check) {
   try {
     const data = JSON.parse(check.detail)
     if (check.name === "accessibility" && Array.isArray(data)) {

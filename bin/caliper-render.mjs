@@ -28,7 +28,7 @@ Options:
              replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
   --chromium Chromium executable. Default: the CHROMIUM environment variable
-  --list     Print every part with its states, composition links and problems, and devices, as JSON
+  --list     Print every part with states, composition, expectations and problems, and devices, as JSON
   --check    Report render, browser, spill, axe, repeat-render and baseline checks.
              Uses two fresh renders; writes report.json and both sets of images under --out.
   --baselines Directory of accepted images for this project. Without it, baseline checks are NotRun.
@@ -42,8 +42,8 @@ Output: one JSON object on stdout.
   problems  What the frame shows: load errors, render errors with stacks, warnings
   console   Browser errors the frame did not catch
   spill     null when the part fits the viewport. Else the box that holds the part,
-            in CSS px, and up to 5 elements that reach past the edge. The device
-            clips or scrolls that content: it is not visible at first.
+            in CSS px, and up to 5 elements that reach past the edge. With --check,
+            every spilling element is measured. The device clips or scrolls that content.
 
 An animation that ends, such as an entry animation, is jumped to its end before
 the spill is measured and the PNG is taken. A looping animation keeps running.
@@ -51,8 +51,11 @@ the spill is measured and the PNG is taken. A looping animation keeps running.
 Exit status: 0 when every frame is Rendered, 1 when a frame is Empty or Failed,
 2 when the request is invalid or the dev server or browser is not reachable.
 With --check, exit 0 means the report was written, NOT that checks passed.
-Check statuses: Passed, Failed, Review, Inconclusive, NotRun. Empty states,
-spill and changed/missing baselines need Review; none blocks Replace.
+Check statuses: Passed, Accepted, Failed, Review, Inconclusive, NotRun.
+Product-owned expectations can pass intended empty states and accept narrowly scoped
+spill or axe findings, with evidence, reasons and counts retained. Accepted is not a
+clean pass. Undeclared emptiness, spill and changed/missing baselines need Review.
+Invalid expectations fail; unused exceptions need Review. None blocks Replace.
 Approval records visual intent only. It does not hide accessibility or other findings.
 Checks cover listed states only, not interactions or every possible consumer.`
 
@@ -123,6 +126,8 @@ if (args.list) {
       file: part.file, name: part.name, states: part.states.map(state => state.export),
       ...(part.composition === undefined ? {} : { composition: part.composition }),
       ...(part.compositionProblems === undefined ? {} : { compositionProblems: part.compositionProblems }),
+      ...(part.expectations === undefined ? {} : { expectations: part.expectations }),
+      ...(part.expectationProblems === undefined ? {} : { expectationProblems: part.expectationProblems }),
     })),
     devices: DEVICES.map(device => ({ id: device.id, name: device.name, cssWidth: device.cssWidth, cssHeight: device.cssHeight, widthMm: device.widthMm })),
   })

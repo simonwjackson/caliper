@@ -131,7 +131,7 @@ export function caliper(options = {}) {
       if (taken !== null) return taken
       if (id !== RESOLVED_REACT_MODULE) return null
       return [
-        'export { createElement } from "react"',
+        'export { createElement, useLayoutEffect } from "react"',
         'export { createRoot } from "react-dom/client"',
       ].join("\n")
     },
@@ -367,6 +367,8 @@ function createSession(server, root, options, env, overlay) {
       part: tag(fileUrl(partFile)),
       partFile,
       state: stateName,
+      ...(part?.expectations?.[stateName] ? { expectations: part.expectations[stateName] } : {}),
+      ...(part?.expectationProblems?.length ? { expectationProblems: part.expectationProblems } : {}),
       ...(flat === null ? {} : { take: /** @type {string} */ (take) }),
       css,
       warnings: [

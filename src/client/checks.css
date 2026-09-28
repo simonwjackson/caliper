@@ -65,6 +65,7 @@
   color: var(--cal-muted);
 }
 .cal-check-badge[data-status="Passed"] { color: var(--cal-good); }
+.cal-check-badge[data-status="Accepted"] { color: var(--cal-accent); }
 .cal-check-badge[data-status="Failed"] { color: var(--cal-bad); }
 .cal-check-badge[data-status="Review"],
 .cal-check-badge[data-status="Inconclusive"],

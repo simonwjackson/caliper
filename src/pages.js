@@ -58,13 +58,23 @@ export function framePage({ clientUrl, config, problem }) {
     <script type="application/json" id="caliper-frame-config">${json}</script>
     <script>
       setTimeout(function () {
-        if (document.documentElement.dataset.caliperState) return
+        var state = document.documentElement.dataset.caliperState
+        if (state && state !== "Loading") return
         var panel = document.createElement("div")
         panel.id = "caliper-problem"
         panel.setAttribute("role", "alert")
-        panel.textContent = "Caliper's frame script did not start within ${FRAME_WATCHDOG_MS / 1000} seconds. Check the terminal that runs Vite."
+        panel.textContent = document.documentElement.dataset.caliperStarted
+          ? "Caliper's frame did not finish its first render within ${FRAME_WATCHDOG_MS / 1000} seconds. Check for pending imports or suspended product content."
+          : "Caliper's frame script did not start within ${FRAME_WATCHDOG_MS / 1000} seconds. Check the terminal that runs Vite."
         document.body.append(panel)
         document.documentElement.dataset.caliperState = "Failed"
+        var config = JSON.parse(document.getElementById("caliper-frame-config").textContent)
+        var report = {
+          part: config.partFile, partState: config.state, take: config.take || null, state: "Failed",
+          problems: (window.caliperReport ? window.caliperReport.problems : []).concat([{ kind: "error", title: panel.textContent, detail: "" }])
+        }
+        window.caliperReport = report
+        if (window.parent !== window) window.parent.postMessage(Object.assign({ source: "caliper-frame" }, report), location.origin)
       }, ${FRAME_WATCHDOG_MS})
     </script>
     <script type="module" src="${clientUrl}/frame.js"></script>

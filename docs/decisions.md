@@ -201,6 +201,44 @@ Those paths retain product-level tests. Add a product-command interface only
 when a concrete scenario demonstrates the need, and state which input handling
 that check bypasses. Browser checks do not prove physical-device input behavior.
 
+## Product-owned expectations
+
+The user chose a separate `Accepted` status on 2026-09-28. A matching exception
+is not a clean pass. Product part files can export literal `expectations`, keyed
+by state, for expected emptiness, bounded spill, and specific axe violations.
+Static derivation validates this data without executing source. Composition links
+do not propagate exceptions. Take frames read declarations from their overlay.
+
+An empty expectation passes only when both samples are empty. Visible content
+fails that expectation. Spill exceptions name an exact measured element path,
+one viewport edge, a positive maximum distance in CSS pixels, and a reason.
+Accessibility exceptions name one axe rule, its exact target array, and a reason.
+These targets are identities copied from observations, not broad selector filters.
+
+Reports retain raw findings, accepted reasons and counts. Every unresolved node
+and edge keeps its normal status. Unavailable evidence is inconclusive; incomplete
+axe findings still need review. Unused declarations need review and removal.
+Invalid declarations accept nothing. Changed declarations between samples are
+inconclusive and accept nothing. Browser and render failures cannot be waived.
+The UI, CLI, and agent consume the same report contract. Ordinary Replace and the
+reviewed alternate gate keep their existing behavior. Baseline approval records
+images, not exceptions.
+
+Real React regression tests reproduced stale Empty warnings over delayed content
+and an unresolved suspended root incorrectly reported as Empty. Frame readiness
+now follows a React commit. DOM changes update the verdict and remove only the
+empty warning. Root suspension reaches the watchdog. This does not infer product
+readiness: an inner Suspense boundary that commits a null fallback is observable
+empty content. The product still owns reproducible scenario inputs and behavior.
+
+Costs: exact targets need maintenance; a narrow exception can still conceal a
+real defect. Reasons do not prove WCAG compliance or scroll reachability. Check
+renders now retain every spilling element, making some reports larger. The check
+environment version changes to 2, requiring review of older baselines. Accepted
+findings have a separate label and use the chrome's existing accent token rather
+than the passing color. Existing expandable result rows remain, as in the inspected
+[Klaviyo import history](https://mobbin.com/screens/7b815936-117a-4695-8a9b-429403b4c671).
+
 ## Implementation choices
 
 | # | Decision | Why |

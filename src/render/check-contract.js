@@ -2,10 +2,12 @@
 import { Type } from "typebox"
 
 export const CheckSchema = Type.Object({
-  name: Type.Union([Type.Literal("render"), Type.Literal("browser"), Type.Literal("spill"), Type.Literal("accessibility"), Type.Literal("determinism"), Type.Literal("baseline")]),
-  status: Type.Union([Type.Literal("Passed"), Type.Literal("Failed"), Type.Literal("Review"), Type.Literal("Inconclusive"), Type.Literal("NotRun")]),
+  name: Type.Union([Type.Literal("render"), Type.Literal("browser"), Type.Literal("spill"), Type.Literal("accessibility"), Type.Literal("determinism"), Type.Literal("baseline"), Type.Literal("expectations")]),
+  status: Type.Union([Type.Literal("Passed"), Type.Literal("Accepted"), Type.Literal("Failed"), Type.Literal("Review"), Type.Literal("Inconclusive"), Type.Literal("NotRun")]),
   detail: Type.String(),
   image: Type.Optional(Type.String()),
+  accepted: Type.Optional(Type.Array(Type.Object({ rule: Type.String(), target: Type.String(), reason: Type.String() }))),
+  unmatched: Type.Optional(Type.Array(Type.String())),
 })
 
 const Digest = Type.String({ pattern: "^[a-f0-9]{64}$" })

@@ -1176,8 +1176,8 @@ function renderSetup() {
   body.replaceChildren()
   if (!project) return
   const derivations = [project.entry, project.css, project.wrapper]
-  const compositionProblems = project.parts.flatMap(part => (part.compositionProblems ?? []).map(problem => `${part.file}: ${problem}`))
-  const failures = derivations.filter(derivation => derivation._tag === "Failed").length + compositionProblems.length
+  const declarationProblems = project.parts.flatMap(part => [...(part.compositionProblems ?? []), ...(part.expectationProblems ?? [])])
+  const failures = derivations.filter(derivation => derivation._tag === "Failed").length + declarationProblems.length
   const details = /** @type {HTMLDetailsElement} */ ($(".cal-setup"))
   $(".cal-setup summary").textContent = failures
     ? `Setup · ${failures} problems`
@@ -1186,7 +1186,7 @@ function renderSetup() {
   if (failures > 0) details.open = true
 
   body.append(
-    ...compositionProblems.map(problem => h("p", { class: "cal-agent-failed", role: "alert" }, problem)),
+    ...declarationProblems.map(problem => h("p", { class: "cal-agent-failed", role: "alert" }, problem)),
     setupRow("Entry", project.entry, entry => [h("code", {}, entry.file)]),
     setupRow("Global CSS", project.css, css => [
       css.stylesheets.length === 0

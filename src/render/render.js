@@ -25,6 +25,8 @@ import { auditAccessibility, axeVersion } from "./accessibility.js"
  *   environment?: string,
  *   checks?: import("./check-contract.js").CheckResult[],
  *   checkReport?: string,
+ *   expectations?: import('../expectation-contract.js').StateExpectations,
+ *   expectationProblems?: readonly string[],
  * }} RenderResult
  *   `frame` is the frame's own verdict. `problems` are what the frame shows.
  *   `console` holds browser errors the frame did not catch, for example a
@@ -33,12 +35,13 @@ import { auditAccessibility, axeVersion } from "./accessibility.js"
  *
  * @typedef {{
  *   left: number, top: number, right: number, bottom: number,
- *   elements: Array<{ element: string, left: number, top: number, right: number, bottom: number }>,
+ *   elements: Array<{ element: string, target?: string, left: number, top: number, right: number, bottom: number }>,
+ *   complete?: boolean,
  * }} Spill
  *   The box, in CSS px, that holds every element of the part, when it reaches
  *   past the viewport. The content past the edge is clipped or scrolls: the
- *   device does not show it at first. `elements` lists up to 5 of the
- *   outermost elements that reach past the edge.
+ *   device does not show it at first. Normal renders list up to 5 outermost
+ *   elements; check renders measure every spilling element for scoped exceptions.
  */
 
 /** Layout rounding that does not count as spill, in CSS px. */
@@ -135,7 +138,7 @@ async function renderOne(browser, url, job, out, audit) {
       const width = window.innerWidth
       const height = window.innerHeight
       const box = { left: 0, top: 0, right: 0, bottom: 0 }
-      /** @type {Array<{ element: string, left: number, top: number, right: number, bottom: number }>} */
+      /** @type {Array<{ element: string, target: string, left: number, top: number, right: number, bottom: number }>} */
       const elements = []
       /** @param {DOMRect} rect */
       const outside = rect => rect.left < -tolerance || rect.top < -tolerance || rect.right > width + tolerance || rect.bottom > height + tolerance
@@ -143,6 +146,20 @@ async function renderOne(browser, url, job, out, audit) {
       const describe = element => {
         const classes = [...element.classList].slice(0, 3).map(name => `.${name}`).join("")
         return `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}${classes}`
+      }
+      // Copy this exact target from a finding into a product declaration. Full
+      // ancestry avoids accepting an unrelated element with the same classes.
+      /** @param {Element} element */
+      const target = element => {
+        const path = []
+        let node = /** @type {Element | null} */ (element)
+        while (node && node.id !== "caliper-host") {
+          const parent = node.parentElement
+          const siblings = parent ? [...parent.children].filter(child => child.tagName === node?.tagName) : []
+          path.unshift(`${node.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(node) + 1})`)
+          node = parent
+        }
+        return `#caliper-host > ${path.join(" > ")}`
       }
       for (const element of document.querySelectorAll("#caliper-host *")) {
         const rect = element.getBoundingClientRect()
@@ -153,19 +170,23 @@ async function renderOne(browser, url, job, out, audit) {
         box.bottom = Math.max(box.bottom, rect.bottom)
         const parent = element.parentElement
         const parentOutside = parent !== null && parent.id !== "caliper-host" && outside(parent.getBoundingClientRect())
-        if (outside(rect) && !parentOutside && elements.length < limit) {
-          elements.push({ element: describe(element), left: Math.round(rect.left), top: Math.round(rect.top), right: Math.round(rect.right), bottom: Math.round(rect.bottom) })
+        if (outside(rect) && (limit === 0 || (!parentOutside && elements.length < limit))) {
+          elements.push({ element: describe(element), target: target(element), left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })
         }
       }
       const spill = elements.length === 0 ? null : {
-        left: Math.round(box.left), top: Math.round(box.top), right: Math.round(box.right), bottom: Math.round(box.bottom), elements,
+        left: Math.round(box.left), top: Math.round(box.top), right: Math.round(box.right), bottom: Math.round(box.bottom), elements, complete: limit === 0,
       }
+      /** @type {import('../types').FrameConfig} */
+      const config = JSON.parse(document.getElementById("caliper-frame-config")?.textContent ?? "{}")
       return {
+        ...(config.expectations ? { expectations: config.expectations } : {}),
+        ...(config.expectationProblems ? { expectationProblems: config.expectationProblems } : {}),
         frame: root.dataset.caliperState ?? "Failed",
         problems: own?.problems ?? (watchdog ? [{ kind: "error", title: watchdog, detail: "" }] : []),
         spill,
       }
-    }, { tolerance: SPILL_TOLERANCE, limit: SPILL_ELEMENTS })
+    }, { tolerance: SPILL_TOLERANCE, limit: audit ? 0 : SPILL_ELEMENTS })
     const png = join(out, `${slug(job.part)}${job.take === undefined ? "" : `.take-${job.take}`}.${job.state}.${job.device}.png`)
     await page.screenshot({ path: png })
     const accessibility = audit ? await auditAccessibility(page) : undefined
@@ -178,9 +199,11 @@ async function renderOne(browser, url, job, out, audit) {
       problems: report.problems,
       console: consoleErrors,
       spill: report.spill,
+      ...(report.expectations ? { expectations: report.expectations } : {}),
+      ...(report.expectationProblems ? { expectationProblems: report.expectationProblems } : {}),
       ...(accessibility === undefined ? {} : {
         accessibility,
-        environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:1`,
+        environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:2`,
       }),
     }
   } finally {

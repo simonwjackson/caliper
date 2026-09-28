@@ -12,7 +12,7 @@
  * @typedef {import("../types").FrameConfig & { problem: string | null }} Config
  * @typedef {"Loading" | "Rendered" | "Empty" | "Failed"} FrameState
  * @typedef {{ kind: "error" | "warning", title: string, detail: string }} Problem
- * @typedef {{ createElement: (type: unknown) => unknown, createRoot: (container: Element, options?: object) => { render: (element: unknown) => void } }} ReactModule
+ * @typedef {{ createElement: (type: unknown) => unknown, useLayoutEffect: (effect: () => (() => void), dependencies: unknown[]) => void, createRoot: (container: Element, options?: object) => { render: (element: unknown) => void } }} ReactModule
  */
 
 const configElement = document.getElementById("caliper-frame-config")
@@ -24,6 +24,7 @@ const host = /** @type {HTMLElement} */ (document.getElementById("caliper-host")
 let state = "Loading"
 /** @type {Problem[]} */
 const problems = []
+document.documentElement.dataset.caliperStarted = "true"
 
 /**
  * Record the frame's state on the document, for tests, and tell the chrome.
@@ -89,6 +90,7 @@ function warn(text) {
   banner.append(line)
   problems.push({ kind: "warning", title: text, detail: "" })
   if (state !== "Loading") setState(state)
+  return line
 }
 
 /** @param {unknown} error */
@@ -117,7 +119,7 @@ async function load(url) {
   }
 }
 
-/** Two animation frames: long enough for React to commit its first render. */
+/** Allow committed layout and immediate effects to settle before reporting it. */
 function afterPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 }
@@ -177,15 +179,47 @@ async function run() {
       fail(`${config.partFile} threw while rendering`, error, info?.componentStack?.trim())
     },
   })
-  root.render(react.createElement(component))
-
-  await afterPaint()
-  if (state !== "Loading") return
-  if (container.childNodes.length === 0) {
-    warn(`${config.partFile} rendered nothing: its component returned null or an empty tree.`)
-    return setState("Empty")
+  // A layout effect runs only after this tree commits. An unresolved suspended
+  // root stays pending for the existing watchdog instead of becoming Empty.
+  function CommittedPart() {
+    react.useLayoutEffect(() => {
+      let active = true
+      let scheduled = false
+      /** @type {HTMLElement | undefined} */
+      let emptyWarning
+      const emptyTitle = `${config.partFile} rendered nothing: its component returned null or an empty tree.`
+      const report = async () => {
+        if (scheduled) return
+        scheduled = true
+        await afterPaint()
+        scheduled = false
+        if (!active || state === "Failed" || document.documentElement.dataset.caliperState === "Failed") return
+        if (container.childNodes.length === 0) {
+          emptyWarning ??= warn(emptyTitle)
+          setState("Empty")
+        } else {
+          if (emptyWarning) {
+            const banner = emptyWarning.parentElement
+            emptyWarning.remove()
+            emptyWarning = undefined
+            if (banner?.childNodes.length === 0) banner.remove()
+            const index = problems.findIndex(problem => problem.kind === "warning" && problem.title === emptyTitle)
+            if (index !== -1) problems.splice(index, 1)
+          }
+          setState("Rendered")
+        }
+      }
+      // A committed null state can later receive content from its own effects or
+      // actions. Keep its verdict current without removing unrelated warnings.
+      const observer = new MutationObserver(() => { void report() })
+      observer.observe(container, { childList: true, subtree: true })
+      void report()
+      return () => { active = false; observer.disconnect() }
+    }, [])
+    return react.createElement(component)
   }
-  setState("Rendered")
+  root.render(react.createElement(CommittedPart))
 }
 
+setState("Loading")
 run().catch(error => fail("Caliper's frame failed", error))
