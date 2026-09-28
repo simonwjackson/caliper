@@ -180,12 +180,22 @@ export type AgentOptions = {
   /**
    * Agent Skills (SKILL.md folders, https://agentskills.io) for the agent.
    * Caliper always looks in `.agents/skills/` of the project and its parent
-   * folders up to the Git root, then in `~/.agents/skills/`. List more
-   * folders here: a folder of skills or one skill's folder, relative to the
-   * project root or starting with `~/`, for example `["~/.pi/agent/skills"]`.
-   * `false` turns skills off.
+   * folders up to the Git root, then in `~/.agents/skills/`. A list adds
+   * folders: a folder of skills or one skill's folder, relative to the
+   * project root or starting with `~/`. The object form also chooses skills
+   * by name. `false` turns skills off.
    */
-  readonly skills?: false | readonly string[]
+  readonly skills?: false | readonly string[] | SkillOptions
+}
+
+/** Which skills the agent gets. */
+export type SkillOptions = {
+  /** More folders to look in, as in the list form of `skills`. */
+  readonly folders?: readonly string[]
+  /** Only these skills, by name. Default: every skill found. */
+  readonly include?: readonly string[]
+  /** Never these skills, by name. */
+  readonly exclude?: readonly string[]
 }
 
 /** One skill the agent can load. */

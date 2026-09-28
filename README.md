@@ -269,24 +269,35 @@ name wins:
 
 1. `.agents/skills/` in the project root, then in each parent folder up to the
    Git root, so a monorepo can share skills.
-2. Each folder in `agent.skills`, in order.
+2. Each folder that `agent.skills` adds, in order.
 3. `~/.agents/skills/`.
+
+A home folder often holds skills for coding work that do not help a take. Choose
+the skills by name:
 
 ```ts
 caliper({
   agent: {
     model: "claude-opus-5-5",
-    // A folder of skills, or one skill's folder. Relative to the project root, or under ~/.
-    skills: ["~/.pi/agent/skills/intrinsic-design"],
+    skills: {
+      include: ["intrinsic-design", "frontend-design"], // only these; default: all found
+      exclude: [],                                       // never these
+      folders: ["./design/skills"],                      // more folders: of skills, or one skill's
+    },
   },
 })
 ```
 
-`skills: false` turns skills off. Caliper does not read `~/.pi/agent/skills/`
-or `.claude/skills/` unless you list them: those folders belong to other
-clients, and hold skills that expect a shell, which the take agent does not
-have. A skill in a folder under your home folder also exists only on your
-machine, so a teammate's takes do not get it.
+`skills: ["./design/skills"]` is short for `{ folders: [...] }`, and
+`skills: false` turns skills off. A name in `include` or `exclude` that matches
+no skill shows as a problem, since it is usually a typo. A filtered skill is
+gone: the agent does not see it, and `/name` cannot load it. Folders are
+relative to the project root, or start with `~/`.
+
+Caliper does not read `~/.pi/agent/skills/` or `.claude/skills/` unless you add
+them: those folders belong to other clients, and hold skills that expect a
+shell, which the take agent does not have. A skill under your home folder also
+exists only on your machine, so a teammate's takes do not get it.
 
 The agent sees only each skill's name and description, about 100 tokens per
 skill. When your request matches a description, it calls `activate_skill` to
@@ -302,7 +313,7 @@ a missing folder, a skill with no description (skipped), a name that differs
 from its folder, or a skill hidden by another with the same name.
 
 Costs: every take pays for the list of names and descriptions, even when it
-loads no skill. The agent decides from the description alone, so it can skip a
+loads no skill; `include` keeps that list short. The agent decides from the description alone, so it can skip a
 skill that applies. Name the skill with `/name` when it must apply. A project's
 skills are as trusted as its `vite.config`, which Vite already runs.
 

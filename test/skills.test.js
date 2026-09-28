@@ -75,8 +75,32 @@ describe("finding skills", () => {
   test("reports a missing configured folder and a bad option, and false turns skills off", async () => {
     await inTree({ "home/.agents/skills/review/SKILL.md": skill("review", "User review rules.") }, ({ home, root }) => {
       expect(discoverSkills({ root, home, option: ["./nowhere"] }).problems).toEqual(["Skill folder nowhere does not exist."])
-      expect(discoverSkills({ root, home, option: "~/.pi" }).problems[0]).toContain("agent.skills must be false or a list")
+      expect(discoverSkills({ root, home, option: "~/.pi" }).problems[0]).toContain("agent.skills must be false, a list of folders")
+      expect(discoverSkills({ root, home, option: { only: ["review"] } }).problems[0]).toContain("{ folders, include, exclude }")
+      expect(discoverSkills({ root, home, option: { include: "review" } }).problems[0]).toContain("{ folders, include, exclude }")
       expect(discoverSkills({ root, home, option: false })).toEqual({ skills: [], problems: [] })
+    })
+  })
+
+  test("include keeps only the named skills, exclude drops them, and an unknown name is reported", async () => {
+    await inTree({
+      "repo/apps/web/.agents/skills/layout/SKILL.md": skill("layout", "Project layout rules."),
+      "home/extra/copy/SKILL.md": skill("copy", "Writing rules."),
+      "home/.agents/skills/tdd/SKILL.md": skill("tdd", "Test first."),
+      "home/.agents/skills/intrinsic-design/SKILL.md": skill("intrinsic-design", "Layout from container size."),
+    }, ({ home, root }) => {
+      /** @param {unknown} option */
+      const names = option => discoverSkills({ root, home, option }).skills.map(found => found.name)
+      expect(names(undefined)).toEqual(["layout", "intrinsic-design", "tdd"])
+      expect(names({ folders: ["~/extra"] })).toEqual(["layout", "copy", "intrinsic-design", "tdd"])
+      expect(names({ include: ["intrinsic-design", "layout"] })).toEqual(["layout", "intrinsic-design"])
+      expect(names({ exclude: ["tdd"] })).toEqual(["layout", "intrinsic-design"])
+      expect(names({ include: ["layout", "tdd"], exclude: ["tdd"] })).toEqual(["layout"])
+      const typo = discoverSkills({ root, home, option: { include: ["intrinsic"], exclude: ["tdd"] } })
+      expect(typo.skills).toEqual([])
+      expect(typo.problems).toEqual(['agent.skills.include names "intrinsic", which Caliper did not find.'])
+      // A filtered skill cannot be named with /name either.
+      expect(skillSession(discoverSkills({ root, home, option: { exclude: ["tdd"] } })).mentioned("/tdd")).toEqual([])
     })
   })
 

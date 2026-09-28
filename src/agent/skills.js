@@ -39,17 +39,19 @@ const DESCRIPTION_LIMIT = 1024
  * throws. Problems are for the user, not the model.
  *
  * @param {{ root: string, home: string, option: unknown }} input
- *   `option` is `agent.skills` from vite.config: undefined, false, or folders.
+ *   `option` is `agent.skills` from vite.config: undefined, false, a list of
+ *   folders, or `{ folders, include, exclude }`.
  * @returns {SkillCatalog}
  */
 export function discoverSkills({ root, home, option }) {
   if (option === false) return { skills: [], problems: [] }
   /** @type {string[]} */
   const problems = []
+  const settings = skillSettings(option, problems)
   /** @type {Array<{ dir: string, scope: SkillSummary["scope"], required: boolean }>} */
   const sources = [
     ...projectFolders(root).map(dir => ({ dir: join(dir, SKILLS_DIR), scope: /** @type {const} */ ("project"), required: false })),
-    ...configured(option, root, home, problems).map(dir => ({ dir, scope: /** @type {const} */ ("configured"), required: true })),
+    ...configured(settings.folders, root, home).map(dir => ({ dir, scope: /** @type {const} */ ("configured"), required: true })),
     { dir: join(home, SKILLS_DIR), scope: "user", required: false },
   ]
   /** @type {Map<string, Skill>} */
@@ -74,7 +76,54 @@ export function discoverSkills({ root, home, option }) {
       found.set(skill.name, skill)
     }
   }
-  return { skills: [...found.values()], problems }
+  return { skills: filtered([...found.values()], settings, problems), problems }
+}
+
+/**
+ * `agent.skills` in one shape. A list is shorthand for `{ folders }`.
+ *
+ * @param {unknown} option
+ * @param {string[]} problems
+ * @returns {{ folders: string[], include?: string[], exclude: string[] }}
+ */
+function skillSettings(option, problems) {
+  const none = { folders: [], exclude: [] }
+  if (option === undefined) return none
+  /** @param {unknown} value */
+  const names = value => Array.isArray(value) && value.every(entry => typeof entry === "string" && entry.trim() !== "")
+  if (names(option)) return { folders: /** @type {string[]} */ (option), exclude: [] }
+  const input = /** @type {Record<string, unknown>} */ (option)
+  const keys = input !== null && typeof input === "object" && !Array.isArray(input) ? Object.keys(input) : null
+  if (keys === null || keys.some(key => !["folders", "include", "exclude"].includes(key))
+    || [input.folders, input.include, input.exclude].some(value => value !== undefined && !names(value))) {
+    problems.push('agent.skills must be false, a list of folders, or { folders, include, exclude } with lists of text, for example { include: ["intrinsic-design"] }.')
+    return none
+  }
+  return {
+    folders: /** @type {string[] | undefined} */ (input.folders) ?? [],
+    ...(input.include === undefined ? {} : { include: /** @type {string[]} */ (input.include) }),
+    exclude: /** @type {string[] | undefined} */ (input.exclude) ?? [],
+  }
+}
+
+/**
+ * Keep the skills `include` names, or all when it is not set, then drop the
+ * ones `exclude` names. A filtered skill is gone entirely, as the spec's client
+ * guide advises, so the model never tries to load it. A name that matches no
+ * skill is reported, since it is usually a typo.
+ *
+ * @param {Skill[]} skills
+ * @param {{ include?: string[], exclude: string[] }} settings
+ * @param {string[]} problems
+ */
+function filtered(skills, { include, exclude }, problems) {
+  const known = new Set(skills.map(skill => skill.name))
+  for (const [key, list] of /** @type {const} */ ([["include", include ?? []], ["exclude", exclude]])) {
+    for (const name of list) if (!known.has(name.trim())) problems.push(`agent.skills.${key} names "${name}", which Caliper did not find.`)
+  }
+  const kept = include === undefined ? null : new Set(include.map(name => name.trim()))
+  const dropped = new Set(exclude.map(name => name.trim()))
+  return skills.filter(skill => (kept === null || kept.has(skill.name)) && !dropped.has(skill.name))
 }
 
 /** The catalog as the chrome shows it: no absolute paths beyond `location`. @param {SkillCatalog} catalog @returns {SkillsStatus} */
@@ -221,19 +270,15 @@ function projectFolders(root) {
 }
 
 /**
- * @param {unknown} option
+ * Absolute folders: `~/` is the home folder, a relative path starts at the project root.
+ *
+ * @param {readonly string[]} folders
  * @param {string} root
  * @param {string} home
- * @param {string[]} problems
  * @returns {string[]}
  */
-function configured(option, root, home, problems) {
-  if (option === undefined) return []
-  if (!Array.isArray(option) || option.some(entry => typeof entry !== "string" || entry.trim() === "")) {
-    problems.push("agent.skills must be false or a list of folders, for example [\"~/.pi/agent/skills\"].")
-    return []
-  }
-  return option.map(entry => {
+function configured(folders, root, home) {
+  return folders.map(entry => {
     const trimmed = entry.trim()
     if (trimmed === "~") return home
     if (trimmed.startsWith("~/")) return join(home, trimmed.slice(2))
