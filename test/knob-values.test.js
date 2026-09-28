@@ -1,6 +1,9 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
-import { controlFor, formatNumber, labelFor, mergeHints, namespaceOf, parseSyntax, replaceThreshold, scrub, sentinelFor, thresholdsOf } from "../src/client/knob-values.js"
+import {
+  controlFor, declarationsIn, formatNumber, labelFor, mergeHints, namespaceOf, parseSyntax, readersOf, replaceThreshold, scrub, sentinelFor,
+  referenceGraph, syntaxOfValue, thresholdsOf,
+} from "../src/client/knob-values.js"
 
 describe("the control a registered property gets", () => {
   test("a length or a number scrubs, with a step from its written precision and no range", () => {
@@ -122,5 +125,36 @@ describe("container thresholds", () => {
     const condition = "pico-stage (width < 45em) and (height >= 40em)"
     expect(replaceThreshold(condition, 1, "36.5em")).toBe("pico-stage (width < 45em) and (height >= 36.5em)")
     expect(replaceThreshold(condition, 0, "100em")).toBe("pico-stage (width < 100em) and (height >= 40em)")
+  })
+})
+
+describe("plain custom properties", () => {
+  test("a declaration block splits into its declarations, leaving semicolons in strings and functions alone", () => {
+    expect(declarationsIn('--a: 4px; content: "x; y"; background: url(data:a;b) !important; --b:var(--a)'))
+      .toEqual([["--a", "4px"], ["content", '"x; y"'], ["background", "url(data:a;b)"], ["--b", "var(--a)"]])
+    expect(declarationsIn("")).toEqual([])
+  })
+
+  test("the readers of a property are the standard longhands that name it, through other custom properties", () => {
+    const graph = referenceGraph([
+      "--ink: var(--p8-white); color: var(--ink)",
+      "padding: var(--gap) var(--pad); --shadow: 0 0 var(--glow) var(--ink)",
+      "--loop: var(--loop-b); --loop-b: var(--loop)",
+    ])
+    const longhands = (/** @type {string} */ name) => name === "padding" ? ["padding-top", "padding-right", "padding-bottom", "padding-left"] : [name]
+    expect(readersOf(graph, "--p8-white", longhands)).toEqual(["color"])
+    expect(readersOf(graph, "--gap", longhands)).toEqual(["padding-top", "padding-right", "padding-bottom", "padding-left"])
+    // --shadow names --glow, but nothing reads --shadow.
+    expect(readersOf(graph, "--glow", longhands)).toEqual([])
+    expect(readersOf(graph, "--loop", longhands)).toEqual([])
+  })
+
+  test("the control's syntax comes from the value, since nothing registers it", () => {
+    expect(syntaxOfValue("#ff77a8", true)).toBe("<color>")
+    expect(syntaxOfValue("12px", false)).toBe("<length>")
+    expect(syntaxOfValue("1.5", false)).toBe("<number>")
+    expect(syntaxOfValue("40%", false)).toBe("<percentage>")
+    expect(syntaxOfValue("bold", false)).toBe("*")
+    expect(controlFor({ syntax: syntaxOfValue("12px", false), value: "12px", hints: {} })).toEqual({ _tag: "Number", number: 12, unit: "px", step: 1 })
   })
 })

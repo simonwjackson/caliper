@@ -1,11 +1,12 @@
 // @ts-check
 import { h } from "./dom.js"
 import {
-  animatedProperties, applyLive, containersOf, declarationsOf, initialComputed, knockout, observeSheets, projectSheets,
-  registrations, sample, summarize,
+  animatedProperties, applyLive, containersOf, declarationsOf, initialComputed, isRead, knockout, longhandsIn, observeSheets,
+  plainProperties, projectSheets, readTargets, referenceBlocks, registrations, sample, summarize,
 } from "./knob-cssom.js"
 import {
-  clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, replaceThreshold, scrub, sentinelFor, thresholdsOf,
+  clampTo, controlFor, formatNumber, labelFor, mergeHints, parseNumber, readersOf, referenceGraph, replaceThreshold, scrub,
+  sentinelFor, syntaxOfValue, thresholdsOf,
 } from "./knob-values.js"
 
 /**
@@ -26,9 +27,11 @@ import {
  * @typedef {{ take: string | null, label: string }} Variant
  * @typedef {{ iframe: HTMLIFrameElement, document: Document, window: Window }} Frame
  * @typedef {{ _tag: "Property", registration: Registration }
+ *   | { _tag: "Plain" }
  *   | { _tag: "Threshold", index: number, condition: string }} Origin
- *   What a knob edits: a registered property's declaration, or one length in
- *   a `@container` condition, which is `condition` as the file writes it.
+ *   What a knob edits: a registered property's declaration, the declaration
+ *   of a plain custom property the part reads, or one length in a
+ *   `@container` condition, which is `condition` as the file writes it.
  * @typedef {{
  *   key: string, name: string, origin: Origin, site: Site, source: Located,
  *   control: Exclude<Control, { _tag: "Skip" }>, label: string, where: string, note: string,
@@ -199,9 +202,9 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
           knobs.length === 0
             ? h("div", { class: "cal-knobs-note" },
               h("p", {}, skipped.length === 0
-                ? "Caliper found no design inputs in this part's CSS. Register one with @property to get a knob:"
-                : "No registered property here is a knob. The list below says why."),
-              skipped.length === 0 ? h("pre", {}, '@property --gap {\n  syntax: "<length>";\n  inherits: true;\n  initial-value: 8px;\n}') : null)
+                ? "Caliper found no design inputs in this part's CSS. A custom property that the part reads is a knob:"
+                : "No design input here is a knob. The list below says why."),
+              skipped.length === 0 ? h("pre", {}, ".card {\n  --gap: 8px;\n  padding: var(--gap);\n}") : null)
             : h("ul", { class: "cal-knob-list" }, ...knobs.map(knobRow)),
           ...(skipped.length === 0 ? [] : [h("details", { class: "cal-knobs-skipped" },
             h("summary", {}, `${skipped.length} not ${skipped.length === 1 ? "a knob" : "knobs"}`),
@@ -417,7 +420,9 @@ export function createKnobsPanel(container, { frames, variant, openFile }) {
       case "Token": {
         const tokens = tokensOf(knob, control.token, control.namespace)
         const chosen = /^var\(\s*(--[\w-]+)\s*\)$/.exec(value)?.[1] ?? control.token
-        const isColor = knob.origin._tag === "Property" && /color/.test(knob.origin.registration.syntax)
+        const isColor = knob.origin._tag === "Property"
+          ? /color/.test(knob.origin.registration.syntax)
+          : CSS.supports("color", tokens.find(token => token.name === chosen)?.value ?? "")
         const expanded = palettes.has(knob.key)
         const toggle = h("button", {
           id,
@@ -610,6 +615,30 @@ async function discover(list, target) {
     }
   }
 
+  // Plain custom properties the part reads: a sentinel in the declaration
+  // changes a longhand that names the property, on any element of the part.
+  /** @type {Map<string, { site: Site, value: string, document: Document }>} */
+  const plain = new Map()
+  for (const { document, window } of list) {
+    const graph = referenceGraph(referenceBlocks(document))
+    const longhands = longhandsIn(document)
+    const targets = readTargets(document)
+    const host = document.getElementById("caliper-host")
+    for (const name of plainProperties(document, registered)) {
+      const readers = readersOf(graph, name, longhands)
+      if (readers.length === 0) continue
+      for (const candidate of declarationsOf(document, name)) {
+        const site = { sheetId: candidate.sheetId, path: candidate.path, property: name, name, selector: candidate.selector }
+        if (plain.has(siteKey(site))) continue
+        // A reference names no type, so its type comes from the value the part sees.
+        const text = /\bvar\(/.test(candidate.value) && host ? window.getComputedStyle(host).getPropertyValue(name).trim() : candidate.value
+        const typed = sentinelFor(syntaxOfValue(text, CSS.supports("color", text)), text)
+        const sentinels = [...(typed === null || typed === "caliper-knockout" ? [] : [typed]), "caliper-knockout"]
+        if (isRead(window, targets, candidate, name, readers, sentinels)) plain.set(siteKey(site), { site, value: candidate.value, document })
+      }
+    }
+  }
+
   // The @container rules whose thresholds reach the part.
   /** @type {Map<string, { site: Site, document: Document }>} */
   const containers = new Map()
@@ -622,7 +651,7 @@ async function discover(list, target) {
 
   // Locate every site, and each registered property's @property rule for its hints.
   /** @type {Map<string, { site: Site, document: Document }>} */
-  const asks = new Map(containers)
+  const asks = new Map([...containers, ...plain])
   for (const { site, document } of sites.values()) {
     asks.set(siteKey(site), { site, document })
     const registration = registered.get(site.name)
@@ -666,6 +695,39 @@ async function discover(list, target) {
       note: fromProperty?.note ?? "",
       problems: [...new Set([...(fromProperty?.problems ?? []), ...(site.property === "initial-value" ? [] : source.problems)])],
       elements,
+      document,
+    })
+  }
+  for (const [key, { site, value, document }] of plain) {
+    const where = site.selector
+    const source = located.get(key)
+    if (source === undefined || source._tag === "Refused") {
+      skipped.push({ name: site.name, where, reason: source?.reason ?? "Caliper did not get an answer for it." })
+      continue
+    }
+    const hints = mergeHints(configured[site.name], source.hints)
+    const syntax = syntaxOfValue(source.value, !/\bvar\(/.test(source.value) && CSS.supports("color", source.value))
+    const control = controlFor({ syntax, value: source.value, hints })
+    if (control._tag === "Skip") {
+      skipped.push({ name: site.name, where, reason: syntax === "*" && control.reason.startsWith("Caliper has no control") ? `Caliper has no control for a value like ${source.value}.` : control.reason })
+      continue
+    }
+    if (source.value.replace(/\s+/g, " ") !== value.replace(/\s+/g, " ")) {
+      skipped.push({ name: site.name, where, reason: "The frame's CSS and the file disagree. Caliper waits for the frame to reload." })
+      continue
+    }
+    knobs.push({
+      key,
+      name: site.name,
+      origin: { _tag: "Plain" },
+      site,
+      source,
+      control,
+      label: hints.label ?? labelFor(site.name),
+      where: `in ${where}`,
+      note: source.note,
+      problems: [...source.problems],
+      elements: [],
       document,
     })
   }

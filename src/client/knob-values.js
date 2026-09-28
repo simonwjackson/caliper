@@ -239,6 +239,104 @@ export function replaceThreshold(condition, index, value) {
 }
 
 /**
+ * The declarations of a block's text, as `[property, value]`, without
+ * `!important`. A semicolon inside a string or a function does not split.
+ *
+ * @param {string} text
+ * @returns {Array<[string, string]>}
+ */
+export function declarationsIn(text) {
+  /** @type {Array<[string, string]>} */
+  const found = []
+  let depth = 0
+  /** @type {string | null} */
+  let quote = null
+  let start = 0
+  const push = (/** @type {number} */ end) => {
+    const chunk = text.slice(start, end)
+    const colon = chunk.indexOf(":")
+    if (colon > 0) found.push([chunk.slice(0, colon).trim(), chunk.slice(colon + 1).replace(/!\s*important\s*$/i, "").trim()])
+  }
+  for (let index = 0; index < text.length; index++) {
+    const char = text.charAt(index)
+    if (quote !== null) {
+      if (char === "\\") index++
+      else if (char === quote) quote = null
+    } else if (char === '"' || char === "'") quote = char
+    else if (char === "(") depth++
+    else if (char === ")") depth--
+    else if (char === ";" && depth === 0) {
+      push(index)
+      start = index + 1
+    }
+  }
+  push(text.length)
+  return found
+}
+
+/**
+ * Which properties name each custom property in a `var()`, from declaration
+ * blocks: style rules, `@keyframes` frames and inline styles.
+ *
+ * @param {Iterable<string>} blocks
+ * @returns {Map<string, Set<string>>}
+ */
+export function referenceGraph(blocks) {
+  /** @type {Map<string, Set<string>>} */
+  const graph = new Map()
+  for (const block of blocks) {
+    for (const [property, value] of declarationsIn(block)) {
+      for (const match of value.matchAll(/var\(\s*(--[\w-]+)/g)) {
+        const name = /** @type {string} */ (match[1])
+        const readers = graph.get(name) ?? new Set()
+        readers.add(property)
+        graph.set(name, readers)
+      }
+    }
+  }
+  return graph
+}
+
+/**
+ * The standard longhands that read a custom property: those that name it in
+ * a `var()`, directly or through other custom properties.
+ *
+ * @param {Map<string, Set<string>>} graph from `referenceGraph`
+ * @param {string} name
+ * @param {(property: string) => string[]} longhands a shorthand's longhands
+ * @returns {string[]}
+ */
+export function readersOf(graph, name, longhands) {
+  const seen = new Set([name])
+  const queue = [name]
+  /** @type {Set<string>} */
+  const found = new Set()
+  while (queue.length > 0) {
+    const next = /** @type {string} */ (queue.shift())
+    for (const property of graph.get(next) ?? []) {
+      if (!property.startsWith("--")) for (const longhand of longhands(property)) found.add(longhand)
+      else if (!seen.has(property)) {
+        seen.add(property)
+        queue.push(property)
+      }
+    }
+  }
+  return [...found]
+}
+
+/**
+ * The syntax a plain custom property's control uses, read from its value.
+ *
+ * @param {string} value
+ * @param {boolean} isColor whether the browser reads the value as a colour
+ */
+export function syntaxOfValue(value, isColor) {
+  const number = parseNumber(value)
+  if (number !== null) return number.unit === "" ? "<number>" : number.unit === "%" ? "<percentage>" : "<length>"
+  return isColor ? "<color>" : "*"
+}
+
+/**
  * @param {...(KnobHints | undefined)} layers lowest first
  * @returns {KnobHints}
  */

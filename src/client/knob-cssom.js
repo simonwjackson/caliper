@@ -225,6 +225,118 @@ export function knockout(window, elements, property, candidates, sentinel) {
 }
 
 /**
+ * The custom properties that style rules declare and no `@property`
+ * registers.
+ *
+ * @param {Document} document
+ * @param {{ has: (name: string) => boolean }} registered
+ * @returns {Set<string>}
+ */
+export function plainProperties(document, registered) {
+  /** @type {Set<string>} */
+  const found = new Set()
+  for (const { sheet } of projectSheets(document)) {
+    for (const { rule } of walk(sheet.cssRules)) {
+      if (kindOf(rule) !== "style") continue
+      for (const name of /** @type {CSSStyleRule} */ (rule).style) if (name.startsWith("--") && !registered.has(name)) found.add(name)
+    }
+  }
+  return found
+}
+
+/**
+ * Every declaration block that can name a custom property in a `var()`:
+ * style rules, `@keyframes` frames, and the inline styles of the part.
+ *
+ * @param {Document} document
+ * @returns {string[]}
+ */
+export function referenceBlocks(document) {
+  /** @type {string[]} */
+  const blocks = []
+  for (const { sheet } of projectSheets(document)) {
+    for (const { rule } of walk(sheet.cssRules)) {
+      const kind = kindOf(rule)
+      if (kind === "style") blocks.push(/** @type {CSSStyleRule} */ (rule).style.cssText)
+      if (kind === "keyframes") for (const frame of /** @type {CSSKeyframesRule} */ (rule).cssRules) blocks.push(/** @type {CSSKeyframeRule} */ (frame).style.cssText)
+    }
+  }
+  for (const element of document.querySelectorAll("#caliper-host [style], #caliper-host")) {
+    const inline = element.getAttribute("style")
+    if (inline) blocks.push(inline)
+  }
+  return blocks
+}
+
+/**
+ * A shorthand's longhands, as the frame's browser expands them: a property
+ * that is not a shorthand is its own.
+ *
+ * @param {Document} document
+ * @returns {(property: string) => string[]}
+ */
+export function longhandsIn(document) {
+  /** @type {Map<string, string[]>} */
+  const cache = new Map()
+  return property => {
+    const known = cache.get(property)
+    if (known) return known
+    const probe = document.createElement("div")
+    probe.style.setProperty(property, "inherit")
+    const list = probe.style.length > 0 ? [...probe.style] : [property]
+    cache.set(property, list)
+    return list
+  }
+}
+
+/**
+ * Every element of the part, the host included, and each `::before` and
+ * `::after` of theirs that renders. A plain property can be read on any of
+ * them, so a sample is not enough.
+ *
+ * @param {Document} document
+ * @returns {Array<{ element: Element, pseudo: string | null }>}
+ */
+export function readTargets(document) {
+  const view = document.defaultView
+  const host = document.getElementById("caliper-host")
+  if (host === null || view === null) return []
+  return [host, ...host.querySelectorAll("*")].flatMap(element => [null, "::before", "::after"]
+    .filter(pseudo => pseudo === null || !/^(none|normal)$/.test(view.getComputedStyle(element, pseudo).content))
+    .map(pseudo => ({ element, pseudo })))
+}
+
+/**
+ * Whether the part reads a declaration: a sentinel in it changes one of the
+ * longhands that name the property, on any target. Each sentinel is tried.
+ *
+ * @param {Window} window
+ * @param {Array<{ element: Element, pseudo: string | null }>} targets
+ * @param {Candidate} candidate
+ * @param {string} property
+ * @param {string[]} readers standard longhands
+ * @param {string[]} sentinels
+ */
+export function isRead(window, targets, candidate, property, readers, sentinels) {
+  if (readers.length === 0) return false
+  const read = () => targets.map(({ element, pseudo }) => {
+    const style = window.getComputedStyle(element, pseudo)
+    return readers.map(name => style.getPropertyValue(name)).join("\u0000")
+  })
+  const style = candidate.rule.style
+  const value = style.getPropertyValue(property)
+  const priority = style.getPropertyPriority(property)
+  const before = read()
+  for (const sentinel of sentinels) {
+    style.setProperty(property, sentinel, priority)
+    const after = read()
+    style.setProperty(property, value, priority)
+    if (after.some((text, index) => text !== before[index])) return true
+  }
+  return false
+}
+
+/**
  * The registered initial value of `property`, as the browser computes it.
  *
  * @param {Document} document

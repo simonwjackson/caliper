@@ -80,6 +80,17 @@ try {
    */
   const shown = (origin, name) => page.evaluate(([origin, name]) => [...document.querySelectorAll("iframe.cal-frame[src]")].map(iframe => {
     const frame = /** @type {HTMLIFrameElement} */ (iframe)
+    if (origin === "Plain") {
+      // A plain property need not reach the part's first element: read its declarations.
+      return [...(frame.contentDocument?.styleSheets ?? [])].flatMap(sheet => {
+        /** @param {CSSRuleList} list @returns {string[]} */
+        const values = list => [...list].flatMap(rule => [
+          ...("style" in rule && rule.constructor.name === "CSSStyleRule" ? [/** @type {CSSStyleRule} */ (rule).style.getPropertyValue(name)] : []),
+          ...("cssRules" in rule && rule.constructor.name !== "CSSKeyframesRule" ? values(/** @type {CSSGroupingRule} */ (rule).cssRules) : []),
+        ]).filter(Boolean)
+        return values(sheet.cssRules)
+      }).join(" | ")
+    }
     if (origin === "Threshold") {
       return [...(frame.contentDocument?.styleSheets ?? [])].flatMap(sheet => [...sheet.cssRules].flatMap(rule => ("conditionText" in rule && rule.constructor.name === "CSSContainerRule" ? [String(rule.conditionText)] : []))).join(" | ")
     }
@@ -87,10 +98,10 @@ try {
     return element ? frame.contentWindow?.getComputedStyle(element).getPropertyValue(name) : null
   }), [origin, name])
 
-  for (const origin of ["Property", "Threshold"]) {
+  for (const origin of ["Property", "Plain", "Threshold"]) {
     const row = page.locator(`.cal-knob[data-control='Number'][data-origin='${origin}']`).first()
     if ((await row.count()) === 0) {
-      console.log(`\nNo ${origin === "Property" ? "property" : "threshold"} knob to drag.`)
+      console.log(`\nNo ${origin.toLowerCase()} number knob to drag.`)
       continue
     }
     writes.length = 0
@@ -98,6 +109,7 @@ try {
     const file = await row.locator(".cal-knob-file").textContent()
     const before = await shown(origin, site)
     const label = row.locator(".cal-knob-label")
+    await label.scrollIntoViewIfNeeded()
     const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await label.boundingBox())
     const y = box.y + box.height / 2
     await page.mouse.move(box.x + 5, y)
@@ -110,7 +122,7 @@ try {
     assert.equal(writes.length, 0, "no write during the drag")
     await page.mouse.up()
     await page.waitForTimeout(1500)
-    console.log(origin === "Property"
+    console.log(origin !== "Threshold"
       ? `\nDragged ${site} (${file}): ${before.join(", ")} -> ${during.join(", ")} in ${during.length} frames; ${writes.length} write on release.`
       : `\nDragged a threshold (${file}) in ${during.length} frames; ${writes.length} write on release.\n  before: ${before[0]}\n  during: ${during[0]}`)
     assert(during.every((value, index) => value !== before[index]), "every frame changed during the drag")

@@ -100,6 +100,9 @@ const card = [
   "  height: 40px;",
   "  animation: cycle 1s paused;",
   "  opacity: var(--hidden);",
+  "  --pad: 6px;",
+  "  padding: var(--pad);",
+  "  --unused: 3px;",
   "}",
   "",
   ".stage {",
@@ -187,12 +190,13 @@ try {
   const cardBackground = async () => (await frame()).evaluate(() => getComputedStyle(/** @type {Element} */ (document.querySelector(".card"))).backgroundColor)
   await frame()
 
-  await step("the Knobs button opens the panel beside the stage, and finds the registered inputs", async () => {
+  await step("the Knobs button opens the panel beside the stage, and finds the design inputs the part uses", async () => {
     await page.getByRole("button", { name: "Knobs" }).click()
     await page.locator(".cal-knob").nth(2).waitFor()
     const labels = await page.locator(".cal-knob-label").allInnerTexts()
-    // In source order, by file. The threshold of a rule for no element on the stage is not a knob.
-    assert.deepEqual(labels, ["Narrow stage", "Pixel rows", "Bg", "Accent"])
+    // In source order, by file. The threshold of a rule for no element on the stage is not a knob,
+    // and neither are --unused and --p8-navy, which the part does not read.
+    assert.deepEqual(labels, ["Pad", "Narrow stage", "Black", "Pink", "Pixel rows", "Bg", "Accent"])
     const box = await page.locator(".cal-knobs").boundingBox()
     const stage = await page.locator(".cal-stage").boundingBox()
     assert(box && stage && box.x >= stage.x + stage.width - 1, "the panel sits right of the stage")
@@ -240,7 +244,7 @@ try {
   await step("a @container threshold previews live by replacing its rule, and writes the one length on release", async () => {
     const cardHeight = async () => (await frame()).evaluate(() => getComputedStyle(/** @type {Element} */ (document.querySelector(".card"))).height)
     const row = page.locator(".cal-knob", { hasText: "Narrow stage" })
-    assert.match(await row.locator(".cal-knob-site").innerText(), /@container stage \(width < 280px\) · card\.css:16/)
+    assert.match(await row.locator(".cal-knob-site").innerText(), /@container stage \(width < 280px\) · card\.css:19/)
     assert.equal(await row.locator(".cal-knob-number").inputValue(), "280")
     assert.equal(await row.locator(".cal-knob-unit").innerText(), "px")
     assert.equal(await cardHeight(), "40px", "the stage is wider than the threshold")
@@ -262,6 +266,31 @@ try {
       .filter(sheet => /** @type {Element | null} */ (sheet.ownerNode)?.getAttribute("data-vite-dev-id")?.endsWith("card.css"))
       .flatMap(sheet => [...sheet.cssRules].flatMap(rule => ("conditionText" in rule ? [String(rule.conditionText)] : []))))
     assert.deepEqual(conditions, ["stage (width < 310px)", "stage (width < 100px)"], "one rule per condition, in its place")
+  })
+
+  await step("a plain custom property the part reads is a knob, with the control its value asks for", async () => {
+    const cardPadding = async () => (await frame()).evaluate(() => getComputedStyle(/** @type {Element} */ (document.querySelector(".card"))).paddingTop)
+    const pad = page.locator(".cal-knob", { hasText: "Pad" })
+    assert.match(await pad.locator(".cal-knob-site").innerText(), /--pad in \.card · card\.css:8/)
+    assert.equal(await pad.locator(".cal-knob-unit").innerText(), "px")
+    const black = page.locator('.cal-knob[data-knob$="#--p8-black"]')
+    assert.equal(await black.getAttribute("data-control"), "Color")
+    assert.equal(await black.getAttribute("data-origin"), "Plain")
+    const label = pad.locator(".cal-knob-label")
+    const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await label.boundingBox())
+    const y = box.y + box.height / 2
+    const before = read("src/card.css")
+    await page.mouse.move(box.x + 10, y)
+    await page.mouse.down()
+    for (let dx = 4; dx <= 20; dx += 4) await page.mouse.move(box.x + 10 + dx, y)
+    await page.waitForTimeout(100)
+    assert.equal(await cardPadding(), "16px", "the frame shows the dragged value")
+    assert.equal(read("src/card.css"), before, "no write during the drag")
+    await page.mouse.up()
+    for (let attempt = 0; attempt < 50 && read("src/card.css") === before; attempt++) await page.waitForTimeout(100)
+    assert.equal(read("src/card.css"), before.replace("--pad: 6px;", "--pad: 16px;"), "only the one value changed")
+    await page.waitForTimeout(800)
+    assert.equal(await cardPadding(), "16px")
   })
 
   await step("the token picker offers the sibling tokens and writes a reference, never a raw colour", async () => {

@@ -413,8 +413,8 @@ frame shows the new value at once, and no file changes. When you let go,
 Caliper writes the value into that declaration, once, and Vite reloads the
 frames from the file.
 
-A knob is a custom property registered with `@property`, or a `@container`
-threshold:
+A knob is a custom property registered with `@property`, a plain custom
+property that the part reads, or a `@container` threshold:
 
 ```css
 /** How many virtual pixels the short side holds. @label Pixel rows @min 180 @max 720 @step 10 */
@@ -443,6 +443,26 @@ Some registered properties are not knobs. The panel lists each one under
 computed with a math function such as `calc()`, `max()` or `clamp()`, a value
 that combines tokens, a syntax with no control yet, and a declaration Caliper
 cannot place in its file.
+
+A plain custom property, one that no `@property` registers, is a knob when the
+part reads it:
+
+```css
+.card {
+  --pad: 6px;
+  padding: var(--pad);
+}
+```
+
+The part reads a declaration when a test value in it changes a property that
+names it in a `var()`, directly or through other custom properties, on an
+element of the part or its `::before` or `::after`. Caliper tests every
+element, not a sample. `@keyframes` and inline styles count as readers too. A
+plain property that the part does not read, such as an unused palette colour,
+does not show. Its control comes from its value: a length, a number or a
+percentage scrubs, a colour is a colour field, and `var()` of one token is the
+token picker. A value built with a math function is an output and shows under
+**not knobs**, as for a registered property.
 
 A `@container` threshold is a knob too. Each length in the condition of a
 `@container` rule that applies to the part is one knob:
@@ -487,8 +507,10 @@ Caliper turns on Vite's `css.devSourcemap`, because a knob maps a rule in the
 browser to its source file through it. Served CSS is larger in development.
 
 Costs and limits: the Knobs and Takes panels never show at the same time.
-Knobs for plain custom properties and for promoting a literal to a token are
-not built yet. The `knobs` option gives no hints to a `@container` threshold. Caliper refuses a knob in
+Promoting a literal to a token is not built yet. Finding which plain
+properties a part reads costs about 40 ms per frame, and up to about 700 ms on
+a page with 280 elements. A plain property is a knob only for the states on
+the stage: a value that only a hidden state reads does not show. The `knobs` option gives no hints to a `@container` threshold. Caliper refuses a knob in
 nested CSS, `@layer`, `@scope` and `@starting-style`, which are not tested.
 Tailwind, Sass and CSS modules are not tested. Only Chromium has run the
 panel. The code pane still saves over a change made elsewhere, so a pane save
