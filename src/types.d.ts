@@ -327,9 +327,48 @@ export type CodeChange = {
   readonly take: string | null
 }
 
+/**
+ * What standard CSS cannot say about a knob (decision 26). A doc comment
+ * directly above the declaration gives these, for example
+ * `/** @label Pixel rows @min 180 @max 720 @step 10 *\/` or `/** @knob ignore *\/`.
+ */
+export type KnobHints = {
+  readonly label?: string
+  readonly min?: number
+  readonly max?: number
+  /** More than 0. */
+  readonly step?: number
+  /** Not a knob, although Caliper would find it. */
+  readonly ignore?: boolean
+}
+
+/** Where the knobs API found a declaration a knob shows. Offsets are into the file as `version` names it. */
+export type KnobSource =
+  | {
+    readonly _tag: "Located"
+    /** Root-relative. */
+    readonly file: string
+    /** The value's start and end in the file, without the spaces around it. */
+    readonly start: number
+    readonly end: number
+    readonly value: string
+    readonly version: string
+    /** From the doc comment directly above the declaration, or above its `@property` rule. */
+    readonly hints: KnobHints
+    /** The comment's prose, without its hints. */
+    readonly note: string
+    readonly problems: readonly string[]
+  }
+  | { readonly _tag: "Refused", readonly reason: string }
+
 export type CaliperOptions = {
   /** The agent that makes takes. Leave it out to use Caliper as a viewer only. */
   readonly agent?: AgentOptions
+  /**
+   * Knob hints by custom property name, for CSS a project cannot annotate.
+   * A doc comment above the declaration wins over these.
+   */
+  readonly knobs?: Readonly<Record<string, KnobHints>>
   /** The module the app starts from, relative to the Vite root. Overrides the derived entry. */
   readonly entry?: string
   /**

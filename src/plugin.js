@@ -9,6 +9,7 @@ import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { createTakesApi } from "./agent/api.js"
 import { codeChange, createCodeApi } from "./code/api.js"
+import { createKnobsApi } from "./knobs/api.js"
 import { createChecksApi } from "./checks/api.js"
 import { createSourceRevision } from "./checks/source-revision.js"
 import { checkSource } from "./authored/source.js"
@@ -94,6 +95,9 @@ export function caliper(options = {}) {
           entries: parts,
           include: react,
         },
+        // A knob maps a rule the browser holds to its source file through
+        // the served CSS's sourcemap (decision 23). Served CSS gets larger.
+        css: { devSourcemap: true },
       }, checkDelivery.config())
     },
 
@@ -290,6 +294,8 @@ function createSession(server, root, options, env, overlay) {
     skills: () => discoverSkills({ root, home: homedir(), option: options.agent?.skills }),
   })
 
+  const knobs = createKnobsApi({ store, writeTake: takes.editByHand, options: options.knobs })
+
   const checks = createChecksApi({
     store,
     project: async () => (await load()).project,
@@ -319,6 +325,7 @@ function createSession(server, root, options, env, overlay) {
     const path = url.pathname.slice(CALIPER_PATH.length)
     if (await takes.handle(path, request, response)) return undefined
     if (await code.handle(path, url, request, response)) return undefined
+    if (await knobs.handle(path, request, response)) return undefined
     if (await checks.handle(path, url, request, response)) return undefined
     if (path.startsWith("/modules/")) {
       const gzip = /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))

@@ -298,7 +298,20 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     await Promise.all([agents.close(), Promise.allSettled([...rendering])])
   }
 
-  return { handle, snapshot, close }
+  /**
+   * Save a take's copy of a file as an edit by hand, as the code pane does. A
+   * knob in a take's frame writes here, so the agent's next prompt names it.
+   *
+   * @param {string} take
+   * @param {string} file
+   * @param {string} content
+   */
+  const editByHand = (take, file, content) => {
+    if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
+    agents.editByHand(take, file, content)
+  }
+
+  return { handle, snapshot, close, editByHand }
 }
 
 /**
