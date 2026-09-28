@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import { mkdirSync, symlinkSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { chromium } from "playwright-core"
+import { reveal } from "../scripts/reveal.mjs"
 import { manifest, withProject } from "./project-server.js"
 
 // Real browser + real React, without adding React to Caliper's dependencies.
@@ -121,15 +122,17 @@ browserTest("part navigation: layers, independent disclosure, all states, keyboa
       await page.waitForFunction(() => [...document.querySelectorAll(".cal-part")].findIndex(node => node.getAttribute("title") === "pages/Unknown.part.tsx") === 3)
       expect(await page.locator(".cal-group").allTextContents()).toEqual(["Pages", "Templates", "Organisms", "Molecules", "Atoms", "Unclassified"])
 
-      // Container-size ladder: disclosure and selection remain reachable; the
-      // list scrolls, and the preview keeps real device viewports at every size.
+      // Container-size ladder: disclosure and selection remain reachable, at
+      // most one tap away in the part drawer; the list scrolls, and the
+      // preview keeps real device viewports at every size.
       mkdirSync("/tmp/caliper-navigation", { recursive: true })
       for (const size of [{ width: 1600, height: 1000 }, { width: 900, height: 700 }, { width: 420, height: 900 }, { width: 1280, height: 300 }, { width: 320, height: 480 }]) {
         await page.setViewportSize(size)
-        await homeButton.scrollIntoViewIfNeeded()
+        await (await reveal(page, homeButton)).scrollIntoViewIfNeeded()
         await homeButton.click()
-        const toggle = page.getByRole("button", { name: "Collapse Home states", exact: true })
-        await toggle.scrollIntoViewIfNeeded()
+        // By CSS: a role query skips the toggle while the drawer is closed.
+        const toggle = page.locator('.cal-part-toggle[aria-label="Collapse Home states"]')
+        await (await reveal(page, toggle)).scrollIntoViewIfNeeded()
         const target = await toggle.boundingBox()
         expect(target).not.toBeNull()
         expect(target?.width).toBeGreaterThanOrEqual(44)
@@ -140,6 +143,7 @@ browserTest("part navigation: layers, independent disclosure, all states, keyboa
         expect(await homeStates.isVisible()).toBe(true)
         await homeStates.getByRole("button", { name: "Busy", exact: true }).click()
         expect(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("state")).toBe("Busy")
+        await reveal(page, homeButton)
         await homeButton.click()
         expect(await page.locator(".cal-cell").count()).toBe(3)
         const screens = await page.locator(".cal-cell .cal-screen").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width))

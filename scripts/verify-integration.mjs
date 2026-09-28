@@ -12,6 +12,7 @@ import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
+import { reveal } from "./reveal.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" }, component: { type: "boolean", default: false }, live: { type: "boolean", default: false }, out: { type: "string", default: "/tmp/caliper-integration-browser" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
@@ -135,7 +136,8 @@ try {
   for (const [name, width, height] of sizes) {
     await page.setViewportSize({ width, height })
     await page.waitForTimeout(150)
-    for (const control of [page.getByRole("button", { name: "Check original and alternate", exact: true }), page.locator(".cal-integration input"), apply]) {
+    for (const target of [page.locator(".cal-integration button", { hasText: "Check original and alternate" }), page.locator(".cal-integration input"), page.locator(".cal-integration button", { hasText: "Apply reviewed alternate" })]) {
+      const control = await reveal(page, target)
       await control.scrollIntoViewIfNeeded()
       const box = await control.boundingBox()
       assert(box && box.width > 0 && box.height > 0 && box.y >= 0 && box.y + box.height <= height, `review controls reachable at ${name}`)

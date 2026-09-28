@@ -19,6 +19,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { chromium } from "playwright-core"
+import { reveal } from "./reveal.mjs"
 
 const { values: args } = parseArgs({
   options: {
@@ -108,7 +109,7 @@ try {
         assert(frame && frame.width > 0 && frame.height > 0, `${label}: the device preview has not collapsed`)
       }
       for (const selector of open ? [".cal-takes-toggle", ".cal-prompt", ".cal-start"] : [".cal-takes-toggle"]) {
-        const control = page.locator(selector)
+        const control = await reveal(page, page.locator(selector))
         await control.scrollIntoViewIfNeeded()
         const box = await control.boundingBox()
         // Browser scrolling rounds fractional CSS pixels to a device pixel.

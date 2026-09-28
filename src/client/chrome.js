@@ -2,6 +2,7 @@
 import { createCodePane } from "./code-pane.js"
 import { CARD, DEFAULT_PX_PER_MM, DEVICES, frameGeometry, gridGeometry } from "./device-frame.js"
 import { h } from "./dom.js"
+import { fitBar, planLayout } from "./layout.js"
 import { createIntegrationPanel } from "./integration-review.js"
 import { contextsFor, sameState, stateExists, subjectsOf } from "./scenarios.js"
 
@@ -45,6 +46,8 @@ const takeName = take => take.name ?? take.direction?.title ?? `Take ${take.take
  *   one direction per take, and you edit them before the takes start.
  * @typedef {{ key: string, label: string, title: string, src: string, select: () => void, status?: string }} Cell
  *   One labelled frame in the grid.
+ * @typedef {"preview" | "code" | "takes"} View
+ *   With tabs, the one pane the work area shows.
  */
 
 const STORAGE_PX_PER_MM = "caliper:px-per-mm"
@@ -52,6 +55,11 @@ const STORAGE_DEVICE = "caliper:device"
 const STORAGE_TAKES_OPEN = "caliper:takes-open"
 const STORAGE_CODE_OPEN = "caliper:code-open"
 const STORAGE_CODE_SHARE = "caliper:code-share"
+const STORAGE_VIEW = "caliper:view"
+/** Bar groups move into the More menu in this order: the rarest action first. */
+const BAR_OVERFLOW = ["calibrate", "devices"]
+/** The narrowest the bar's title gets while it shares a row with the controls. */
+const BAR_TITLE_MIN = 160
 /** The share of the work area the code pane takes, beside or under the stage. */
 const DEFAULT_CODE_SHARE = 0.45
 const MIN_CODE_SHARE = 0.2
@@ -116,6 +124,17 @@ const state = {
   /** Whether the code pane is open. */
   codeOpen: localStorage.getItem(STORAGE_CODE_OPEN) === "true",
   codeShare: clampShare(Number(localStorage.getItem(STORAGE_CODE_SHARE)) || DEFAULT_CODE_SHARE),
+  /** Where the regions go; layout.js decides from the chrome's box. @type {import("./layout.js").LayoutPlan} */
+  layout: { nav: "docked", takes: "closed", code: "closed", tabs: false },
+  /** Whether the part list is open over the work area, when it is a drawer. */
+  navOpen: false,
+  /** With tabs, the pane that fills the work area. @type {View} */
+  view: viewFrom(localStorage.getItem(STORAGE_VIEW)),
+}
+
+/** @param {string | null} value @returns {View} */
+function viewFrom(value) {
+  return value === "code" || value === "takes" ? value : "preview"
 }
 
 /** @param {number} share */
@@ -146,7 +165,44 @@ function $(selector) {
 const app = $("#caliper")
 app.append(
   h("div", { class: "cal" },
-    h("aside", { class: "cal-side" },
+    // The bar spans the chrome, so its controls keep one row while the panes below it change.
+    h("header", { class: "cal-bar" },
+      h("button", {
+        class: "cal-nav-toggle",
+        type: "button",
+        "aria-controls": "cal-side",
+        "aria-expanded": "false",
+        onClick: () => setNavOpen(!state.navOpen),
+      }, h("span", { "aria-hidden": "true" }, "☰ "), "Parts"),
+      h("div", { class: "cal-title" },
+        h("strong", { class: "cal-part-name" }),
+        h("span", { class: "cal-part-file" })),
+      h("div", { class: "cal-controls" },
+        h("div", { class: "cal-devices", "data-group": "devices", role: "radiogroup", "aria-label": "Device" }),
+        h("button", { class: "cal-calibrate", "data-group": "calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate"),
+        h("div", { class: "cal-views", "data-group": "views", role: "group", "aria-label": "Panes" },
+          h("button", { class: "cal-preview-tab", type: "button", onClick: () => setView("preview") }, "Preview"),
+          h("button", { class: "cal-code-toggle", type: "button", "aria-controls": "cal-code", onClick: () => toggleCode() }, "Code"),
+          h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => toggleTakes() }, "Takes")),
+        h("button", {
+          class: "cal-more",
+          type: "button",
+          popovertarget: "cal-more-menu",
+          "aria-label": "More controls",
+          title: "More controls",
+        }, h("span", { "aria-hidden": "true" }, "⋯")))),
+    h("div", {
+      class: "cal-more-menu",
+      id: "cal-more-menu",
+      popover: "auto",
+      role: "dialog",
+      "aria-label": "More controls",
+      onBeforetoggle: event => {
+        if (/** @type {ToggleEvent} */ (event).newState === "open") renderMoreMenu()
+      },
+    }),
+    h("div", { class: "cal-scrim", "aria-hidden": "true", onClick: () => setNavOpen(false) }),
+    h("aside", { class: "cal-side", id: "cal-side" },
       h("header", { class: "cal-side-head" },
         h("h1", { class: "cal-project" }, "Caliper"),
         h("span", { class: "cal-count" })),
@@ -165,14 +221,6 @@ app.append(
         h("summary", {}, "Setup"),
         h("div", { class: "cal-setup-body" }))),
     h("main", { class: "cal-main" },
-      h("header", { class: "cal-bar" },
-        h("div", { class: "cal-title" },
-          h("strong", { class: "cal-part-name" }),
-          h("span", { class: "cal-part-file" })),
-        h("div", { class: "cal-devices", role: "radiogroup", "aria-label": "Device" }),
-        h("button", { class: "cal-calibrate", type: "button", onClick: () => setCalibrating(!state.calibrating) }, "Calibrate"),
-        h("button", { class: "cal-code-toggle", type: "button", "aria-controls": "cal-code", onClick: () => setCodeOpen(!state.codeOpen) }, "Code"),
-        h("button", { class: "cal-takes-toggle", type: "button", "aria-controls": "cal-takes", onClick: () => setTakesOpen(!takesOpen()) }, "Takes")),
       h("div", { class: "cal-work" },
       h("div", { class: "cal-stage" },
         h("figure", { class: "cal-device" },
@@ -393,6 +441,8 @@ function selectSubject(subject, context) {
 }
 
 function showChanged() {
+  // Choosing what to show closes the part list when it covers the stage.
+  setNavOpen(false)
   reconcileContext()
   state.plan = { _tag: "None" }
   saveLocation()
@@ -435,13 +485,9 @@ function setCodeOpen(open) {
 }
 
 function renderCode() {
-  work.classList.toggle("cal-code-open", state.codeOpen)
-  $(".cal-code").hidden = !state.codeOpen
-  split.hidden = !state.codeOpen
-  $(".cal-code-toggle").setAttribute("aria-expanded", String(state.codeOpen))
+  applyLayout()
   renderCodeShare()
   syncCode()
-  code.setOpen(state.codeOpen)
 }
 
 function renderCodeShare() {
@@ -450,9 +496,172 @@ function renderCodeShare() {
   split.setAttribute("aria-orientation", codeBeside() ? "vertical" : "horizontal")
 }
 
-/** Whether the code pane sits beside the stage, not under it. chrome.css decides from the work area's shape. */
+/** Whether the code pane sits beside the stage, not under it. layout.js decides from the chrome's box. */
 function codeBeside() {
-  return getComputedStyle(work).getPropertyValue("--cal-code-beside").trim() === "1"
+  return state.layout.code === "beside"
+}
+
+/**
+ * The bar's Code button opens and closes the code pane. With tabs, open means
+ * shown: closing it shows the preview again.
+ */
+function toggleCode() {
+  if (!state.layout.tabs) return setCodeOpen(!state.codeOpen)
+  if (state.view !== "code") return setView("code")
+  setView("preview")
+  setCodeOpen(false)
+}
+
+/** The bar's Takes button, as the Code button. */
+function toggleTakes() {
+  if (!state.layout.tabs) return setTakesOpen(!takesOpen())
+  if (state.view !== "takes") return setView("takes")
+  setView("preview")
+  setTakesOpen(false)
+}
+
+/**
+ * Show one pane in the work area, when the panes are tabs. Showing Code or
+ * Takes also opens it, so it stays open when the chrome widens.
+ *
+ * @param {View} view
+ */
+function setView(view) {
+  setNavOpen(false)
+  state.view = view
+  localStorage.setItem(STORAGE_VIEW, view)
+  if (view === "code" && !state.codeOpen) {
+    state.codeOpen = true
+    localStorage.setItem(STORAGE_CODE_OPEN, "true")
+  }
+  if (view === "takes" && !takesOpen()) {
+    state.takesOpen = true
+    localStorage.setItem(STORAGE_TAKES_OPEN, "true")
+  }
+  applyLayout()
+  syncCode()
+}
+
+/** @param {boolean} open */
+function setNavOpen(open) {
+  if (state.navOpen === open) return
+  state.navOpen = open
+  applyLayout()
+  if (state.layout.nav !== "drawer") return
+  if (open) {
+    const current = /** @type {HTMLElement | null} */ (document.querySelector(".cal-parts [aria-current='true']") ?? document.querySelector(".cal-filter"))
+    current?.focus({ preventScroll: true })
+    current?.scrollIntoView({ block: "nearest" })
+  } else if (document.activeElement === document.body || $(".cal-side").contains(document.activeElement)) {
+    $(".cal-nav-toggle").focus({ preventScroll: true })
+  }
+}
+
+/** Which panes show now. With tabs, only the chosen one fills the work area. */
+function shownPanes() {
+  const plan = state.layout
+  if (plan.tabs) return { preview: state.view === "preview", code: state.view === "code", takes: state.view === "takes" }
+  return { preview: true, code: plan.code !== "closed", takes: plan.takes !== "closed" }
+}
+
+/** The code pane's open state, as last told to the pane. */
+let codeShownBefore = /** @type {boolean | null} */ (null)
+
+/**
+ * Place every region for the chrome's current box, then fit the bar. This is
+ * the only place that shows or hides the panes.
+ */
+function applyLayout() {
+  const root = /** @type {HTMLElement} */ (app)
+  const cal = $(".cal")
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  const plan = planLayout(root.clientWidth / rem, root.clientHeight / rem, { code: state.codeOpen, takes: takesOpen() })
+  state.layout = plan
+  if (plan.nav !== "drawer") state.navOpen = false
+  cal.dataset.nav = plan.nav
+  cal.dataset.takes = plan.takes
+  cal.dataset.code = plan.code
+  cal.toggleAttribute("data-tabs", plan.tabs)
+  if (plan.tabs) cal.dataset.view = state.view
+  else delete cal.dataset.view
+  cal.toggleAttribute("data-nav-open", plan.nav === "drawer" && state.navOpen)
+
+  const shown = shownPanes()
+  $(".cal-takes").hidden = !shown.takes
+  $(".cal-code").hidden = !shown.code
+  split.hidden = plan.tabs || !shown.code
+  $(".cal-nav-toggle").setAttribute("aria-expanded", String(plan.nav === "drawer" && state.navOpen))
+  $(".cal-preview-tab").setAttribute("aria-pressed", String(shown.preview))
+  $(".cal-code-toggle").setAttribute("aria-expanded", String(shown.code))
+  $(".cal-takes-toggle").setAttribute("aria-expanded", String(shown.takes))
+  if (codeShownBefore !== shown.code) {
+    codeShownBefore = shown.code
+    code.setOpen(shown.code)
+  }
+  fitBarToWidth()
+}
+
+/** Fit the bar's controls to its width: one row, then two, then the More menu. */
+function fitBarToWidth() {
+  const bar = $(".cal-bar")
+  const controls = $(".cal-controls")
+  const groups = /** @type {HTMLElement[]} */ ([...controls.querySelectorAll("[data-group]")])
+  // Measure every group at its natural width, including the ones in the menu now.
+  for (const group of groups) group.removeAttribute("data-overflow")
+  const more = $(".cal-more")
+  more.hidden = false
+  const style = getComputedStyle(bar)
+  const gap = parseFloat(getComputedStyle(controls).columnGap) || 0
+  const width = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  const lead = state.layout.nav === "drawer" ? $(".cal-nav-toggle").getBoundingClientRect().width : 0
+  const fit = fitBar(width, {
+    lead,
+    title: BAR_TITLE_MIN,
+    gap,
+    more: more.getBoundingClientRect().width,
+    groups: groups.map(group => ({ id: group.dataset.group ?? "", width: Math.ceil(group.getBoundingClientRect().width) })),
+    overflowOrder: BAR_OVERFLOW,
+  })
+  for (const group of groups) group.toggleAttribute("data-overflow", fit.overflow.includes(group.dataset.group ?? ""))
+  more.hidden = fit.overflow.length === 0
+  bar.dataset.rows = String(fit.rows)
+  const menu = $(".cal-more-menu")
+  if (more.hidden && menu.matches(":popover-open")) menu.hidePopover()
+}
+
+/** The More menu holds the bar's groups that do not fit, with the full title above them. */
+function renderMoreMenu() {
+  const menu = $(".cal-more-menu")
+  const overflow = new Set([...document.querySelectorAll(".cal-controls [data-overflow]")].map(node => /** @type {HTMLElement} */ (node).dataset.group))
+  const close = () => menu.hidePopover()
+  menu.replaceChildren(
+    h("div", { class: "cal-more-title" },
+      h("strong", {}, $(".cal-part-name").textContent ?? ""),
+      h("span", {}, $(".cal-part-file").textContent ?? "")),
+    ...(overflow.has("devices") ? [h("div", { class: "cal-more-group", role: "radiogroup", "aria-label": "Device" },
+      h("p", { class: "cal-more-label" }, "Device"),
+      ...DEVICES.map(device => h("button", {
+        type: "button",
+        role: "radio",
+        class: "cal-more-item",
+        "aria-checked": device.id === state.device.id ? "true" : "false",
+        onClick: () => { close(); selectDevice(device) },
+      }, device.name)))] : []),
+    ...(overflow.has("calibrate") ? [h("div", { class: "cal-more-group" },
+      h("button", {
+        type: "button",
+        class: `cal-more-item${state.calibrated ? "" : " cal-attention"}`,
+        "aria-pressed": String(state.calibrating),
+        onClick: () => { close(); setCalibrating(!state.calibrating) },
+      }, "Calibrate"))] : []),
+  )
+  // The menu opens under the More button, inside the window.
+  const anchor = $(".cal-more").getBoundingClientRect()
+  const width = Math.min(18 * 16, window.innerWidth - 16)
+  menu.style.width = `${width}px`
+  menu.style.left = `${Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8))}px`
+  menu.style.top = `${anchor.bottom + 4}px`
+  menu.style.maxHeight = `${window.innerHeight - anchor.bottom - 12}px`
 }
 
 /** @param {number} share @param {boolean} [keep] store it for the next visit */
@@ -492,6 +701,8 @@ function resetCalibration() {
 /** @param {boolean} on */
 function setCalibrating(on) {
   state.calibrating = on
+  // The card is drawn on the stage, so the stage must show.
+  if (on && state.layout.tabs && state.view !== "preview") setView("preview")
   renderBar()
   renderCalibration()
 }
@@ -1216,13 +1427,10 @@ function setTakesOpen(open) {
 }
 
 function renderTakes() {
-  const open = takesOpen()
-  $(".cal").classList.toggle("cal-takes-closed", !open)
-  $(".cal-takes").hidden = !open
   const toggle = $(".cal-takes-toggle")
-  toggle.setAttribute("aria-expanded", String(open))
   const running = state.takes?.takes.filter(take => take.run._tag === "Running").length ?? 0
   toggle.textContent = running > 0 ? `Takes · ${running} working` : "Takes"
+  applyLayout()
   renderAgent()
   renderTakeList()
   renderLog()
@@ -1505,10 +1713,18 @@ new ResizeObserver(() => {
   renderStage()
   renderCodeShare()
 }).observe(stage)
+// The layout is a function of the chrome's box. A new box can move the panes.
+new ResizeObserver(() => applyLayout()).observe(app)
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && state.navOpen && state.layout.nav === "drawer") {
+    event.preventDefault()
+    setNavOpen(false)
+  }
+})
 renderParts()
 renderBar()
 renderCalibration()
-renderStage()
 renderTakes()
 renderCode()
+renderStage()
 connect()

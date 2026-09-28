@@ -37,6 +37,13 @@ It does not run the app to do this.
 
 `vite build` never includes Caliper. The plugin sets `apply: "serve"`.
 
+Caliper fits the window it has, including a phone. In a wide window, the part
+list, the stage, the code pane and the Takes panel sit side by side. In a
+small window, **Parts** opens the part list over the stage, and **Preview**,
+**Code** and **Takes** switch the one pane that fills the rest. Controls that
+do not fit the bar, such as the devices and **Calibrate**, move into the **⋯**
+menu. Nothing is removed at any size.
+
 ## What Caliper finds by itself
 
 | Need | Where Caliper looks |

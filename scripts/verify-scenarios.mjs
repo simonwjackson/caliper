@@ -16,6 +16,7 @@ import { createIntegrationReview } from "../src/takes/integration.js"
 import { planRenders } from "../src/render/plan.js"
 import { renderJobs } from "../src/render/render.js"
 import { relatedStates } from "../src/client/scenarios.js"
+import { reveal } from "./reveal.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-scenarios" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
@@ -134,7 +135,7 @@ try {
   for (const [name,width,height] of sizes) {
     await page.setViewportSize({ width,height })
     for (const selector of ['select[aria-label="Preview scenario"]', '[data-state-group="MissingArt"] [data-take]', '.cal-context-children .cal-state', '.cal-setup summary', '.cal-prompt', '.cal-start', '.cal-take-actions button', '.cal-calibrate', '.cal-takes-toggle']) {
-      const control = page.locator(selector).first()
+      const control = await reveal(page, page.locator(selector).first())
       await control.scrollIntoViewIfNeeded()
       const box = await control.boundingBox()
       assert(box && box.width > 0 && box.height > 0 && box.y >= -1 && box.y + box.height <= height + 1, `${selector} reachable at ${name}: ${JSON.stringify(box)}`)

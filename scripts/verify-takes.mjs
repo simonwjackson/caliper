@@ -19,6 +19,7 @@ import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { chromium } from "playwright-core"
+import { reveal } from "./reveal.mjs"
 
 const { values: args } = parseArgs({
   options: {
@@ -127,9 +128,9 @@ try {
       return Math.max(doc.scrollHeight - doc.clientHeight, doc.scrollWidth - doc.clientWidth, root.scrollHeight - root.clientHeight, root.scrollWidth - root.clientWidth)
     })
     assert.equal(overflow, 0, `the page does not scroll at ${name}`)
-    // Every control stays reachable at every size, inside its own scrolling region.
+    // Every control stays reachable at every size, inside its own scrolling region or one tap away.
     for (const selector of [".cal-prompt", ".cal-start", ".cal-take-actions button"]) {
-      const control = page.locator(selector).first()
+      const control = await reveal(page, page.locator(selector).first())
       await control.scrollIntoViewIfNeeded()
       const box = await control.boundingBox()
       assert(box !== null && box.height > 0 && box.y >= 0 && box.y + box.height <= /** @type {number} */ (height), `${selector} is reachable at ${name}`)

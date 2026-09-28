@@ -24,9 +24,6 @@
   --cal-warn: #f0b85a;
   --cal-bad: #ff7a7a;
   --cal-stage: #0e0f11;
-  --cal-side-min: 15rem;
-  --cal-side-max: 20rem;
-  --cal-takes-width: 24rem;
   /* Room for captions and a small preview before its region must scroll. */
   --cal-stage-min: 12rem;
   --cal-navigation-min: 6rem;
@@ -105,109 +102,156 @@ pre {
 }
 
 /*
- * Wide: parts | stage | takes, three columns.
- * Medium: the takes panel moves under the stage, where width is plentiful.
- * Narrow: list, stage and takes stack, each with a share of the height.
- * The widths are guesses, not measured on a real desk.
+ * src/client/layout.js decides where each region goes from the chrome's box
+ * and writes the plan here as data attributes:
+ *
+ *   data-nav    docked: a column at the left. drawer: over the work area.
+ *   data-takes  column: at the right. below: under the stage. tab: fills the work area.
+ *   data-code   beside or below the stage, or tab.
+ *   data-tabs   one of preview, code and takes fills the work area (data-view).
+ *
+ * The sizes below mirror layout.js; change them together.
  */
 .cal {
+  --cal-nav-width: clamp(14rem, 20%, 18rem);
+  --cal-takes-width: clamp(22rem, 28%, 26rem);
+  --cal-takes-share: 40%;
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr) var(--cal-takes-width);
-  grid-template-areas: "side main takes";
   height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "bar" "main";
 }
 
-.cal-side {
-  grid-area: side;
+.cal-bar {
+  grid-area: bar;
 }
 
 .cal-main {
   grid-area: main;
 }
 
+.cal-side {
+  grid-area: side;
+}
+
 .cal-takes {
   grid-area: takes;
 }
 
-/* A closed Takes panel gives its room back to the stage. The bar's Takes button reopens it. */
-.cal.cal-takes-closed {
-  grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
-  grid-template-areas: "side main";
+.cal[data-nav="docked"] {
+  grid-template-columns: var(--cal-nav-width) minmax(0, 1fr);
+  grid-template-areas: "bar bar" "side main";
 }
 
-/* Outrank the responsive panel rules below. A visible panel with no named
- * grid area creates implicit tracks and collapses the preview. */
+.cal[data-takes="column"] {
+  grid-template-columns: minmax(0, 1fr) var(--cal-takes-width);
+  grid-template-areas: "bar bar" "main takes";
+}
+
+.cal[data-nav="docked"][data-takes="column"] {
+  grid-template-columns: var(--cal-nav-width) minmax(0, 1fr) var(--cal-takes-width);
+  grid-template-areas: "bar bar bar" "side main takes";
+}
+
+.cal[data-takes="below"] {
+  grid-template-rows: auto minmax(0, 1fr) minmax(15rem, var(--cal-takes-share));
+  grid-template-areas: "bar" "main" "takes";
+}
+
+.cal[data-nav="docked"][data-takes="below"] {
+  grid-template-areas: "bar bar" "side main" "side takes";
+}
+
+/* Tabs: the Takes panel takes the work area's cell, over the stage. */
+.cal[data-takes="tab"] > .cal-takes {
+  grid-area: main;
+  z-index: 1;
+  border-left: 0;
+}
+
+/* The stage keeps its size under another tab, so its frames do not reload or rescale. */
+.cal[data-view="takes"] > .cal-main,
+.cal[data-view="code"] .cal-stage,
+.cal[data-view="code"] .cal-problems {
+  visibility: hidden;
+}
+
+/* Outrank the panel rules below. A visible panel with no named grid area
+ * creates implicit tracks and collapses the preview. */
 .cal > .cal-takes[hidden] {
   display: none;
 }
 
+.cal[data-takes="below"] > .cal-takes {
+  border-left: 0;
+  border-top: 1px solid var(--cal-line);
+}
+
+/* Under the stage, width is plentiful: the takes sit left of the conversation
+ * and the prompt. With no takes yet, the conversation and prompt take the row. */
+.cal[data-takes="below"] > .cal-takes:has(.cal-take) {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "head log" "list log" "list composer";
+}
+
+.cal[data-takes="below"] > .cal-takes:has(.cal-take) > .cal-takes-head {
+  grid-area: head;
+}
+
+.cal[data-takes="below"] > .cal-takes:has(.cal-take) > .cal-take-list {
+  grid-area: list;
+  max-height: none;
+  min-height: 0;
+  border-right: 1px solid var(--cal-line);
+}
+
+.cal[data-takes="below"] > .cal-takes:has(.cal-take) > .cal-log {
+  grid-area: log;
+  border-top: 0;
+}
+
+.cal[data-takes="below"] > .cal-takes:has(.cal-take) > .cal-composer {
+  grid-area: composer;
+}
+
+/* The drawer: the part list opens over the work area, under the bar. */
+.cal[data-nav="drawer"] > .cal-side {
+  grid-area: 2 / 1 / -1 / -1;
+  justify-self: start;
+  width: min(20rem, 88%);
+  z-index: 3;
+  box-shadow: 12px 0 32px rgb(0 0 0 / 0.5);
+}
+
+.cal[data-nav="drawer"]:not([data-nav-open]) > .cal-side {
+  display: none;
+}
+
+.cal-scrim {
+  display: none;
+}
+
+.cal[data-nav-open] > .cal-scrim {
+  display: block;
+  grid-area: 2 / 1 / -1 / -1;
+  z-index: 2;
+  background: rgb(0 0 0 / 0.55);
+}
+
+.cal:not([data-nav="drawer"]) .cal-nav-toggle {
+  display: none;
+}
+
+.cal-nav-toggle[aria-expanded="true"],
 .cal-code-toggle[aria-expanded="true"],
-.cal-takes-toggle[aria-expanded="true"] {
+.cal-takes-toggle[aria-expanded="true"],
+.cal-preview-tab[aria-pressed="true"] {
   background: var(--cal-accent);
   color: var(--cal-stage);
-}
-
-@container (width < 72rem) {
-  .cal.cal-takes-closed {
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "side main";
-  }
-  .cal {
-    grid-template-columns: minmax(var(--cal-side-min), var(--cal-side-max)) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(12rem, 40%);
-    grid-template-areas: "side main" "side takes";
-  }
-  /* Two columns under the stage: the takes on the left, the conversation and
-   * the prompt on the right. `.cal >` outranks the panel's own rules below. */
-  .cal > .cal-takes {
-    border-left: 0;
-    border-top: 1px solid var(--cal-line);
-    display: grid;
-    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: "head log" "list log" "list composer";
-  }
-  .cal > .cal-takes > .cal-takes-head {
-    grid-area: head;
-  }
-  .cal > .cal-takes > .cal-take-list {
-    grid-area: list;
-    max-height: none;
-    min-height: 0;
-    border-right: 1px solid var(--cal-line);
-  }
-  .cal > .cal-takes > .cal-log {
-    grid-area: log;
-    border-top: 0;
-  }
-  .cal > .cal-takes > .cal-composer {
-    grid-area: composer;
-  }
-}
-
-/* A narrow window stacks list, stage and takes. Each keeps a share of the
- * height and scrolls inside itself. */
-@container (width < 44rem) {
-  .cal {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(5rem, 22%) minmax(0, 1fr) minmax(0, 42%);
-    grid-template-areas: "side" "main" "takes";
-  }
-  .cal.cal-takes-closed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(5rem, 28%) minmax(0, 1fr);
-    grid-template-areas: "side" "main";
-  }
-  .cal-side {
-    border-right: 0;
-    border-bottom: 1px solid var(--cal-line);
-  }
-  .cal > .cal-takes {
-    display: flex;
-  }
-  .cal > .cal-takes > .cal-take-list {
-    border-right: 0;
-  }
 }
 
 /* ------------------------------------------------------------------ side */
@@ -468,21 +512,47 @@ pre {
   container: cal-main / size;
 }
 
+/*
+ * The bar spans the chrome. chrome.js fits it with layout.js's fitBar: one
+ * row; then the title gets its own row; then groups move into the More menu,
+ * Calibrate first, until the controls fit one row. The title is a readout, so
+ * it yields width before any control does.
+ */
 .cal-bar {
-  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--cal-space-2) var(--cal-space-3);
+  min-width: 0;
   padding: var(--cal-space-2) var(--cal-space-3);
+  background: var(--cal-bg);
   border-bottom: 1px solid var(--cal-line);
 }
 
-/* The title is a readout: it yields width before the controls do. */
+.cal-bar[data-rows="1"] {
+  flex-wrap: nowrap;
+}
+
+.cal-bar button {
+  min-height: 2.25rem;
+}
+
+/* Touch needs larger targets than a mouse; the drawn controls stay compact. */
+@media (pointer: coarse) {
+  .cal-bar button,
+  .cal-more-item {
+    min-height: 2.75rem;
+  }
+}
+
+.cal-nav-toggle {
+  flex: none;
+}
+
 .cal-title {
   display: flex;
   flex-direction: column;
-  flex: 1 1 12rem;
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -497,17 +567,72 @@ pre {
   font-size: var(--cal-text-sm);
 }
 
-.cal-devices {
+.cal-controls {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
+  align-items: center;
+  gap: var(--cal-space-2);
+}
+
+.cal-bar[data-rows="2"] > .cal-controls {
+  flex-basis: 100%;
+}
+
+/* The views sit at the end of their row, next to More. */
+.cal-bar[data-rows="2"] .cal-views {
+  margin-left: auto;
+}
+
+/* A group in the More menu keeps its natural width for the next fit, out of sight and out of reach. */
+.cal-controls > [data-overflow] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.cal-more {
+  flex: none;
+  min-width: 2.75rem;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.cal-more[hidden] {
+  display: none;
+}
+
+.cal-devices,
+.cal-views {
+  display: flex;
+  flex: none;
   gap: 1px;
   border-radius: var(--cal-radius);
   overflow: hidden;
 }
 
-.cal-devices button {
+.cal-devices button,
+.cal-views button {
   border-radius: 0;
   border: 0;
+  white-space: nowrap;
+}
+
+/* Beside the stage, Code and Takes are two toggles; as tabs, they join Preview in one control. */
+.cal:not([data-tabs]) .cal-views {
+  gap: var(--cal-space-2);
+  overflow: visible;
+}
+
+.cal:not([data-tabs]) .cal-views button {
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+}
+
+.cal:not([data-tabs]) .cal-preview-tab {
+  display: none;
 }
 
 .cal-devices button[aria-checked="true"] {
@@ -515,7 +640,9 @@ pre {
   color: var(--cal-stage);
 }
 
-.cal-calibrate[aria-pressed="true"] {
+.cal-calibrate[aria-pressed="true"],
+.cal-more-item[aria-pressed="true"],
+.cal-more-item[aria-checked="true"] {
   background: var(--cal-accent);
   color: var(--cal-stage);
 }
@@ -524,6 +651,55 @@ pre {
   border-color: var(--cal-warn);
   color: var(--cal-warn);
 }
+
+/* The More menu lives in the top layer, so no pane clips it. chrome.js places it. */
+.cal-more-menu {
+  inset: auto;
+  margin: 0;
+  padding: var(--cal-space-2);
+  overflow: auto;
+  border: 1px solid var(--cal-line);
+  border-radius: var(--cal-radius);
+  background: var(--cal-panel);
+  color: var(--cal-ink);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+
+.cal-more-menu:popover-open {
+  display: grid;
+  gap: var(--cal-space-3);
+}
+
+/* The title the bar may have truncated, in full. */
+.cal-more-title {
+  display: grid;
+  gap: var(--cal-space-1);
+  padding: var(--cal-space-1) var(--cal-space-2);
+  overflow-wrap: anywhere;
+}
+
+.cal-more-title span {
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-more-group {
+  display: grid;
+  gap: 2px;
+}
+
+.cal-more-label {
+  margin: 0;
+  padding: 0 var(--cal-space-2);
+  color: var(--cal-muted);
+  font-size: var(--cal-text-sm);
+}
+
+.cal-more-item {
+  min-height: 2.25rem;
+  text-align: left;
+}
+
 
 .cal-stage {
   position: relative;
@@ -536,11 +712,14 @@ pre {
   background: var(--cal-stage);
 }
 
+/* The caption wraps under the frame instead of widening the figure past the stage. */
 .cal-device {
   margin: 0;
   display: grid;
   justify-items: center;
   gap: var(--cal-space-2);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .cal-device[hidden],
@@ -639,8 +818,10 @@ pre {
 .cal-caption,
 .cal-grid-caption {
   font-size: var(--cal-text-sm);
+  line-height: 1.3;
   color: var(--cal-muted);
   text-align: center;
+  text-wrap: balance;
 }
 
 .cal-fit-true {
@@ -658,10 +839,10 @@ pre {
 /* ------------------------------------------------------------- work area */
 
 /*
- * The stage and the code pane share the work area. The pane sits beside the
- * stage when the main column is wide and not tall; otherwise it sits under
- * it, where the width is. The divider sets the pane's share of that axis.
- * Both thresholds are guesses, not measured on a real desk.
+ * The stage and the code pane share the work area. layout.js puts the pane
+ * beside the stage when the width pays for both, under it when the height
+ * does, and behind a tab when neither does. The divider sets the pane's
+ * share of that axis.
  */
 .cal-work {
   --cal-code-beside: 0;
@@ -675,30 +856,33 @@ pre {
 }
 
 /* Stacked, the stage and the pane each keep their minimum; below that, the main column scrolls. */
-.cal-work.cal-code-open {
+.cal[data-code="below"] .cal-work {
   min-height: calc(var(--cal-stage-min) + var(--cal-code-min));
   grid-template-rows: minmax(var(--cal-stage-min), 1fr) auto minmax(var(--cal-code-min), calc(var(--cal-code-share) * 100%));
 }
 
-@container cal-main (width >= 56rem) and (aspect-ratio >= 11 / 10) {
-  .cal-work {
-    --cal-code-beside: 1;
-  }
-  .cal-work.cal-code-open {
-    min-height: var(--cal-stage-min);
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-columns: minmax(16rem, 1fr) auto minmax(22rem, calc(var(--cal-code-share) * 100%));
-  }
-  .cal-split {
-    width: 9px;
-    height: auto;
-    margin: 0 -4px;
-    cursor: col-resize;
-  }
-  .cal-split::before {
-    inset: 0 4px;
-  }
+.cal[data-code="beside"] .cal-work {
+  --cal-code-beside: 1;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(16rem, 1fr) auto minmax(22rem, calc(var(--cal-code-share) * 100%));
 }
+
+.cal[data-code="beside"] .cal-split {
+  width: 9px;
+  height: auto;
+  margin: 0 -4px;
+  cursor: col-resize;
+}
+
+.cal[data-code="beside"] .cal-split::before {
+  inset: 0 4px;
+}
+
+/* As a tab, the pane covers the stage in the same cell. */
+.cal[data-code="tab"] .cal-work > * {
+  grid-area: 1 / 1;
+}
+
 
 .cal-work > [hidden] {
   display: none;
