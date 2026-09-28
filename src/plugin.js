@@ -12,6 +12,7 @@ import { codeChange, createCodeApi } from "./code/api.js"
 import { createChecksApi } from "./checks/api.js"
 import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code/modules.js"
 import { listeningOrigin } from "./server-origin.js"
+import { reportLateChanges } from "./late-changes.js"
 import { resolveAgent } from "./agent/config.js"
 import { chromePage, framePage } from "./pages.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
@@ -263,6 +264,9 @@ function createSession(server, root, options, env, overlay) {
     }, TAKES_DELAY_MS)
   }
   server.httpServer?.once("close", () => { void close() })
+  // Vite's watcher drops a second save within 50 ms. Every writer hits it: an
+  // agent, the code pane, a knob and the user's own editor.
+  const stopLateChanges = reportLateChanges(server.watcher)
   const code = createCodeApi({ store, project: async () => (await load()).project, resolve })
   const takes = createTakesApi({
     store,
@@ -403,6 +407,7 @@ function createSession(server, root, options, env, overlay) {
     for (const stream of streams) stream.end()
     streams.clear()
     for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) server.watcher.off(event, checks.invalidate)
+    stopLateChanges()
     await checks.close()
     // Vite awaits closeBundle before a test or caller removes the project root.
     // Await a derivation already in flight as well as cancelling queued work.

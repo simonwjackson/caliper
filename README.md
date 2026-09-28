@@ -505,7 +505,13 @@ CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/
 CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks-ui.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-code.mjs --url http://127.0.0.1:5173 --root /path/to/project --part src/ui/atoms/Button.atom.part.tsx
+CHROMIUM=/path/to/chromium node scripts/verify-fast-saves.mjs
 ```
+
+`scripts/verify-fast-saves.mjs` checks that a page shows the last of two saves
+made 20 ms apart, before and after a reload. Vite's own watcher drops the second
+save; `PLAIN=1` runs the same check without Caliper and shows that bug.
+`ATOMIC=1` saves by renaming a temporary file, as many editors do.
 
 `scripts/verify-css-loading.mjs` creates a temporary React project and starts
 real Vite servers. It checks exact stylesheet sets, shared motion, CSS modules,
