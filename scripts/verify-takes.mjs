@@ -11,7 +11,7 @@
  *
  * It types the prompt in the chrome, starts the takes, waits until every
  * agent is done, checks that a plan of 3 or more takes marks one strange
- * direction or says why it has none (decision 32), checks that each take frame renders, and takes screenshots
+ * direction or says why it has none (decision 33), checks that each take frame renders, and takes screenshots
  * of the chrome at three window sizes. It discards the takes at the end, so
  * the project's files do not change.
  */

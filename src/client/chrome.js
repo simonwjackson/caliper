@@ -1840,7 +1840,7 @@ function renderComposer() {
   renderPlan()
 }
 
-/** How the chrome explains the planner's strange direction (decision 32). */
+/** How the chrome explains the planner's strange direction (decision 33). */
 const STRANGE_NOTE = "Strange direction: it breaks this part's current pattern on purpose."
 
 /**

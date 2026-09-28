@@ -260,7 +260,7 @@ export type Direction = {
   readonly title: string
   /** One to three sentences: what the take changes and how it differs from the others. */
   readonly brief: string
-  /** Present on the one direction that breaks the part's current pattern on purpose (decision 31). */
+  /** Present on the one direction that breaks the part's current pattern on purpose (decision 33). */
   readonly strange?: true
 }
 
