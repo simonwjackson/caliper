@@ -174,6 +174,29 @@ source invalidation, and evidence in `.caliper/checks` that needs manual cleanup
 The modal blocks editing while open; close it while checks run to keep working.
 Checks still do not prove interactions or discover every affected consumer.
 
+## Authored checks: browser input
+
+The user chose browser input for authored checks attached to a state. Checks
+send clicks, typing and keyboard input, then assert observable results. The
+initial API does not expose product commands such as a fixture host's
+`press("options")`. Calling a product command directly can pass while the
+browser input handler is broken.
+
+The product scenario owns local data, initial state and real action behavior.
+The authored check sends input and asserts the result. Caliper owns isolation,
+device size, timeouts and evidence. Prefer established query, interaction and
+assertion tools over Caliper-specific equivalents. Select libraries after
+verifying their fit with Vite and take overlays.
+
+This is an input-boundary decision, not an implemented feature or an approved
+complete API. Export syntax, execution details and libraries remain open.
+The reporting-only Replace policy remains unchanged.
+
+Cost: browser input does not cover every controller or native-device path.
+Those paths retain product-level tests. Add a product-command interface only
+when a concrete scenario demonstrates the need, and state which input handling
+that check bypasses. Browser checks do not prove physical-device input behavior.
+
 ## Implementation choices
 
 | # | Decision | Why |
