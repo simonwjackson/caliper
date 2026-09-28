@@ -921,6 +921,7 @@ CHROMIUM=/path/to/chromium CALIPER_TEST_MODULES=/path/to/react-project/node_modu
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-integration.mjs --modules /path/to/react-project/node_modules
+CHROMIUM=/path/to/chromium ./scripts/verify-attachments.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-scenarios.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium node scripts/verify-checks.mjs --modules /path/to/react-project/node_modules
 CHROMIUM=/path/to/chromium ./scripts/verify-authored-agent-cli.mjs --modules /path/to/react-project/node_modules
