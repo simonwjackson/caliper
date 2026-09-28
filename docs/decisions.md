@@ -192,6 +192,10 @@ This is an input-boundary decision, not an implemented feature or an approved
 complete API. Export syntax, execution details and libraries remain open.
 The reporting-only Replace policy remains unchanged.
 
+The [library-fit spike](research/authored-checks.md) tested synthetic input,
+driver-side checks and a browser-local check with a bounded Playwright input
+bridge. Its results support further bridge work, not a production API decision.
+
 Cost: browser input does not cover every controller or native-device path.
 Those paths retain product-level tests. Add a product-command interface only
 when a concrete scenario demonstrates the need, and state which input handling
