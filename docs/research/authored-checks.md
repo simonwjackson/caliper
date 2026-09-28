@@ -6,7 +6,7 @@ A browser-local check can use existing DOM query and assertion libraries with a 
 
 The user then chose a modern public API with mature internals permitted. A follow-up verified standalone `@vitest/expect` plugins with `@testing-library/jest-dom` for typed `expect(element).toBeVisible()` assertions. This is the recommended assertion direction, not a shipped feature or an approved complete API.
 
-Keep check functions with their product states. Execute product and check modules in the browser, not Node. Reuse `playwright-core` for actual input. Caliper must own the check lifecycle and the small browser-to-driver transport, not new query or assertion semantics.
+Keep check functions with their product states. Execute product and check modules in the browser, not Node. Reuse `playwright-core` for actual input. In this modular proposal, Caliper owns the check lifecycle and the small browser-to-driver transport, not new query or assertion semantics. The [full Vitest Browser Mode comparison](vitest-browser-mode.md) measures what an existing runtime removes and which integration costs remain.
 
 The accepted input decision remains in [the decision record](../decisions.md#authored-checks-browser-input). No authored-check feature, runtime dependency, report schema or UI change shipped with this research.
 
@@ -21,7 +21,7 @@ Each check ran in a fresh Chromium context on Caliper's actual frame route. The 
 | DOM Testing Library + user-event + Chai | Retry, typing, Enter submission and take checks worked. It also clicked the covered button and reported success on both sizes. Click events had `isTrusted=false`. | Synthetic input can pass when the browser would deliver the click to another element. Do not use it as evidence of browser hit-testing. |
 | Driver-side Playwright + Playwright expect | Retry, keyboard and take checks worked. It refused covered clicks. `toBeVisible` and `toHaveText` worked without the Playwright Test runner. | Checks lived in a separate Node module. Loading the whole part through Vite SSR failed with `document is not defined`. Executing arbitrary take-owned checks in Node expands their authority. |
 | Browser-local queries and Chai + Playwright input bridge | Same functional results as driver-side Playwright, including refusal of covered clicks and `isTrusted=true`. Browser-authored check helpers followed the take tag. | Requires an input transport. The spike handles click, typing and a key press, not a complete interaction API or runner. |
-| Bare `vitest/browser` import | Failed with its explicit outside-Browser-Mode error in the existing frame. | Not a standalone replacement. Adopting Vitest's complete runtime remains possible but was not tested. |
+| Bare `vitest/browser` import | Failed with its explicit outside-Browser-Mode error in the existing frame. | Not a standalone replacement. The later [full-runtime experiment](vitest-browser-mode.md) tested nested Caliper frames instead. |
 
 All 48 executions matched the experiment's expected outcomes. Ten check executions intentionally failed. Synthetic covered clicks are known incorrect successes, not evidence that those product states work.
 
@@ -70,7 +70,7 @@ The recommendation is a feasibility result, not permission to copy the bridge in
 - A timeout on an action or `waitFor` does not bound an arbitrary check promise. Add a check-wide deadline, cancellation and context cleanup. Test a hanging check.
 - The spike rejects input outside the product host. That is an input guard, not a security sandbox. Validate run, document and origin identity across navigation and invalidation. Browser scripts retain same-origin authority. No network seal was implemented.
 - Do not load agent-edited checks directly into the Vite server or another unrestricted Node process. That would give take code more authority than its current file-write tools. Isolated Node checks are an alternative architecture, not a small loading shortcut.
-- Fix and test frame readiness separately. This experiment waited for its known heading; it did not fix the existing Empty-verdict race.
+- Await frame readiness separately from check-specific product readiness. This experiment waited for its known heading. Commit `d24885f` later fixed the Empty-verdict race with React-commit readiness, but that does not infer asynchronous product readiness.
 - Identify when a take changes checks as well as implementation. Passing modified expectations does not prove the old contract. Keep ordinary Replace reporting-only.
 - Test browser errors, missing exports, malformed checks, source changes, timeouts, HMR and take-only states through discovery, CLI, agent and chrome reporting. Keep interaction results separate from initial-state visual baseline evidence.
 
