@@ -104,11 +104,23 @@ exact places, as fast as possible, with no screenshots passed by hand.
      after marks on takes work, since this only adds to them. The order is
      not settled.
 
+9. **A mark mode you switch on.** One key (for example `M`) or one bar
+   button turns mark mode on and off. While it is on, a click or drag in any
+   frame makes a mark, and the part does not react. Outside mark mode the
+   frames stay interactive. It works the same with a mouse and on touch.
+   - Rejected: Alt-click per mark (no touch, and parts may use it), a Takes
+     view that always marks (you cannot mark a state reached by clicking),
+     and both a mode and Alt-click (two ways to do one thing).
+   - Cost: one key press before a pass. The chrome must show clearly that the
+     mode is on, for example with a coloured frame edge and a cursor change.
+   - Not checked: that turning the mode on keeps a state you reached by
+     clicking, such as an open menu. It should, if marking does not reload
+     the frame.
+
 ## Open
 
 - Lineage display and cleanup. Decision 3 makes the chain of takes the
   version history, so no versions inside a take are needed.
-- How a click makes a mark instead of using the part.
 - Where marks live, and whether they survive a restart.
 
 ## Facts checked
