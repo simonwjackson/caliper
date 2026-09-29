@@ -20,6 +20,14 @@ dark.
 | Checks modal: less slop | Donut, badge pills and footer copy removed. One total line, then a glyph column (tick, cross, dash) per group. Failed group first with its reason inline. |
 | Knobs: show, do not tell | Sliders for numbers. The whole 16-colour palette is the control for a colour. A container threshold is a bar with the threshold mark and a "now" line for the part's current size. Only the live knob shows its source path. Skipped outputs fold into one line. |
 
+## Fifth pass: three marks
+
+| Mark | Feedback | Change |
+|---|---|---|
+| Gutters | The bar's left gutter was 1 rem past the panel, the right was 1 rem to the edge, and they read as different | One `--gutter` token. The parts panel, side panel, bar, code pane and subject all derive from it: `--free-l` is two gutters plus the panel width. |
+| A | The draft still read as generated | The draft is the marked takes in a row, marks drawn on, each note under its mark. Same shape as the canvas. Selectors are gone from the draft; the agent gets them, you do not need them. |
+| B | The chevron's space and baseline | The `▸` glyph is gone. A drawn 5 px chevron, centred on the x-height, 0.3 rem after the text, the same on the chain head and the checks fold. |
+
 ## Fourth pass: the seven marks
 
 | Mark | Feedback | Change |
