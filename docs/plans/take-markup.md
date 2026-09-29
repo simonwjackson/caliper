@@ -137,10 +137,22 @@ exact places, as fast as possible, with no screenshots passed by hand.
       selector may match nothing. Caliper shows such a mark as lost and does
       not drop it quietly.
 
+11. **The Takes view shows the newest take of each chain next to its
+    parent.** Each chain appears as a before and after pair, beside the
+    original. Older takes in the chain fold into that chain's history, and
+    you can open them.
+    - Rejected: every take flat (a wall of frames after a few passes), and the
+      newest take only (seeing what a pass changed needs extra clicks, which
+      weakens decision 3).
+    - Cost: twice the frames. Three chains plus the original is 7 frames. At
+      small sizes, such as the Fold, the layout falls back to the newest take
+      only, with the parent one tap away (intrinsic layout, decision 22).
+
 ## Open
 
-- Lineage display and cleanup. Decision 3 makes the chain of takes the
-  version history, so no versions inside a take are needed.
+- Accept and cleanup: which take in a chain you can accept, and what happens
+  to the rest of the chain after accept or discard.
+- Build order: marks on takes first, then marks on the original (decision 8).
 
 ## Facts checked
 
