@@ -60,11 +60,20 @@ exact places, as fast as possible, with no screenshots passed by hand.
    - Cost: the old agent's own reasoning is lost. A fix that no mark named has
      no record of why it was made.
 
+5. **One Send for every marked take.** Marks stay a draft until you send.
+   Send makes one new take for each marked take, and their agents run in
+   parallel, like submitting a code review. The button shows the count, for
+   example "Send 7 marks on 3 takes".
+   - Rejected: a Send per take, and both kinds of Send.
+   - Cost: no agent starts until the whole pass is done. With takes at 26 to
+     31 s each (decision 15), results arrive about 30 s after Send.
+
 ## Open
 
-- Sending marks on several takes: one action for all, or one per take.
 - Marks across takes ("take 2's header in take 3").
-- Versions, since each follow-up can still make a good part worse.
+- Lineage display and cleanup. Decision 3 makes the chain of takes the
+  version history, so no versions inside a take are needed.
+- Whether you can mark the original, not only takes.
 - Where marks live, and whether they survive a restart.
 
 ## Facts checked
