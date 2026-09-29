@@ -69,27 +69,113 @@
         <span class="true">True size</span>
       </div>
 
-      <!-- takes on the canvas: the real files and every take, side by side -->
+      <!-- takes on the canvas as chains: the original, then each chain as a before-and-after pair (decision 11) -->
       <div class="s-takes">
-        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>3 takes</span></div>
+        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span class="n-takes">3 chains</span><span class="sep mark-only"></span><span class="mark-only">Mark mode: click or drag on any frame. <kbd>M</kbd> leaves.</span></div>
         <div class="frames">
-          <figure class="fr orig"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Real files</b></figcaption></figure>
-          <figure class="fr focus">
+
+          <figure class="fr orig" data-take="0">
             <img class="screen" src="assets/pico-game-detail.png" alt="">
-            <div class="pins"><span class="pin" style="left:22%;top:48%"><span>1</span></span><span class="pin" style="left:66%;top:39%"><span>2</span></span></div>
-            <figcaption><b>1</b> Cover art two thirds wide <span class="dot good"></span></figcaption>
-            <div class="notes">
-              <div class="note"><i>1</i><span>Too wide. The cover should not push the title down.</span></div>
-              <div class="note"><i>2</i><span>This stat row is right. Keep it.</span></div>
-              <input placeholder="Click the take to add a note">
+            <div class="marks">
+              <span class="pin" style="left:32%;top:71%"><span>A</span></span>
             </div>
+            <figcaption><b>Real files</b></figcaption>
           </figure>
-          <figure class="fr"><img class="screen t2" src="assets/pico-game-detail.png" alt=""><figcaption><b>2</b> Stats in one row <span class="dot"></span></figcaption></figure>
-          <figure class="fr running"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>3</b> Actions as chips <span class="dim">rendering</span></figcaption></figure>
+
+          <div class="chain">
+            <div class="chain-head">
+              <b>6</b><span class="from">← from 1</span><span class="dim">(4 discarded)</span>
+              <button class="hist" aria-expanded="true">3 in chain ▾</button>
+            </div>
+            <div class="history">
+              <span class="step"><i style="background-image:url(assets/pico-game-detail.png)"></i>1</span>
+              <span class="arrow">→</span>
+              <span class="step gone"><i style="background-image:url(assets/pico-game-detail.png)"></i>4 <s>discarded</s></span>
+              <span class="arrow">→</span>
+              <span class="step now"><i style="background-image:url(assets/pico-game-detail.png)"></i>6</span>
+            </div>
+            <div class="pair">
+              <figure class="fr parent" data-take="1"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>1</b> Cover art two thirds wide</figcaption></figure>
+              <figure class="fr focus" data-take="6">
+                <img class="screen t2" src="assets/pico-game-detail.png" alt="">
+                <div class="marks">
+                  <span class="pin" style="left:63%;top:44%"><span>A</span></span>
+                  <span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span>
+                </div>
+                <figcaption><b>6</b> Cover at half, title beside it <span class="dot good"></span></figcaption>
+                <!-- the note editor, open at the newest mark -->
+                <div class="editor">
+                  <span class="id">6B</span>
+                  <input value="Too heavy. Thin the border to one pixel" autofocus>
+                  <div class="refs">
+                    <span class="dim">Point at</span>
+                    <button class="chip">0A</button><button class="chip">6A</button><button class="chip">5A</button><button class="chip lost">3A</button>
+                    <span class="dim end"><kbd>Enter</kbd> saves</span>
+                  </div>
+                </div>
+              </figure>
+            </div>
+          </div>
+
+          <div class="chain">
+            <div class="chain-head"><b>5</b><span class="from">← from 2</span><button class="hist" aria-expanded="false">2 in chain ▾</button></div>
+            <div class="pair">
+              <figure class="fr parent" data-take="2"><img class="screen v3" src="assets/pico-game-detail.png" alt=""><figcaption><b>2</b> Stats in one row</figcaption></figure>
+              <figure class="fr" data-take="5">
+                <img class="screen v4" src="assets/pico-game-detail.png" alt="">
+                <div class="marks"><span class="pin" style="left:70%;top:64%"><span>A</span></span></div>
+                <figcaption><b>5</b> Stats in one row, larger <span class="dot"></span></figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="chain flagged">
+            <div class="chain-head"><b>3</b><span class="from">no follow-up</span><span class="flag">made before take 8 was accepted</span></div>
+            <div class="pair">
+              <figure class="fr" data-take="3">
+                <img class="screen v5" src="assets/pico-game-detail.png" alt="">
+                <div class="marks"><span class="pin lost" style="left:48%;top:80%"><span>A</span></span></div>
+                <figcaption><b>3</b> Actions as chips</figcaption>
+              </figure>
+            </div>
+          </div>
+
         </div>
         <div class="caption">
           <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
           <span class="true">True size</span>
+        </div>
+      </div>
+
+      <!-- what the agent sees (decision 1 and 4): the screenshot with the pins drawn on it, plus text -->
+      <div class="s-agent">
+        <div class="slate"><b>Take 9</b><span>← from 6</span><span class="sep"></span><span>what its agent received</span></div>
+        <div class="agent">
+          <div class="shot">
+            <img class="screen t2" src="assets/pico-game-detail.png" alt="">
+            <div class="marks model">
+              <span class="pin" style="left:63%;top:44%"><span>A</span></span>
+              <span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span>
+            </div>
+            <p class="dim">take-6.png, 640 × 480, pins drawn in</p>
+          </div>
+          <pre class="brief">Part: Game Detail, state Default, device RG353M.
+Take 9 continues take 6, which continued take 1.
+
+First prompt
+  Give the cover more room and let the title breathe.
+Direction (planner)
+  Cover art two thirds wide.
+Pass 1 marks on take 1
+  A  "cover is too wide, title pushed down"   div.pico-game-detail__cover
+Pass 2 marks on take 6 (this pass)
+  A  "love this"                       button.pico-button--go "CONTINUE"
+  B  region 166×125 at 141,77          "too heavy. thin the border to one pixel"
+     inside: div.pico-game-detail__cover, img.pico-cover-art
+Also referenced
+  5A on take 5 says "restore 0A here": you may read take 5's files.
+
+Files: copies of take 6 in .caliper/takes/9. Write only there.</pre>
         </div>
       </div>
 
@@ -145,11 +231,32 @@
       </div>
     </figure>
 
-    <!-- the bar under the takes canvas -->
+    <!-- the bar under the takes canvas: the composer, the draft, and Send -->
     <div class="bar-composer">
-      <div class="focused"><b>Take 1</b><button class="btn primary">Accept</button><button class="btn">Discard</button><button class="btn">Revise from notes</button></div>
-      <textarea placeholder="Describe a change to Game Detail"></textarea>
-      <div class="go"><span class="count">Takes <b>1</b> ▾</span><span class="hint">Ctrl+Enter</span><button class="btn primary">New take</button></div>
+      <div class="draft" hidden>
+        <div class="draft-head"><b>Draft</b><span class="dim">7 marks on 3 takes · 2 new takes</span><button class="btn small">Clear</button></div>
+        <ul class="draft-list">
+          <li class="grp"><b>0</b> Real files <span class="dim">→ pointed at only, no take</span></li>
+          <li><span class="id">0A</span><span class="el">div.pico-game-detail__actions</span><span class="txt">the old actions list was clearer</span></li>
+          <li class="grp"><b>6</b> Cover at half, title beside it <span class="dim">→ new take 9</span></li>
+          <li><span class="id">6A</span><span class="el">button.pico-button--go</span><span class="txt">love this</span></li>
+          <li><span class="id">6B</span><span class="el">region · div.pico-game-detail__cover +1</span><span class="txt">too heavy. thin the border to one pixel</span></li>
+          <li class="grp"><b>5</b> Stats in one row, larger <span class="dim">→ new take 10</span></li>
+          <li><span class="id">5A</span><span class="el">div.pico-game-facts__row</span><span class="txt">restore <a class="ref">0A</a> here</span></li>
+          <li class="grp"><b>3</b> Actions as chips <span class="dim">→ pointed at only, no take</span></li>
+          <li class="lost"><span class="id">3A</span><span class="el">element not found after the restart</span><span class="txt">keep the chip shape</span><button class="btn small">Re-place</button></li>
+        </ul>
+      </div>
+      <div class="bar-row">
+        <button class="markbtn" aria-pressed="false" title="Mark mode (M)"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 16s5-4.2 5-8.5A5 5 0 0 0 4 7.5C4 11.8 9 16 9 16z"/><circle cx="9" cy="7.5" r="1.6" fill="currentColor" stroke="none"/></svg></button>
+        <div class="focused"><b>Take 6</b><button class="btn primary">Accept</button><button class="btn">Discard</button></div>
+        <textarea placeholder="Describe a change to Game Detail"></textarea>
+        <div class="go">
+          <button class="btn draft-toggle" aria-expanded="false">7 marks ▾</button>
+          <span class="count">Takes <b>1</b> ▾</span>
+          <button class="btn primary send">Send 7 marks, 2 new takes</button>
+        </div>
+      </div>
       <p class="empty-hint">An agent edits copies of the real files and renders them here beside the original. Nothing touches your files until you accept.</p>
     </div>
     <!-- ===================== knobs ===================== -->
@@ -305,7 +412,10 @@ const state = q.get("state") ?? "takes";
 if (q.get("accent")) document.documentElement.dataset.accent = q.get("accent");
 const app = document.querySelector(".app");
 app.dataset.state = state;
-const on = { parts: ["parts"], code: ["code"], takes: ["takes"], empty: ["takes"], knobs: ["knobs"], checks: ["checks"], calibrate: ["calibrate"], grid: [], error: [] }[state] ?? ["takes"];
+const on = { parts: ["parts"], code: ["code"], takes: ["takes"], empty: ["takes"], mark: ["takes"], draft: ["takes"], agent: ["takes"], knobs: ["knobs"], checks: ["checks"], calibrate: ["calibrate"], grid: [], error: [] }[state] ?? ["takes"];
+if (state === "mark") { app.dataset.mark = "on"; document.querySelector(".markbtn")?.setAttribute("aria-pressed", "true"); }
+if (state !== "mark") document.querySelector(".editor")?.remove();
+if (state === "draft") { document.querySelector(".draft").hidden = false; document.querySelector(".draft-toggle")?.setAttribute("aria-expanded", "true"); }
 for (const b of document.querySelectorAll("[data-tool]")) {
   const t = b.dataset.tool;
   const pressed = on.includes(t) || (t === "parts" && b.closest(".rail")) || (t === "preview" && state !== "parts" && state !== "checks");

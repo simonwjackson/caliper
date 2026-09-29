@@ -24,11 +24,11 @@
 </style>
 </head>
 <body>
-<h1>Caliper: Darkroom, second pass</h1>
-<p>The room is dark and the device is the only lit thing in it. There is no accent hue: the product is the only colour on screen, and selection, focus and the live knob use ink. Takes live on the canvas beside the real files, and you comment on a take by dropping numbered pins on it. In light mode the room becomes a lightbox. Each state below is the same page with <code>?state=</code>; open it on this phone to see it at real size in your system's colour scheme.</p>
+<h1>Caliper: Darkroom, third pass</h1>
+<p>The room is dark and the device is the only lit thing in it. There is no accent hue: the product is the only colour on screen, and selection, focus and the live knob use ink. Takes live on the canvas as chains: the real files, then each chain as a before-and-after pair. You mark a take with lettered pins and regions (<code>docs/plans/take-markup.md</code>), and one Send makes the next take of every marked chain. In light mode the room becomes a lightbox. Each state below is the same page with <code>?state=</code>; open it on this phone to see it at real size in your system's colour scheme.</p>
 <dl><dt>Type</dt><dd>Public Sans, tabular numerals, no mono except code and CSS names</dd><dt>Dark</dt><dd>room #121316, card #1C1D21, ink #ECECEE</dd><dt>Light</dt><dd>room #DDDEE2, card #F7F7F9, ink #17181C</dd><dt>Alternative</dt><dd>one cool accent, <a href="b-darkroom.html?state=takes&accent=sky">?accent=sky</a>, kept only for comparison</dd></dl>
 <nav>
-  <a href="#takes">Takes</a><a href="#empty">First run</a><a href="#knobs">Knobs</a><a href="#code">Code</a><a href="#grid">All states</a><a href="#checks">Checks</a><a href="#calibrate">Calibrate</a><a href="#error">Error</a><a href="#parts">Parts drawer</a>
+  <a href="#takes">Chains</a><a href="#mark">Mark mode</a><a href="#draft">Draft and Send</a><a href="#agent">What the agent sees</a><a href="#empty">First run</a><a href="#knobs">Knobs</a><a href="#code">Code</a><a href="#grid">All states</a><a href="#checks">Checks</a><a href="#calibrate">Calibrate</a><a href="#error">Error</a><a href="#parts">Parts drawer</a>
 </nav>
 
 <template id="section">
@@ -42,15 +42,18 @@
 
 <script>
 const states = [
-  ["takes", "Takes on the canvas", "The real files and every take in one row at true size. Under a frame there is only its name and a dot if a check failed. Click a take to focus it: it gets the ring, and you drop numbered pins on the image with a note each. Accept, Discard and Revise from notes act on the focused take from the bar at the bottom, which also holds the composer. No right panel."],
-  ["empty", "First run, no takes yet", "The real files alone, the composer, and one sentence about what will happen."],
-  ["knobs", "Knobs", "Sliders for numbers, the whole palette as the control for a colour, a bar for each container threshold that shows where the part sits now. The live knob is the only one with a source path. Skipped outputs fold into one line."],
+  ["takes", "Takes as chains", "The real files, then each chain as a before-and-after pair: parent dimmed on the left, newest take on the right. The head says where the take came from, for example \"6 ← from 1 (4 discarded)\", and unfolds the chain history as a strip. A chain with no follow-up is one frame. A chain made before another was accepted is dimmed and flagged. Marks are lettered pins, named by take: 0A on the original, 6A and 6B on take 6. A lost mark is a hollow pin. The bar holds the mark-mode button, the focused take's Accept and Discard, the composer, the draft count and Send. On the phone each chain shows the newest take only; the parent is one tap away."],
+  ["mark", "Mark mode with the note editor", "Mark mode is on: every frame gets a dashed edge and a crosshair, and the slate says how to leave. A click makes a lettered pin, a drag makes a region. The editor opens under the marked frame: the mark's name, one line of text, and the marks you can point at as chips. A lost mark is a dashed chip. Enter saves."],
+  ["draft", "The draft and Send", "The draft unfolds above the bar: every mark grouped by take, with the element it attached to and the note, and what Send will do for that take (a new take, or pointed at only). A lost mark says so and offers Re-place. The Send button carries the count: 7 marks, 2 new takes."],
+  ["agent", "What the agent sees", "The new take's brief: the parent take's screenshot with the pins drawn in white, and the text history from the take records: first prompt, planner direction, each pass's marks with their elements, references to other takes, and the write fence."],
+  ["empty", "First run, no takes yet", "The real files alone, the composer, one sentence."],
+  ["knobs", "Knobs", "Sliders for numbers, the palette as the control for a colour, a bar per container threshold with the part's current size marked. Only the live knob shows its source path."],
   ["code", "Code pane with a take diff", "Code sits under the stage so the frame stays visible while you read the diff."],
-  ["grid", "All states side by side", "Every state of the part on one device, each at true size, with only its name under it. A failed check is a dot."],
-  ["checks", "Checks window", "One line for the total, then one group per state and device with a glyph column: a tick, a cross, or a dash for not run. The failed group comes first with its reason inline. No badges."],
-  ["calibrate", "Calibrate", "The room dims the panels and shows the credit card outline at the current px/mm."],
-  ["error", "A part that throws", "The frame carries its own failure at device size with the stack; readable copy under it. The parts list moves the dot to the broken state and Checks turns red."],
-  ["parts", "Parts drawer (phone only)", "On the phone the parts panel is a drawer from the left over the room."],
+  ["grid", "All states side by side", "Every state of the part on one device at true size, only its name under it."],
+  ["checks", "Checks window", "One total line, then one group per state and device with a glyph column. Failed first with the reason inline."],
+  ["calibrate", "Calibrate", "Panels dim; the credit card outline at the current px/mm."],
+  ["error", "A part that throws", "The frame carries its own failure with the stack; readable copy under it."],
+  ["parts", "Parts drawer (phone only)", "The parts panel as a drawer from the left."],
 ];
 const tpl = document.getElementById("section");
 for (const [id, title, what] of states) {

@@ -19,8 +19,10 @@ const put = async (from, to, file) => {
   const body = file ? await readFile(join(here, "parts", file), "utf8") : "";
   s = s.slice(0, a) + body + s.slice(b);
 };
-await put("    <!-- ===================== subject", "    <!-- ===================== takes", "subject.html");
-await put("    <!-- ===================== takes", "    <!-- ===================== knobs", null);
+// The old takes panel sits between subject and knobs on the first run only.
+const next = s.includes("<!-- ===================== takes") ? "    <!-- ===================== takes" : "    <!-- ===================== knobs";
+await put("    <!-- ===================== subject", next, "subject.html");
+if (next.includes("takes")) await put("    <!-- ===================== takes", "    <!-- ===================== knobs", null);
 await put("    <!-- ===================== knobs", "    <!-- ===================== code pane", "knobs.html");
 await put("    <!-- ===================== checks window", "  </main>", "checks.html");
 await writeFile(page, s);

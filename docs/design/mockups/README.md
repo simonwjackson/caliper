@@ -1,8 +1,8 @@
-# Visual direction: Darkroom (second pass)
+# Visual direction: Darkroom (third pass)
 
 The chosen direction for Caliper's chrome, 2026-09-28. Two other directions
 (Bench, Tiles) were shown and dropped the same day; they are in this folder's
-history at `9804fd3`. The first Darkroom pass is at `ccbda2b`.
+history at `9804fd3`. The first Darkroom pass is at `ccbda2b`, the second at `5ea59a4`.
 
 `b-darkroom.html` is one page. `?state=` picks the state and `b.css` is the
 one stylesheet. Sections that changed in the second pass live in `parts/` and
@@ -20,11 +20,37 @@ dark.
 | Checks modal: less slop | Donut, badge pills and footer copy removed. One total line, then a glyph column (tick, cross, dash) per group. Failed group first with its reason inline. |
 | Knobs: show, do not tell | Sliders for numbers. The whole 16-colour palette is the control for a colour. A container threshold is a bar with the threshold mark and a "now" line for the part's current size. Only the live knob shows its source path. Skipped outputs fold into one line. |
 
+## Third pass: take markup (`docs/plans/take-markup.md`)
+
+The plan settles behaviour (decisions 1 to 13) and lists nine surfaces for
+the designer. Each is in one of four states: `takes`, `mark`, `draft`, `agent`.
+
+| Surface | Where | How it looks |
+|---|---|---|
+| Mark mode | `mark` | A pin button at the left of the bar, filled when on. Every frame gets a dashed ink edge at 4 px offset and a crosshair. The slate says "Mark mode: click or drag on any frame. M leaves." |
+| A mark | `takes`, `mark` | A click is a teardrop pin with its letter. A drag is a region: a 2 px ink box with a light fill and the letter on a tab at its top-left corner. Named by take and letter: 0A on the original. |
+| The note editor | `mark` | A card under the marked frame. The mark's name on a filled tag, one text line, then chips for the marks you can point at. Enter saves. |
+| A reference | `mark`, `draft` | In a note, "0A" is a small bordered token. In the editor you pick it from the chips, which list every mark in the draft. |
+| A lost mark | `takes`, `mark`, `draft` | A hollow dashed pin on the frame, a dashed chip in the editor, and in the draft a warn-coloured "element not found" with Re-place. |
+| The draft and Send | `draft` | "7 marks ▾" at the right of the bar unfolds the draft above it, grouped by take, each group saying what Send does for it. Send carries the count: "Send 7 marks, 2 new takes". |
+| The pair view | `takes` | Each chain is a head, an optional history strip, and a pair: parent at 78 % opacity, newest take at full. A chain with no follow-up is one frame. On the phone: newest only, "parent · 3 in chain" one tap away. |
+| Chain labels | `takes` | "6 ← from 1 (4 discarded)" in the chain head; the strip shows 1 → 4 (struck) → 6. A chain made before an accept is dimmed with "made before take 8 was accepted" in warn. |
+| What the agent sees | `agent` | The parent's screenshot with pins drawn in white, beside the text brief built from the take records. |
+
+Costs: three chains plus the original is seven frames, and at 1600 wide they
+wrap to two rows of RG353M. On the ODIN 2 PORTAL a pair alone is 1,208 px, so
+that device shows the newest take only at any desk width under about 1,900
+px. The editor covers the frame below it while open. Mark letters run out at
+Z; the plan does not say what comes after.
+
 ## States
 
 | `?state=` | Shows |
 |---|---|
-| `takes` | Real files and three takes on the canvas, take 1 focused with two pins |
+| `takes` | The original and three chains as pairs, take 6 focused with two marks |
+| `mark` | Mark mode on, the note editor open at 6B |
+| `draft` | The draft unfolded above the bar |
+| `agent` | What take 9's agent received |
 | `empty` | First run: the real files, the composer, one sentence |
 | `knobs` | Knobs panel: registered, thresholds, what the part reads, literals |
 | `code` | Code pane under the stage with a take diff |

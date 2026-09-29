@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "out");
-export const STATES = ["takes", "empty", "knobs", "code", "grid", "checks", "calibrate", "error", "parts"];
+export const STATES = ["takes", "mark", "draft", "agent", "empty", "knobs", "code", "grid", "checks", "calibrate", "error", "parts"];
 const states = process.argv.slice(2).length ? process.argv.slice(2) : STATES;
 const sizes = [
   { name: "desk", width: 1600, height: 1000, scale: 1 },

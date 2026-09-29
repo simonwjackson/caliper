@@ -1,0 +1,109 @@
+      <!-- takes on the canvas as chains: the original, then each chain as a before-and-after pair (decision 11) -->
+      <div class="s-takes">
+        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span class="n-takes">3 chains</span><span class="sep mark-only"></span><span class="mark-only">Mark mode: click or drag on any frame. <kbd>M</kbd> leaves.</span></div>
+        <div class="frames">
+
+          <figure class="fr orig" data-take="0">
+            <img class="screen" src="assets/pico-game-detail.png" alt="">
+            <div class="marks">
+              <span class="pin" style="left:32%;top:71%"><span>A</span></span>
+            </div>
+            <figcaption><b>Real files</b></figcaption>
+          </figure>
+
+          <div class="chain">
+            <div class="chain-head">
+              <b>6</b><span class="from">← from 1</span><span class="dim">(4 discarded)</span>
+              <button class="hist" aria-expanded="true">3 in chain ▾</button>
+            </div>
+            <div class="history">
+              <span class="step"><i style="background-image:url(assets/pico-game-detail.png)"></i>1</span>
+              <span class="arrow">→</span>
+              <span class="step gone"><i style="background-image:url(assets/pico-game-detail.png)"></i>4 <s>discarded</s></span>
+              <span class="arrow">→</span>
+              <span class="step now"><i style="background-image:url(assets/pico-game-detail.png)"></i>6</span>
+            </div>
+            <div class="pair">
+              <figure class="fr parent" data-take="1"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>1</b> Cover art two thirds wide</figcaption></figure>
+              <figure class="fr focus" data-take="6">
+                <img class="screen t2" src="assets/pico-game-detail.png" alt="">
+                <div class="marks">
+                  <span class="pin" style="left:63%;top:44%"><span>A</span></span>
+                  <span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span>
+                </div>
+                <figcaption><b>6</b> Cover at half, title beside it <span class="dot good"></span></figcaption>
+                <!-- the note editor, open at the newest mark -->
+                <div class="editor">
+                  <span class="id">6B</span>
+                  <input value="Too heavy. Thin the border to one pixel" autofocus>
+                  <div class="refs">
+                    <span class="dim">Point at</span>
+                    <button class="chip">0A</button><button class="chip">6A</button><button class="chip">5A</button><button class="chip lost">3A</button>
+                    <span class="dim end"><kbd>Enter</kbd> saves</span>
+                  </div>
+                </div>
+              </figure>
+            </div>
+          </div>
+
+          <div class="chain">
+            <div class="chain-head"><b>5</b><span class="from">← from 2</span><button class="hist" aria-expanded="false">2 in chain ▾</button></div>
+            <div class="pair">
+              <figure class="fr parent" data-take="2"><img class="screen v3" src="assets/pico-game-detail.png" alt=""><figcaption><b>2</b> Stats in one row</figcaption></figure>
+              <figure class="fr" data-take="5">
+                <img class="screen v4" src="assets/pico-game-detail.png" alt="">
+                <div class="marks"><span class="pin" style="left:70%;top:64%"><span>A</span></span></div>
+                <figcaption><b>5</b> Stats in one row, larger <span class="dot"></span></figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="chain flagged">
+            <div class="chain-head"><b>3</b><span class="from">no follow-up</span><span class="flag">made before take 8 was accepted</span></div>
+            <div class="pair">
+              <figure class="fr" data-take="3">
+                <img class="screen v5" src="assets/pico-game-detail.png" alt="">
+                <div class="marks"><span class="pin lost" style="left:48%;top:80%"><span>A</span></span></div>
+                <figcaption><b>3</b> Actions as chips</figcaption>
+              </figure>
+            </div>
+          </div>
+
+        </div>
+        <div class="caption">
+          <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+          <span class="true">True size</span>
+        </div>
+      </div>
+
+      <!-- what the agent sees (decision 1 and 4): the screenshot with the pins drawn on it, plus text -->
+      <div class="s-agent">
+        <div class="slate"><b>Take 9</b><span>← from 6</span><span class="sep"></span><span>what its agent received</span></div>
+        <div class="agent">
+          <div class="shot">
+            <img class="screen t2" src="assets/pico-game-detail.png" alt="">
+            <div class="marks model">
+              <span class="pin" style="left:63%;top:44%"><span>A</span></span>
+              <span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span>
+            </div>
+            <p class="dim">take-6.png, 640 × 480, pins drawn in</p>
+          </div>
+          <pre class="brief">Part: Game Detail, state Default, device RG353M.
+Take 9 continues take 6, which continued take 1.
+
+First prompt
+  Give the cover more room and let the title breathe.
+Direction (planner)
+  Cover art two thirds wide.
+Pass 1 marks on take 1
+  A  "cover is too wide, title pushed down"   div.pico-game-detail__cover
+Pass 2 marks on take 6 (this pass)
+  A  "love this"                       button.pico-button--go "CONTINUE"
+  B  region 166×125 at 141,77          "too heavy. thin the border to one pixel"
+     inside: div.pico-game-detail__cover, img.pico-cover-art
+Also referenced
+  5A on take 5 says "restore 0A here": you may read take 5's files.
+
+Files: copies of take 6 in .caliper/takes/9. Write only there.</pre>
+        </div>
+      </div>
