@@ -68,9 +68,21 @@ exact places, as fast as possible, with no screenshots passed by hand.
    - Cost: no agent starts until the whole pass is done. With takes at 26 to
      31 s each (decision 15), results arrive about 30 s after Send.
 
+6. **A note can point to a mark on another take.** Marks are named by take
+   and letter, for example "2A". A note on take 3 that says "use 2A here"
+   gives take 3's new agent the element of mark 2A, a crop of take 2's
+   screenshot around it, and read access to take 2's files. Writes stay in
+   the agent's own take folder, so the fence in decision 15 does not change.
+   - Rejected: no references between takes (the agent cannot see the other
+     take), and a merge pass that makes one take from several (a new action
+     and a rule for which take is the base).
+   - Cost: a new reference syntax in notes. The agent must move code between
+     takes, and can get it wrong when both takes changed the same file. The
+     base is always the take where you wrote the note.
+
 ## Open
 
-- Marks across takes ("take 2's header in take 3").
+- Whether a mark that other notes only point to also makes a new take.
 - Lineage display and cleanup. Decision 3 makes the chain of takes the
   version history, so no versions inside a take are needed.
 - Whether you can mark the original, not only takes.
