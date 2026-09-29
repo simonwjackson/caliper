@@ -1,8 +1,8 @@
-# Visual direction: Darkroom (third pass)
+# Visual direction: Darkroom (fourth pass)
 
 The chosen direction for Caliper's chrome, 2026-09-28. Two other directions
 (Bench, Tiles) were shown and dropped the same day; they are in this folder's
-history at `9804fd3`. The first Darkroom pass is at `ccbda2b`, the second at `5ea59a4`.
+history at `9804fd3`. The first Darkroom pass is at `ccbda2b`, the second at `5ea59a4`, the third at `c84f3bd`.
 
 `b-darkroom.html` is one page. `?state=` picks the state and `b.css` is the
 one stylesheet. Sections that changed in the second pass live in `parts/` and
@@ -19,6 +19,18 @@ dark.
 | Not keen on the yellow | No accent hue. Selection, focus, the live knob and the primary button use ink. The product is the only colour on screen. `?accent=sky` keeps one cool alternative for comparison. |
 | Checks modal: less slop | Donut, badge pills and footer copy removed. One total line, then a glyph column (tick, cross, dash) per group. Failed group first with its reason inline. |
 | Knobs: show, do not tell | Sliders for numbers. The whole 16-colour palette is the control for a colour. A container threshold is a bar with the threshold mark and a "now" line for the part's current size. Only the live knob shows its source path. Skipped outputs fold into one line. |
+
+## Fourth pass: the seven marks
+
+| Mark | Feedback | Change |
+|---|---|---|
+| A | Knobs cramped | Row padding 0.4 to 0.85 rem; groups 1.4 rem apart |
+| B | Too much around the frame | The pill above is plain text. Below is one dim line: device names as the switch, then width and true size, in the dimmest ink |
+| C | Fold successes, focus on failures | Failed groups only; passes fold into "9 passed ▸". The window is as tall as its content |
+| D | Empty bar sloppy | One field, one button. Mark, focused take, count and Send appear only when there is something to act on |
+| E | Agent brief off brand | A card in the chrome's type: section headings, each mark as its pin glyph and the note, element on a dim line. This pass's marks are the one raised section |
+| F | Draft sloppy | Mirrors the canvas: thumbnail with marks drawn, then each mark as pin and note, element on a dim line |
+| G | Canvas too tight | Chains 3 rem apart, 1.25 rem inside a pair, chain history folded behind "3 in chain ▸" |
 
 ## Third pass: take markup (`docs/plans/take-markup.md`)
 

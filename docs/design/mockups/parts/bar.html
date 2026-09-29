@@ -1,28 +1,47 @@
     <!-- the bar under the takes canvas: the composer, the draft, and Send -->
     <div class="bar-composer">
       <div class="draft" hidden>
-        <div class="draft-head"><b>Draft</b><span class="dim">7 marks on 3 takes · 2 new takes</span><button class="btn small">Clear</button></div>
-        <ul class="draft-list">
-          <li class="grp"><b>0</b> Real files <span class="dim">→ pointed at only, no take</span></li>
-          <li><span class="id">0A</span><span class="el">div.pico-game-detail__actions</span><span class="txt">the old actions list was clearer</span></li>
-          <li class="grp"><b>6</b> Cover at half, title beside it <span class="dim">→ new take 9</span></li>
-          <li><span class="id">6A</span><span class="el">button.pico-button--go</span><span class="txt">love this</span></li>
-          <li><span class="id">6B</span><span class="el">region · div.pico-game-detail__cover +1</span><span class="txt">too heavy. thin the border to one pixel</span></li>
-          <li class="grp"><b>5</b> Stats in one row, larger <span class="dim">→ new take 10</span></li>
-          <li><span class="id">5A</span><span class="el">div.pico-game-facts__row</span><span class="txt">restore <a class="ref">0A</a> here</span></li>
-          <li class="grp"><b>3</b> Actions as chips <span class="dim">→ pointed at only, no take</span></li>
-          <li class="lost"><span class="id">3A</span><span class="el">element not found after the restart</span><span class="txt">keep the chip shape</span><button class="btn small">Re-place</button></li>
-        </ul>
+        <div class="draft-head"><b>7 marks</b><span class="dim">on 3 takes</span><button class="btn small">Clear all</button></div>
+        <div class="draft-takes">
+          <div class="dtake">
+            <div class="dthumb"><img src="assets/pico-game-detail.png" alt=""><span class="pin" style="left:32%;top:71%"><span>A</span></span></div>
+            <div class="dbody">
+              <div class="dhead"><b>Real files</b><span class="dim">pointed at only</span></div>
+              <div class="dmark"><span class="pin inline"><span>A</span></span><span class="q">the old actions list was clearer</span><span class="el">div.pico-game-detail__actions</span></div>
+            </div>
+          </div>
+          <div class="dtake">
+            <div class="dthumb"><img class="t2" src="assets/pico-game-detail.png" alt=""><span class="pin" style="left:63%;top:44%"><span>A</span></span><span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span></div>
+            <div class="dbody">
+              <div class="dhead"><b>6</b> Cover at half, title beside it<span class="will">→ take 9</span></div>
+              <div class="dmark"><span class="pin inline"><span>A</span></span><span class="q">love this</span><span class="el">button.pico-button--go</span></div>
+              <div class="dmark"><span class="pin inline"><span>B</span></span><span class="q">too heavy. thin the border to one pixel</span><span class="el">region · div.pico-game-detail__cover, img.pico-cover-art</span></div>
+            </div>
+          </div>
+          <div class="dtake">
+            <div class="dthumb"><img class="v4" src="assets/pico-game-detail.png" alt=""><span class="pin" style="left:70%;top:64%"><span>A</span></span></div>
+            <div class="dbody">
+              <div class="dhead"><b>5</b> Stats in one row, larger<span class="will">→ take 10</span></div>
+              <div class="dmark"><span class="pin inline"><span>A</span></span><span class="q">restore <span class="ref">0A</span> here</span><span class="el">div.pico-game-facts__row</span></div>
+            </div>
+          </div>
+          <div class="dtake lost">
+            <div class="dthumb"><img class="v5" src="assets/pico-game-detail.png" alt=""><span class="pin lost" style="left:48%;top:80%"><span>A</span></span></div>
+            <div class="dbody">
+              <div class="dhead"><b>3</b> Actions as chips<span class="dim">pointed at only</span></div>
+              <div class="dmark"><span class="pin inline lost"><span>A</span></span><span class="q">keep the chip shape</span><span class="el warn">element not found after the restart · <button class="link">re-place</button></span></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="bar-row">
         <button class="markbtn" aria-pressed="false" title="Mark mode (M)"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 16s5-4.2 5-8.5A5 5 0 0 0 4 7.5C4 11.8 9 16 9 16z"/><circle cx="9" cy="7.5" r="1.6" fill="currentColor" stroke="none"/></svg></button>
         <div class="focused"><b>Take 6</b><button class="btn primary">Accept</button><button class="btn">Discard</button></div>
         <textarea placeholder="Describe a change to Game Detail"></textarea>
         <div class="go">
-          <button class="btn draft-toggle" aria-expanded="false">7 marks ▾</button>
-          <span class="count">Takes <b>1</b> ▾</span>
-          <button class="btn primary send">Send 7 marks, 2 new takes</button>
+          <button class="btn draft-toggle" aria-expanded="false">7 marks</button>
+          <button class="btn primary send">Send · 2 new takes</button>
+          <button class="btn primary newtake">New take</button>
         </div>
       </div>
-      <p class="empty-hint">An agent edits copies of the real files and renders them here beside the original. Nothing touches your files until you accept.</p>
     </div>
