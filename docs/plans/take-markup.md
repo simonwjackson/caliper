@@ -48,9 +48,21 @@ exact places, as fast as possible, with no screenshots passed by hand.
      version), and saved versions inside one take (new storage and UI).
    - Cost: takes pile up. Lineage and cleanup must be shown and handled.
 
+4. **The new take's agent starts fresh, with a short text history.** It gets
+   the copied files, the marked take's screenshot with the pins drawn on it,
+   the list of marks, and, as text only: the first prompt, the planner's
+   direction, and the marks from each earlier pass in the chain. Caliper
+   builds the history from the take records, so it survives a restart. Each
+   take records the take it came from.
+   - Rejected: a fresh start with no history (the agent may undo choices made
+     on purpose), and a copy of the old conversation (it grows with every
+     pass's screenshots and is lost on restart).
+   - Cost: the old agent's own reasoning is lost. A fix that no mark named has
+     no record of why it was made.
+
 ## Open
 
-- What the new take's agent knows: the old conversation, or a fresh start.
+- Sending marks on several takes: one action for all, or one per take.
 - Marks across takes ("take 2's header in take 3").
 - Versions, since each follow-up can still make a good part worse.
 - Where marks live, and whether they survive a restart.
