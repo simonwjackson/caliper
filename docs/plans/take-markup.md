@@ -161,10 +161,20 @@ exact places, as fast as possible, with no screenshots passed by hand.
       flagged take accepted later still replaces the files accepted before,
       unless its agent rebuilds it first.
 
+13. **Discarding a take removes only that take.** Its children stay. Each
+    take stores its full text history (decision 4) in its own record when it
+    is made, so no take depends on its parent to build its history, and no
+    discard or accept can break a history. The pair view (decision 11) shows
+    a take next to its nearest ancestor that still exists, labelled for
+    example "7 ← from 3 (5 discarded)".
+    - Rejected: removing the take and all its children (one click can remove
+      good work further down), and allowing discard of the newest take only
+      (slow, and it blocks clean-up).
+    - Cost: records repeat some history text down the chain. A pair can
+      compare across a gap, so the label must say so.
+
 ## Open
 
-- Discard inside a chain: what happens to a discarded take's children, and
-  to the history that decision 4 builds from the take records.
 - Build order: marks on takes first, then marks on the original (decision 8).
 
 ## Facts checked
