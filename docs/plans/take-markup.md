@@ -31,9 +31,16 @@ exact places, as fast as possible, with no screenshots passed by hand.
    - Cost: a click on a pseudo-element or on empty space attaches to the
      parent element, which can be vaguer than meant.
 
+2. **A mark carries a note only.** You click or drag, then type. The note
+   says what you like or dislike, in your words ("love this", "too heavy").
+   The agent reads the intent from the note.
+   - Rejected: a separate keep or change flag, and a check that a kept element
+     did not change. Voice notes are not part of this plan.
+   - Cost: every mark needs typing. Nothing checks that a liked element
+     survives the follow-up.
+
 ## Open
 
-- What a mark carries besides its place (keep or change, note, voice).
 - What sending does: a follow-up in the same take, or a new take.
 - Marks across takes ("take 2's header in take 3").
 - Versions, since each follow-up can still make a good part worse.
