@@ -104,15 +104,22 @@ exact places, as fast as possible, with no screenshots passed by hand.
      after marks on takes work, since this only adds to them. The order is
      not settled.
 
-9. **A mark mode you switch on.** One key (for example `M`) or one bar
-   button turns mark mode on and off. While it is on, a click or drag in any
-   frame makes a mark, and the part does not react. Outside mark mode the
-   frames stay interactive. It works the same with a mouse and on touch.
-   - Rejected: Alt-click per mark (no touch, and parts may use it), a Takes
-     view that always marks (you cannot mark a state reached by clicking),
-     and both a mode and Alt-click (two ways to do one thing).
-   - Cost: one key press before a pass. The chrome must show clearly that the
-     mode is on, for example with a coloured frame edge and a cursor change.
+9. **A mark mode you switch on, plus Alt-click.** One key (for example `M`)
+   or one bar button turns mark mode on and off. While it is on, a click or
+   drag in any frame makes a mark, and the part does not react. It works the
+   same with a mouse and on touch, and suits a long pass. Outside mark mode,
+   Alt-click or Alt-drag makes one quick mark, and a plain click uses the
+   part.
+   - Rejected: mark mode only (an extra key press for one quick mark), Alt-click
+     only (no touch), and a Takes view that always marks (you cannot mark a
+     state reached by clicking).
+   - Cost: two ways to do one thing, and more to test. Alt-click does not
+     work on touch. A part that uses Alt-click loses it in Caliper. Some Linux
+     desktops move the window on Alt-drag, so Alt-drag may not reach the
+     page there. The chrome must show clearly that mark mode is on, for
+     example with a coloured frame edge and a cursor change.
+   - Correction: commit `ace0bd8` first recorded this as mark mode only. The
+     user chose mark mode plus Alt-click.
    - Not checked: that turning the mode on keeps a state you reached by
      clicking, such as an open menu. It should, if marking does not reload
      the frame.
