@@ -1,14 +1,53 @@
-# Visual direction: Darkroom (fourth pass)
+# Visual direction: Darkroom (seventh pass)
 
-The chosen direction for Caliper's chrome, 2026-09-28. Two other directions
-(Bench, Tiles) were shown and dropped the same day; they are in this folder's
-history at `9804fd3`. The first Darkroom pass is at `ccbda2b`, the second at `5ea59a4`, the third at `c84f3bd`.
+The chosen direction for Caliper's chrome, 2026-09-28. Decision 34 in
+`docs/decisions.md` records it, and decision 35 records how take markup
+looks. Two other directions (Bench, Tiles) were shown and dropped the same
+day; they are in this folder's history at `d2acd70`. The Darkroom passes are
+`40a76c1`, `03d63a5`, `9056d03`, `416c6a5`, `daea00b`, `a057ac8` and
+`d60973f`.
 
 `b-darkroom.html` is one page. `?state=` picks the state and `b.css` is the
 one stylesheet. Sections that changed in the second pass live in `parts/` and
 `assemble.mjs` splices them in. `index.html` is the gallery; `out/` holds
-every render at desk (1600 × 1000) and folded phone (416 × 640), light and
-dark.
+every render at desk (1600 × 1000), unfolded Fold (1000 × 680) and folded
+phone (416 × 640), light and dark.
+
+## Seventh pass: nothing the Takes panel held may be lost
+
+Moving takes onto the canvas removed the Takes panel. An audit of
+`src/client/chrome.js` found six things that panel holds and the mockup had
+no place for. Each now has one:
+
+| The panel held | Now |
+|---|---|
+| The plan review: editable directions, the strange one, Back, "Start N takes" (decisions 16, 33) | `plan`: the directions wait on the canvas in the slots their takes will fill. The bar keeps the prompt, read only, with Back and Start. |
+| A take's log, direction and "Created in" note | `log`: click the take's name. Its record opens as the side panel. |
+| Review alternate | The foot of the record. |
+| Stop | The record's header, while the take runs. Not drawn: no state shows a running take. |
+| The take count and "Send to take N" | `menu`: New take is a split button. The menu holds 1 take, 2 to 4 planned, and Send to take N (Shift+Enter). |
+| The agent line and skills | The foot of the same menu, in the dimmest ink. An agent that fails to load must show in the bar, where the prompt is. Not drawn. |
+| Image attachments (decision 32) | A clip in the field, thumbnails above it. |
+
+Three open points from the sixth pass are settled here:
+
+- Pins are two-tone: a white fill, a dark ring and a dark letter. They read
+  on a white part and on a black one. Marks do not get a hue, so the
+  no-accent rule holds.
+- The editor has no chip row. You type a mark's name, the matches drop down
+  with a crop of each, and Enter makes a token. Clicking a mark on another
+  frame while the editor is open does the same (not drawn). Twenty marks no
+  longer make a wall of chips.
+- The pair view falls back to the newest take only when the canvas cannot
+  hold one pair at true size: two frames and one gap. On the ODIN 2 PORTAL
+  (604 px a frame, 40 px gap) that is any canvas narrower than 1,248 px.
+  The rule is per device, from the canvas width. Not drawn: every takes
+  state shows the RG353M.
+
+Layout fixes: the bar reads its own width with a container query, so it
+stacks on the Fold as on the phone; a take's record hides the parts panel
+between 44 and 72 rem; on the phone the record is a sheet over the lower
+half, so the stage keeps half the height (decision 22).
 
 ## What changed in the second pass, and why
 
@@ -55,9 +94,9 @@ the designer. Each is in one of four states: `takes`, `mark`, `draft`, `agent`.
 |---|---|---|
 | Mark mode | `mark` | A pin button at the left of the bar, filled when on. Every frame gets a dashed ink edge at 4 px offset and a crosshair. The slate says "Mark mode: click or drag on any frame. M leaves." |
 | A mark | `takes`, `mark` | A click is a teardrop pin with its letter. A drag is a region: a 2 px ink box with a light fill and the letter on a tab at its top-left corner. Named by take and letter: 0A on the original. |
-| The note editor | `mark` | A card under the marked frame. The mark's name on a filled tag, one text line, then chips for the marks you can point at. Enter saves. |
-| A reference | `mark`, `draft` | In a note, "0A" is a small bordered token. In the editor you pick it from the chips, which list every mark in the draft. |
-| A lost mark | `takes`, `mark`, `draft` | A hollow dashed pin on the frame, a dashed chip in the editor, and in the draft a warn-coloured "element not found" with Re-place. |
+| The note editor | `mark` | A card under the marked frame. The mark's name on a filled tag and one text line. Enter saves. (Seventh pass: the chip row is gone.) |
+| A reference | `mark`, `draft` | In a note, "0A" is a small bordered token. In the editor you type the name and pick from a list with a crop of each mark. (Seventh pass: type-ahead, not chips.) |
+| A lost mark | `takes`, `mark`, `draft` | A hollow dashed pin on the frame, a dashed entry in the type-ahead, and in the draft a warn-coloured "element not found" with Re-place. |
 | The draft and Send | `draft` | "7 marks ▾" at the right of the bar unfolds the draft above it, grouped by take, each group saying what Send does for it. Send carries the count: "Send 7 marks, 2 new takes". |
 | The pair view | `takes` | Each chain is a head, an optional history strip, and a pair: parent at 78 % opacity, newest take at full. A chain with no follow-up is one frame. On the phone: newest only, "parent · 3 in chain" one tap away. |
 | Chain labels | `takes` | "6 ← from 1 (4 discarded)" in the chain head; the strip shows 1 → 4 (struck) → 6. A chain made before an accept is dimmed with "made before take 8 was accepted" in warn. |
@@ -76,6 +115,9 @@ Z; the plan does not say what comes after.
 | `takes` | The original and three chains as pairs, take 6 focused with two marks |
 | `mark` | Mark mode on, the note editor open at 6B |
 | `draft` | The draft unfolded above the bar |
+| `plan` | Three directions on the canvas before their takes start |
+| `menu` | The New take menu open, with one image attached |
+| `log` | Take 6's record open in the side panel |
 | `agent` | What take 9's agent received |
 | `empty` | First run: the real files, the composer, one sentence |
 | `knobs` | Knobs panel: registered, thresholds, what the part reads, literals |
@@ -126,8 +168,8 @@ All scripts run through `nix develop`. The page loads Public Sans from
   rule at 44 rem reflows every state to the phone form. Every control stays
   reachable at both sizes.
 - Decision 27: Knobs share the Takes region and the rail switches them. With
-  takes on the canvas, "the Takes region" is the right panel that Knobs and
-  Code now use alone; the decision's text would need one edit.
+  takes on the canvas, the right panel holds Knobs or a take's record.
+  Decision 34 records the change.
 - `b774276`: the page does not scroll; each region scrolls inside itself.
 
 ## Costs
@@ -142,3 +184,8 @@ All scripts run through `nix develop`. The page loads Public Sans from
 - Pins are a new interaction and a new data shape (per take, per state). The
   agent has to be told what a pin means.
 - The rail hides tool names on the desk; the phone dock shows them.
+- On the phone dock, Preview and Takes both read as pressed, because the
+  takes canvas is the preview with takes on it. The build must pick one
+  meaning. Not settled here.
+- Sizes in this mockup use a 16 px rem. The chrome uses 15 px
+  (`src/client/layout.js`). Thresholds here are not the chrome's numbers.

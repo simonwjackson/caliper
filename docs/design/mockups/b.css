@@ -468,7 +468,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   .title .mark-only { flex-basis: 100%; margin: 0; }
   .title { flex-wrap: wrap; padding: 0 .75rem; justify-content: center; }
   .p-side, .p-code { left: 0; right: 0; bottom: 0; top: auto; width: auto; height: 40%; border-radius: 14px 14px 0 0; }
-  .p-take { height: 70%; z-index: 4; }
+  /* half, not more: decision 22 keeps the stage at least half the height */
+  .p-take { height: 50%; z-index: 4; }
   .app[data-state="log"] .subject, .app[data-state="log"] .bar-composer { right: .5rem; }
   .split-menu { right: .5rem; left: .5rem; min-width: 0; }
   .p-knobs, .p-code { grid-template-rows: auto auto 1fr; }

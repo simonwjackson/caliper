@@ -1,8 +1,8 @@
-# Take markup (draft, interview in progress)
+# Take markup
 
-Status: behaviour settled (decisions 1 to 13 below). Not built. Waiting for a
-visual design pass before the build order is chosen. When that is done, the
-settled parts become a numbered decision in `docs/decisions.md`.
+Status: behaviour settled (decisions 1 to 13 below). Appearance settled
+(`docs/decisions.md` 35, drawn in `docs/design/mockups/`). Build order
+chosen (below). Not built. Slice 0 is next.
 
 ## Problem
 
@@ -174,13 +174,35 @@ exact places, as fast as possible, with no screenshots passed by hand.
     - Cost: records repeat some history text down the chain. A pair can
       compare across a gap, so the label must say so.
 
+## Build order
+
+Chosen on 2026-09-29 by the agent, under the user's instruction to go on
+alone until the work is ready to build. It is the three-slice option put to
+the user, with the visual direction (decision 34) as slice 0. Change it
+before slice 0 starts if it is wrong.
+
+| Slice | What lands | Plan decisions |
+|---|---|---|
+| 0 | The Darkroom restyle of today's chrome: tokens, rail and dock, cards, the caption under the frame, takes on the canvas, the bar with the New take menu, the plan review on the canvas, a take's record in the side panel, Knobs and Checks. `planLayout` gets its new places (decision 34). No new take behaviour. | none |
+| 1 | Marks on takes, mark mode and Alt-click, the draft on the dev server, Send, chains as pairs, accept and discard rules | 1 to 5, 9 to 13 |
+| 2 | References between takes | 6, 7 |
+| 3 | Marks on the original | 8 |
+
+Why slice 0 first: slices 1 to 3 draw on the canvas that slice 0 makes.
+Built in the old skin first, every take surface would change twice. Slice 0
+is also the only slice with no new data: CSS, DOM moves and `planLayout`.
+
+Cost: one slice passes with no new take behaviour to use. Slice 0 removes
+the Takes panel, so it must carry every capability the panel holds (the
+seventh-pass audit in the mockup README) or it leaves one unreachable.
+
 ## Open
 
-- Build order. Undecided until the visual design pass is done. Options put to
-  the user: all at once; three usable slices (marks on takes with chains,
-  then references between takes, then marks on the original); or a thinner
-  first slice with takes shown flat, and the pair view and chain rules in
-  slice 2.
+- Typed follow-ups. "Send to take N" (the New take menu) still changes the
+  take it is sent to. Decision 3 makes marks start a new take instead. The
+  two paths stay side by side in slice 0. Whether a typed follow-up should
+  also make a new take is not decided.
+- Letters after Z on one take.
 
 ## For the visual designer
 
@@ -213,8 +235,9 @@ mouse and with touch. Nothing may become unreachable at any size.
 - **What the agent sees.** The take's screenshot with the pins drawn on it
   (decision 1). This image is for the model, not only for the user.
 
-A separate visual direction for Caliper's chrome was in progress in another
-session (handoff `d8ee1657`). Match it if it has landed.
+Done on 2026-09-29: `docs/decisions.md` 35 records each surface, and the
+mockup's `takes`, `mark`, `draft` and `agent` states draw them in the
+Darkroom direction (decision 34).
 
 ## Facts checked
 

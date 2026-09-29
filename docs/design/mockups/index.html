@@ -14,6 +14,7 @@
   p { max-width: 64ch; margin: .25rem 0 .75rem; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
   .row.phones { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 44rem; margin-top: .6rem; }
+  .row.fold { max-width: 60rem; margin-top: .6rem; }
   figure { margin: 0; }
   figure img { width: 100%; height: auto; display: block; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
   figcaption { font-size: 12px; opacity: .7; margin-top: .3rem; }
@@ -24,11 +25,11 @@
 </style>
 </head>
 <body>
-<h1>Caliper: Darkroom, sixth pass</h1>
+<h1>Caliper: Darkroom, seventh pass</h1>
 <p>The room is dark and the device is the only lit thing in it. There is no accent hue: the product is the only colour on screen, and selection, focus and the live knob use ink. Takes live on the canvas as chains: the real files, then each chain as a before-and-after pair. You mark a take with lettered pins and regions (<code>docs/plans/take-markup.md</code>), and one Send makes the next take of every marked chain. In light mode the room becomes a lightbox. Each state below is the same page with <code>?state=</code>; open it on this phone to see it at real size in your system's colour scheme.</p>
 <dl><dt>Type</dt><dd>Public Sans, tabular numerals, no mono except code and CSS names</dd><dt>Dark</dt><dd>room #121316, card #1C1D21, ink #ECECEE</dd><dt>Light</dt><dd>room #DDDEE2, card #F7F7F9, ink #17181C</dd><dt>Alternative</dt><dd>one cool accent, <a href="b-darkroom.html?state=takes&accent=sky">?accent=sky</a>, kept only for comparison</dd></dl>
 <nav>
-  <a href="#takes">Chains</a><a href="#mark">Mark mode</a><a href="#draft">Draft and Send</a><a href="#agent">What the agent sees</a><a href="#empty">First run</a><a href="#knobs">Knobs</a><a href="#code">Code</a><a href="#grid">All states</a><a href="#checks">Checks</a><a href="#calibrate">Calibrate</a><a href="#error">Error</a><a href="#parts">Parts drawer</a>
+  <a href="#takes">Chains</a><a href="#mark">Mark mode</a><a href="#draft">Draft and Send</a><a href="#plan">Plan review</a><a href="#menu">New take menu</a><a href="#log">A take's record</a><a href="#agent">What the agent sees</a><a href="#empty">First run</a><a href="#knobs">Knobs</a><a href="#code">Code</a><a href="#grid">All states</a><a href="#checks">Checks</a><a href="#calibrate">Calibrate</a><a href="#error">Error</a><a href="#parts">Parts drawer</a>
 </nav>
 
 <template id="section">
@@ -36,6 +37,7 @@
     <h2><span class="title"></span><a class="live">Open live</a></h2>
     <p class="what"></p>
     <div class="row"><figure><img class="d1"><figcaption>Desk, dark</figcaption></figure><figure><img class="d2"><figcaption>Desk, light</figcaption></figure></div>
+    <div class="row fold"><figure><img class="f1"><figcaption>Fold unfolded, dark</figcaption></figure><figure><img class="f2"><figcaption>Fold unfolded, light</figcaption></figure></div>
     <div class="row phones"><figure><img class="p1"><figcaption>Phone, dark</figcaption></figure><figure><img class="p2"><figcaption>Phone, light</figcaption></figure></div>
   </section>
 </template>
@@ -43,8 +45,11 @@
 <script>
 const states = [
   ["takes", "Takes as chains", "The real files, then each chain as a before-and-after pair: parent dimmed on the left, newest take on the right. The head says where the take came from, for example \"6 ← from 1 (4 discarded)\", and unfolds the chain history as a strip. A chain with no follow-up is one frame. A chain made before another was accepted is dimmed and flagged. Marks are lettered pins, named by take: 0A on the original, 6A and 6B on take 6. A lost mark is a hollow pin. The bar holds the mark-mode button, the focused take's Accept and Discard, the composer, the draft count and Send. On the phone each chain shows the newest take only; the parent is one tap away."],
-  ["mark", "Mark mode with the note editor", "Mark mode is on: every frame gets a dashed edge and a crosshair, and the slate says how to leave. A click makes a lettered pin, a drag makes a region. The editor opens under the marked frame: the mark's name, one line of text, and the marks you can point at as chips. A lost mark is a dashed chip. Enter saves."],
+  ["mark", "Mark mode with the note editor", "Mark mode is on: every frame gets a dashed edge and a crosshair, and the slate says how to leave. A click makes a lettered pin, a drag makes a region. The editor opens under the marked frame: the mark's name and one line of text. Type a mark's name, such as 0, and the marks that match drop down with a crop of each; Enter makes the reference a token. Clicking a mark on another frame while the editor is open does the same. Enter on an empty list saves."],
   ["draft", "The draft and Send", "The draft is the marked takes in a row, the same shape as the canvas: each take with its marks drawn on, and under it each mark as pin and note, in your words. What Send does for the take sits at the right of its name. On the phone the row stacks."],
+  ["plan", "Plan review", "Asking for 3 takes plans first (decisions 16 and 33). The directions wait on the canvas, in the slots their takes will fill, beside the real files. Each is an editable title and brief with a remove button. The strange direction has a dashed edge and one line on why. The prompt stays in the bar, read only; Back returns to it, and Start carries the count of directions left."],
+  ["menu", "The New take menu", "New take is a split button. Its menu picks how many takes (1, or 2 to 4 planned), holds Send to take N for a plain follow-up prompt, and ends with the agent's model, reasoning and skills in the dimmest ink. An attached image sits above the field, with the clip beside it."],
+  ["log", "A take's record", "Click a take's name to open its record in the side panel: status, files, state, device and lineage on one line; the direction; where it was made; then the conversation, with each tool call as one dim row. Review alternate and Open the diff close it. The canvas and the bar stop at the panel. On the Fold the parts panel yields to it; on the phone it is a sheet over the lower half."],
   ["agent", "What the agent sees", "The parent take's screenshot with the marks drawn in white, beside the brief as a card in the chrome's own type: lineage, first prompt, direction, each pass's marks as pin and note, and what the agent may read and write. This pass's marks are the one raised section."],
   ["empty", "First run, no takes yet", "The real files, one field, one button. Nothing else until there is something to mark or count."],
   ["knobs", "Knobs", "Sliders for numbers, the palette as the control for a colour, a bar per container threshold with the part's current size marked. Only the live knob shows its source path."],
@@ -65,7 +70,9 @@ for (const [id, title, what] of states) {
   const desk = id !== "parts";
   s.querySelector(".d1").src = `out/b-${desk ? id : "takes"}-desk-dark.png`;
   s.querySelector(".d2").src = `out/b-${desk ? id : "takes"}-desk-light.png`;
-  if (!desk) s.querySelector(".row:not(.phones)").remove();
+  if (!desk) s.querySelectorAll(".row:not(.phones)").forEach(r => r.remove());
+  s.querySelector(".f1") && (s.querySelector(".f1").src = `out/b-${id}-fold-dark.png`);
+  s.querySelector(".f2") && (s.querySelector(".f2").src = `out/b-${id}-fold-light.png`);
   s.querySelector(".p1").src = `out/b-${id}-phone-dark.png`;
   s.querySelector(".p2").src = `out/b-${id}-phone-light.png`;
   document.body.appendChild(s);
