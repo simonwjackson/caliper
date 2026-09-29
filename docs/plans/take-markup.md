@@ -124,11 +124,23 @@ exact places, as fast as possible, with no screenshots passed by hand.
      clicking, such as an open menu. It should, if marking does not reload
      the frame.
 
+10. **Draft marks live on the dev server.** The draft is stored in
+    `.caliper/marks.json`, next to the takes, and reaches every open chrome
+    on the event stream. It survives a chrome reload and a Vite restart, and
+    the desk and the Fold see the same draft. After Send, each mark moves
+    into the record of the new take it went to, which gives decision 4 its
+    history.
+    - Rejected: the page only (a reload loses the pass), and `localStorage`
+      (one draft per browser, so no desk-to-Fold pass).
+    - Cost: two open screens edit one draft, and the last write wins. A draft
+      can go stale: if a take changes or its element is gone, the mark's
+      selector may match nothing. Caliper shows such a mark as lost and does
+      not drop it quietly.
+
 ## Open
 
 - Lineage display and cleanup. Decision 3 makes the chain of takes the
   version history, so no versions inside a take are needed.
-- Where marks live, and whether they survive a restart.
 
 ## Facts checked
 
