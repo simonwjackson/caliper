@@ -148,10 +148,23 @@ exact places, as fast as possible, with no screenshots passed by hand.
       small sizes, such as the Fold, the layout falls back to the newest take
       only, with the parent one tap away (intrinsic layout, decision 22).
 
+12. **Accept removes the accepted chain and flags the other chains.** You can
+    accept any take in a chain. Accept copies its files over the real files
+    (decision 12), then removes every take in that chain, because the work is
+    now in the product. Other chains for the same part stay, labelled "made
+    before take N was accepted".
+    - Rejected: keep every take (the panel grows, and a later accept from
+      another chain can quietly undo the first), and remove every take for
+      the part and state (other directions are lost).
+    - Cost: the older takes of the accepted chain cannot be opened or marked
+      again. Git holds the result, not the steps. The flag only warns: a
+      flagged take accepted later still replaces the files accepted before,
+      unless its agent rebuilds it first.
+
 ## Open
 
-- Accept and cleanup: which take in a chain you can accept, and what happens
-  to the rest of the chain after accept or discard.
+- Discard inside a chain: what happens to a discarded take's children, and
+  to the history that decision 4 builds from the take records.
 - Build order: marks on takes first, then marks on the original (decision 8).
 
 ## Facts checked
