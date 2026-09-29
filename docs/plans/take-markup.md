@@ -39,9 +39,18 @@ exact places, as fast as possible, with no screenshots passed by hand.
    - Cost: every mark needs typing. Nothing checks that a liked element
      survives the follow-up.
 
+3. **Sending a take's marks makes a new take from the marked one.** Caliper
+   copies the marked take's files into a new take, as "Prepare alternate"
+   does in `src/takes/integration.js`. The new take's agent works on the
+   marks. The marked take does not change, so a bad result costs nothing:
+   discard it and mark the old take again.
+   - Rejected: a follow-up in the same take (a bad result loses the good
+     version), and saved versions inside one take (new storage and UI).
+   - Cost: takes pile up. Lineage and cleanup must be shown and handled.
+
 ## Open
 
-- What sending does: a follow-up in the same take, or a new take.
+- What the new take's agent knows: the old conversation, or a fresh start.
 - Marks across takes ("take 2's header in take 3").
 - Versions, since each follow-up can still make a good part worse.
 - Where marks live, and whether they survive a restart.
