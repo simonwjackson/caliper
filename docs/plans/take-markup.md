@@ -91,11 +91,24 @@ exact places, as fast as possible, with no screenshots passed by hand.
      whose marks are all pointed to, add one more mark on it. A wrong guess
      shows in the button count, not as a question.
 
+8. **You can mark the original fully.** Marks on the original are named
+   "0A", "0B" and so on. A take's note can point to them ("restore 0A"), and
+   pointing to one never makes a take. A mark on the original that no note
+   points to starts a new take from the real files, by the same rule as
+   decision 7. When you also type a prompt, the marks go with it, and the
+   planner (decision 16) reads them when it proposes directions.
+   - Rejected: marks on takes only (you cannot point at the product), and
+     marks on the original for pointing only (marks cannot start work).
+   - Cost: marks become a second way to start takes. The planner prompt and
+     the Takes panel get a new entry path to test. Recommended build order:
+     after marks on takes work, since this only adds to them. The order is
+     not settled.
+
 ## Open
 
 - Lineage display and cleanup. Decision 3 makes the chain of takes the
   version history, so no versions inside a take are needed.
-- Whether you can mark the original, not only takes.
+- How a click makes a mark instead of using the part.
 - Where marks live, and whether they survive a restart.
 
 ## Facts checked
