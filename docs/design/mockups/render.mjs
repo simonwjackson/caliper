@@ -14,13 +14,14 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "out");
-export const STATES = ["takes", "empty", "knobs", "code", "grid", "compare", "checks", "calibrate", "error", "parts"];
+export const STATES = ["takes", "empty", "knobs", "code", "grid", "checks", "calibrate", "error", "parts"];
 const states = process.argv.slice(2).length ? process.argv.slice(2) : STATES;
 const sizes = [
   { name: "desk", width: 1600, height: 1000, scale: 1 },
   { name: "phone", width: 416, height: 640, scale: 3 },
 ];
 const types = { ".html": "text/html", ".css": "text/css", ".png": "image/png", ".ttf": "font/ttf", ".mjs": "text/javascript" };
+const extra = [["takes", "desk", "dark", "sky"], ["takes", "desk", "light", "sky"], ["knobs", "desk", "dark", "sky"]];
 
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
@@ -49,6 +50,19 @@ for (const state of states) {
       await ctx.close();
     }
   }
+}
+// the one alternative accent, for comparison only
+for (const [state, sizeName, scheme, accent] of extra) {
+  if (!states.includes(state)) continue;
+  const size = sizes.find((s) => s.name === sizeName);
+  const ctx = await browser.newContext({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, colorScheme: scheme });
+  const p = await ctx.newPage();
+  await p.goto(`${base}/b-darkroom.html?state=${state}&accent=${accent}`, { waitUntil: "networkidle" });
+  await p.evaluate(() => document.fonts.ready);
+  const file = join(out, `b-${state}-${sizeName}-${scheme}-${accent}.png`);
+  await p.screenshot({ path: file });
+  console.log(file);
+  await ctx.close();
 }
 await browser.close();
 server.close();

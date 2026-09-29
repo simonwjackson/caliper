@@ -1,35 +1,38 @@
-# Visual direction: Darkroom
+# Visual direction: Darkroom (second pass)
 
 The chosen direction for Caliper's chrome, 2026-09-28. Two other directions
 (Bench, Tiles) were shown and dropped the same day; they are in this folder's
-history at `9804fd3` if the reason ever needs revisiting.
+history at `9804fd3`. The first Darkroom pass is at `ccbda2b`.
 
-`b-darkroom.html` is one page. `?state=` picks the state; `b.css` is the one
-stylesheet. `index.html` is the gallery, and `out/` holds every render at desk
-(1600 × 1000) and folded phone (416 × 640), light and dark.
+`b-darkroom.html` is one page. `?state=` picks the state and `b.css` is the
+one stylesheet. Sections that changed in the second pass live in `parts/` and
+`assemble.mjs` splices them in. `index.html` is the gallery; `out/` holds
+every render at desk (1600 × 1000) and folded phone (416 × 640), light and
+dark.
 
-| State | Shows |
+## What changed in the second pass, and why
+
+| Feedback | Change |
 |---|---|
-| `takes` | Editing view, three takes, one running |
-| `empty` | First run: no takes, the invitation |
-| `knobs` | Knobs panel in the Takes region, four groups, one live |
+| The items around takes felt like noise | Takes moved out of the panel onto the canvas, in one row beside the real files. Under a frame there is only its name and a dot if a check failed. The right panel is gone in that state. Accept, Discard and Revise sit in the one bar at the bottom, with the composer. |
+| Need to see takes together and comment on what works | Click a take to focus it; drop numbered pins on the image, each with a note. "Revise from notes" sends them to the agent. Staged, not built. |
+| Not keen on the yellow | No accent hue. Selection, focus, the live knob and the primary button use ink. The product is the only colour on screen. `?accent=sky` keeps one cool alternative for comparison. |
+| Checks modal: less slop | Donut, badge pills and footer copy removed. One total line, then a glyph column (tick, cross, dash) per group. Failed group first with its reason inline. |
+| Knobs: show, do not tell | Sliders for numbers. The whole 16-colour palette is the control for a colour. A container threshold is a bar with the threshold mark and a "now" line for the part's current size. Only the live knob shows its source path. Skipped outputs fold into one line. |
+
+## States
+
+| `?state=` | Shows |
+|---|---|
+| `takes` | Real files and three takes on the canvas, take 1 focused with two pins |
+| `empty` | First run: the real files, the composer, one sentence |
+| `knobs` | Knobs panel: registered, thresholds, what the part reads, literals |
 | `code` | Code pane under the stage with a take diff |
-| `grid` | All five states of the part side by side at true size |
-| `compare` | Real files beside a take, with the verdict pill |
+| `grid` | All five states side by side at true size |
 | `checks` | Checks window over the room |
 | `calibrate` | Credit-card outline and the scale slider |
 | `error` | A part that throws: the frame carries the failure |
 | `parts` | Phone only: the parts drawer |
-
-## The direction in one paragraph
-
-The room is dark and the device is the only lit thing in it. Tools live on a
-rail at the left, like a tool column. Panels are opaque cards that float over
-the room with one hard edge and no blur. One accent, safelight amber, marks
-only what is current: the pressed tool, the live knob, the running take, the
-selected state. Everything else is grey ink on a grey card. In light mode the
-room becomes a lightbox and the amber darkens to keep contrast. Type is Public
-Sans with tabular numerals; mono appears only for code and CSS names.
 
 ## Run
 
@@ -37,30 +40,30 @@ Sans with tabular numerals; mono appears only for code and CSS names.
 docs/design/mockups/serve.mjs          # http://[::]:5312/, any host, all interfaces
 docs/design/mockups/render.mjs         # writes out/*.png through the dev shell's Chromium
 docs/design/mockups/render.mjs knobs   # one state
+docs/design/mockups/assemble.mjs       # splice parts/*.html back into the page after editing
 docs/design/mockups/probe.mjs b-darkroom 416 640   # prints each region's box
 ```
 
-Both scripts run through `nix develop`. The page loads Public Sans from
+All scripts run through `nix develop`. The page loads Public Sans from
 `assets/fonts/` (copied from nixpkgs), never from a CDN.
 
 ## What is real and what is staged
 
-- The screen in the frame is a crop of a real render of Pico's Game Detail
-  part on the RG353M, from `/tmp/caliper-verify/layout-1600x1000-open.png`
-  (2026-09-27). It is 279 px wide, which is 72 mm at 3.875 px/mm.
-- The other four states in the grid, the three takes and the compare frame are
-  the same screen re-tinted with CSS filters.
-- The knobs are real Pico declarations: `--pico-pixel-rows`, `--pico-pixel-min`,
-  `--pico-bg`, `--pico-accent` (registered), the two `@container` thresholds in
-  `PicoGameFacts.css:27` and `PicoLaunchStage.css:118`, and the plain roles.
-  The skipped outputs (`--pico-px`, `--pico-cycle`) are the ones decision 26
-  skips. The literal (`gap: 6px`) is invented.
-- The code diff is invented but shaped like Pico's CSS. The check names,
-  statuses and notes match `src/client/checks-panel.js`. The error text
-  matches the shape `src/client/frame.js` produces.
-- On the phone, the single-frame states show the ODIN 2 PORTAL, which cannot
-  fit at true size, so the caption carries the scaled warning decision 8
-  requires. Grid, compare and error show the RG353M at true size.
+- The screen in every frame is one real render of Pico's Game Detail part on
+  the RG353M (279 px wide, which is 72 mm at 3.875 px/mm). The other states
+  and the takes are the same screen re-tinted with CSS filters.
+- Pins and notes on a take, and "Revise from notes", are a proposal. Nothing
+  in the chrome does this today.
+- The knobs are Pico's real declarations: `--pico-pixel-rows`,
+  `--pico-pixel-min`, `--pico-bg`, `--pico-accent`; the thresholds in
+  `PicoGameFacts.css:27` and `PicoLaunchStage.css:118`; the roles the part
+  reads. The "now 19em" marks are invented. The literal is invented.
+- The code diff is invented but shaped like Pico's CSS. Check names and
+  statuses match `src/client/checks-panel.js`. The error text matches the
+  shape `src/client/frame.js` produces.
+- On the phone, knobs and code show the ODIN 2 PORTAL, which cannot fit at
+  true size, so the caption carries the scaled warning decision 8 requires.
+  Takes, grid and error show the RG353M at true size.
 
 ## Rules the direction keeps
 
@@ -69,24 +72,21 @@ Both scripts run through `nix develop`. The page loads Public Sans from
 - Decision 10: plain HTML and CSS. `b.css` could become the chrome's CSS.
 - Decision 22: layout is a function of the container. One `@container`
   rule at 44 rem reflows every state to the phone form. Every control stays
-  reachable: Parts, Preview, Takes, Code, Knobs, Checks and Calibrate are one
-  tap away at both sizes.
-- Decision 27: Knobs share the Takes region and the rail switches them.
+  reachable at both sizes.
+- Decision 27: Knobs share the Takes region and the rail switches them. With
+  takes on the canvas, "the Takes region" is the right panel that Knobs and
+  Code now use alone; the decision's text would need one edit.
 - `b774276`: the page does not scroll; each region scrolls inside itself.
 
 ## Costs
 
-- Floating panels steal room width. Between the two panels the desk has about
-  860 px of free room at 1600 wide, so the grid wraps to two columns of
-  RG353M frames and the ODIN 2 PORTAL (604 px) fits with little margin. A
-  narrower desk needs the panels to dock, which is a third layout form
-  `planLayout` does not have today.
-- Amber is not one colour: `#F5A93D` on dark, `#C7740A` on light. Both pass
-  contrast against their cards; the swap is a rule the chrome must carry.
-- The rail hides tool names. It relies on icons plus tooltips, and on the
-  phone the dock shows the names, so the desk is the only place a name is
-  missing.
-- The sheet on the phone takes 40 % of the height by default and 52 % for the
-  first-run copy. The frame above it scrolls, which is allowed, but the
-  scaled ODIN 2 PORTAL warning is the first thing to go under the sheet on a
-  short phone.
+- Takes on the canvas need room. At 1600 wide the free room holds the real
+  files plus three RG353M takes in one row; a fourth wraps. On the ODIN 2
+  PORTAL (604 px each) only two fit side by side at true size, so a take
+  review on that device wraps or scales, and scaling must say so.
+- With no accent hue, "selected" and "live" are both ink rings. The live knob
+  adds a halo to tell them apart. If that proves too quiet in use, the `sky`
+  accent is one token away.
+- Pins are a new interaction and a new data shape (per take, per state). The
+  agent has to be told what a pin means.
+- The rail hides tool names on the desk; the phone dock shows them.

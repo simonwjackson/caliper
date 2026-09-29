@@ -1,0 +1,69 @@
+    <!-- ===================== knobs ===================== -->
+    <section class="panel p-side p-knobs">
+      <div class="sheet-handle"></div>
+      <header>Knobs <span class="sub">Game Detail, Default</span></header>
+      <div class="knobs-body">
+        <div class="kgroup"><h3>Registered <span class="n">4</span></h3>
+          <div class="knob live">
+            <label><code>--pico-pixel-rows</code></label>
+            <input type="range" min="180" max="720" value="352">
+            <span class="val">352</span>
+            <span class="where"><b>Live in 2 frames.</b> Release writes <code>pico-tokens.css:98</code></span>
+          </div>
+          <div class="knob">
+            <label><code>--pico-pixel-min</code></label>
+            <input type="range" min="1" max="6" value="2">
+            <span class="val">2<span class="unit">px</span></span>
+          </div>
+          <div class="knob color">
+            <label><code>--pico-bg</code></label>
+            <div class="swatches" aria-label="Palette">
+              <button aria-pressed="true" style="background:#000000" title="black"></button><button style="background:#1d2b53" title="navy"></button><button style="background:#7e2553" title="maroon"></button><button style="background:#008751" title="green"></button><button style="background:#ab5236" title="brown"></button><button style="background:#5f574f" title="slate"></button><button style="background:#c2c3c7" title="silver"></button><button style="background:#fff1e8" title="white"></button><button style="background:#ff004d" title="red"></button><button style="background:#ffa300" title="orange"></button><button style="background:#ffec27" title="yellow"></button><button style="background:#00e436" title="lime"></button><button style="background:#29adff" title="blue"></button><button style="background:#83769c" title="lilac"></button><button style="background:#ff77a8" title="pink"></button><button style="background:#ffccaa" title="peach"></button>
+            </div>
+          </div>
+          <div class="knob color">
+            <label><code>--pico-accent</code></label>
+            <div class="swatches" aria-label="Palette">
+              <button style="background:#000000"></button><button style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button aria-pressed="true" style="background:#ff77a8"></button><button style="background:#ffccaa"></button>
+            </div>
+          </div>
+          <details class="skipped"><summary>2 outputs skipped ▾</summary><span><code>--pico-px</code> is computed, <code>--pico-cycle</code> is animated</span></details>
+        </div>
+
+        <div class="kgroup"><h3>Thresholds <span class="n">2 reach this part</span></h3>
+          <div class="knob t">
+            <label><code>pico-stage</code> height</label>
+            <div class="thr"><div class="track"></div><div class="below" style="width:44%"></div><span class="mark" style="left:44%"></span><span class="now" data-l="now 19em" style="left:58%"></span></div>
+            <span class="val">16<span class="unit">em</span></span>
+          </div>
+          <div class="knob t">
+            <label><code>pico-launch</code> height</label>
+            <div class="thr"><div class="track"></div><div class="below" style="width:62%"></div><span class="mark" style="left:62%"></span><span class="now" data-l="now 19em" style="left:52%"></span></div>
+            <span class="val">22<span class="unit">em</span></span>
+          </div>
+        </div>
+
+        <div class="kgroup"><h3>This part reads <span class="n">3</span></h3>
+          <div class="knob color">
+            <label><code>--pico-go</code></label>
+            <div class="swatches"><button style="background:#000000"></button><button style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button aria-pressed="true" style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button style="background:#ff77a8"></button><button style="background:#ffccaa"></button></div>
+          </div>
+          <div class="knob color">
+            <label><code>--pico-plate</code></label>
+            <div class="swatches"><button style="background:#000000"></button><button aria-pressed="true" style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button style="background:#ff77a8"></button><button style="background:#ffccaa"></button></div>
+          </div>
+          <div class="knob">
+            <label><code>--pico-u</code></label>
+            <input type="range" min="2" max="8" value="4">
+            <span class="val">4<span class="unit">px</span></span>
+          </div>
+        </div>
+
+        <div class="kgroup"><h3>Literals <span class="n">1</span></h3>
+          <div class="literal">
+            <span><code>gap: 6px</code><br><span class="where">.pico-game-facts__row</span></span>
+            <button class="btn">Make a token</button>
+          </div>
+        </div>
+      </div>
+    </section>

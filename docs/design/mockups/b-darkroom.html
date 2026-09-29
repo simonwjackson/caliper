@@ -60,7 +60,7 @@
     <!-- ===================== subject ===================== -->
     <figure class="subject" style="margin:0">
       <!-- single frame -->
-      <div class="slate s-single"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>The screen after selecting a game</span></div>
+      <div class="slate s-single"><b>Game Detail</b><span>Default</span></div>
       <img class="screen s-single" src="assets/pico-game-detail.png" alt="Game Detail, Default state">
       <div class="caption s-single">
         <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
@@ -69,15 +69,23 @@
         <span class="true">True size</span>
       </div>
 
-      <!-- grid: every state -->
-      <div class="s-grid">
-        <div class="slate"><b>Game Detail</b><span>All 5 states</span><span class="sep"></span><span>Each RG353M, 72 mm, true size</span></div>
-        <div class="cells">
-          <div class="cell on"><div class="lab"><b>Default</b></div><img class="screen" src="assets/pico-game-detail.png" alt=""></div>
-          <div class="cell"><div class="lab"><b>No art or history</b></div><img class="screen v2" src="assets/pico-game-detail.png" alt=""></div>
-          <div class="cell"><div class="lab"><b>Multiple locations</b></div><img class="screen v3" src="assets/pico-game-detail.png" alt=""></div>
-          <div class="cell"><div class="lab"><b>Choose location</b></div><img class="screen v4" src="assets/pico-game-detail.png" alt=""></div>
-          <div class="cell"><div class="lab"><b>Confirm removal</b> <span class="badge bad">1 check failed</span></div><img class="screen v5" src="assets/pico-game-detail.png" alt=""></div>
+      <!-- takes on the canvas: the real files and every take, side by side -->
+      <div class="s-takes">
+        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>3 takes</span></div>
+        <div class="frames">
+          <figure class="fr orig"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Real files</b></figcaption></figure>
+          <figure class="fr focus">
+            <img class="screen" src="assets/pico-game-detail.png" alt="">
+            <div class="pins"><span class="pin" style="left:22%;top:48%"><span>1</span></span><span class="pin" style="left:66%;top:39%"><span>2</span></span></div>
+            <figcaption><b>1</b> Cover art two thirds wide <span class="dot good"></span></figcaption>
+            <div class="notes">
+              <div class="note"><i>1</i><span>Too wide. The cover should not push the title down.</span></div>
+              <div class="note"><i>2</i><span>This stat row is right. Keep it.</span></div>
+              <input placeholder="Click the take to add a note">
+            </div>
+          </figure>
+          <figure class="fr"><img class="screen t2" src="assets/pico-game-detail.png" alt=""><figcaption><b>2</b> Stats in one row <span class="dot"></span></figcaption></figure>
+          <figure class="fr running"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>3</b> Actions as chips <span class="dim">rendering</span></figcaption></figure>
         </div>
         <div class="caption">
           <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
@@ -85,17 +93,19 @@
         </div>
       </div>
 
-      <!-- compare: real files against a take -->
-      <div class="s-compare">
-        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>Compare take 1</span></div>
-        <div class="pair">
-          <div><div class="lab"><b>Real files</b><span>as on disk</span></div><img class="screen" src="assets/pico-game-detail.png" alt=""></div>
-          <div><div class="lab"><b>Take 1</b><span>Cover art two thirds wide</span><span class="badge good">3 of 3 checks</span></div><img class="screen take" src="assets/pico-game-detail.png" alt=""></div>
+      <!-- grid: every state -->
+      <div class="s-grid">
+        <div class="slate"><b>Game Detail</b><span>All 5 states</span></div>
+        <div class="frames">
+          <figure class="fr focus"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Default</b></figcaption></figure>
+          <figure class="fr"><img class="screen v2" src="assets/pico-game-detail.png" alt=""><figcaption><b>No art or history</b></figcaption></figure>
+          <figure class="fr"><img class="screen v3" src="assets/pico-game-detail.png" alt=""><figcaption><b>Multiple locations</b></figcaption></figure>
+          <figure class="fr"><img class="screen v4" src="assets/pico-game-detail.png" alt=""><figcaption><b>Choose location</b></figcaption></figure>
+          <figure class="fr"><img class="screen v5" src="assets/pico-game-detail.png" alt=""><figcaption><b>Confirm removal</b> <span class="dot"></span></figcaption></figure>
         </div>
         <div class="caption">
           <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
           <span class="true">True size</span>
-          <span class="verdict"><span>2 files changed</span><span class="good">no new browser errors</span><button class="btn primary">Accept take 1</button><button class="btn">Discard</button></span>
         </div>
       </div>
 
@@ -119,8 +129,8 @@
         <div class="err-copy">
           <b>Confirm removal: src/pages/PicoGameDetail.page.part.tsx threw while rendering</b>
           <pre>TypeError: Cannot read properties of undefined (reading 'title')
-        at ConfirmRemoval (src/pages/PicoGameDetail.page.part.tsx:41:22)
-        at renderWithHooks (node_modules/.vite/deps/react-dom_client.js:5908:24)</pre>
+    at ConfirmRemoval (src/pages/PicoGameDetail.page.part.tsx:41:22)
+    at renderWithHooks (node_modules/.vite/deps/react-dom_client.js:5908:24)</pre>
         </div>
       </div>
 
@@ -130,133 +140,87 @@
         <div class="calib-card">
           <p>Set the browser zoom to 100%. Hold a credit card against the screen, and move the slider until the outline matches the card.</p>
           <label class="scale"><span>Scale</span><input type="range" min="2" max="12" step="0.01" value="3.875"><output>3.88 px/mm</output></label>
-          <div class="actions"><button class="btn">Reset</button><button class="btn amber">Done</button></div>
+          <div class="actions"><button class="btn">Reset</button><button class="btn primary">Done</button></div>
         </div>
       </div>
     </figure>
 
-
-    <!-- ===================== takes ===================== -->
-    <section class="panel p-side p-takes">
-      <div class="sheet-handle"></div>
-      <header>Takes <span class="sub">claude-opus-5-5, reasoning medium</span></header>
-      <div class="take-list">
-        <div class="take">
-          <div class="thumb" style="background-image:url(assets/pico-game-detail.png)"></div>
-          <div><h4>Cover art two thirds wide</h4>
-            <div class="meta"><span class="good">3 of 3 checks passed</span><span>2 files</span><span>48 s</span></div>
-            <div class="actions"><button class="btn primary">Accept</button><button class="btn">Compare</button><button class="btn">Discard</button></div></div>
-        </div>
-        <div class="take">
-          <div class="thumb t2" style="background-image:url(assets/pico-game-detail.png)"></div>
-          <div><h4>Stats in one row under the title</h4>
-            <div class="meta"><span class="bad">1 check failed</span><span>1 file</span><span>39 s</span></div>
-            <div class="actions"><button class="btn primary">Accept</button><button class="btn">Compare</button><button class="btn">Discard</button></div></div>
-        </div>
-        <div class="take running">
-          <div class="thumb t3" style="background-image:url(assets/pico-game-detail.png)"></div>
-          <div><h4>Actions as one horizontal row of chips</h4>
-            <div class="meta"><span>Rendering, step 3 of 5</span><span>21 s</span></div>
-            <div class="progress"><i></i></div></div>
-        </div>
-      </div>
-      <div class="takes-empty">
-        <h3>No takes of Game Detail yet</h3>
-        <p>Describe a change below. An agent edits copies of the real files, renders them on the RG353M, and shows the result here beside the original.</p>
-        <ul>
-          <li>Nothing touches your files until you accept.</li>
-          <li>Ask for several takes and the planner proposes different directions first.</li>
-          <li>Authored checks run on every take.</li>
-        </ul>
-        <label class="plan"><input type="checkbox" checked> Plan directions before takes start</label>
-      </div>
-      <div class="composer">
-        <textarea placeholder="Describe a change to Game Detail" autofocus></textarea>
-        <div class="foot"><span class="count">Takes <b>1</b> ▾</span><span class="hint">Ctrl+Enter starts</span><button class="go">New take</button></div>
-      </div>
-    </section>
-
+    <!-- the bar under the takes canvas -->
+    <div class="bar-composer">
+      <div class="focused"><b>Take 1</b><button class="btn primary">Accept</button><button class="btn">Discard</button><button class="btn">Revise from notes</button></div>
+      <textarea placeholder="Describe a change to Game Detail"></textarea>
+      <div class="go"><span class="count">Takes <b>1</b> ▾</span><span class="hint">Ctrl+Enter</span><button class="btn primary">New take</button></div>
+      <p class="empty-hint">An agent edits copies of the real files and renders them here beside the original. Nothing touches your files until you accept.</p>
+    </div>
     <!-- ===================== knobs ===================== -->
     <section class="panel p-side p-knobs">
       <div class="sheet-handle"></div>
-      <header>Knobs <span class="sub">Game Detail, Default, on RG353M</span></header>
+      <header>Knobs <span class="sub">Game Detail, Default</span></header>
       <div class="knobs-body">
-        <div class="kgroup"><h3>Registered <span class="n">4 of 6</span></h3>
+        <div class="kgroup"><h3>Registered <span class="n">4</span></h3>
           <div class="knob live">
-            <label title="Drag sideways to change. Shift moves ten steps."><code>--pico-pixel-rows</code></label>
-            <span class="field">352 <span class="unit">rows</span></span>
-            <span class="site">in <code>@property</code>, set on <code>.pico-theme</code> · <button>pico-tokens.css:98</button></span>
-            <span class="status">Live in 2 frames. Release writes the file.</span>
+            <label><code>--pico-pixel-rows</code></label>
+            <input type="range" min="180" max="720" value="352">
+            <span class="val">352</span>
+            <span class="where"><b>Live in 2 frames.</b> Release writes <code>pico-tokens.css:98</code></span>
           </div>
           <div class="knob">
             <label><code>--pico-pixel-min</code></label>
-            <span class="field">2 <span class="unit">px</span></span>
-            <span class="site">from <code>initial-value</code> · <button>pico-tokens.css:38</button></span>
+            <input type="range" min="1" max="6" value="2">
+            <span class="val">2<span class="unit">px</span></span>
           </div>
-          <div class="knob">
+          <div class="knob color">
             <label><code>--pico-bg</code></label>
-            <span class="field"><span class="swatch" style="background:#000"></span> p8-black</span>
-            <span class="site">a role over the palette · <button>pico-tokens.css:98</button></span>
-            <div class="palette" aria-label="Palette">
-              <button aria-pressed="true" style="background:#000000" title="black"></button><button style="background:#1d2b53" title="navy"></button><button style="background:#7e2553" title="maroon"></button><button style="background:#008751" title="green"></button><button style="background:#ab5236" title="brown"></button><button style="background:#5f574f" title="slate"></button><button style="background:#c2c3c7" title="silver"></button><button style="background:#fff1e8" title="white"></button>
-              <button style="background:#ff004d" title="red"></button><button style="background:#ffa300" title="orange"></button><button style="background:#ffec27" title="yellow"></button><button style="background:#00e436" title="lime"></button><button style="background:#29adff" title="blue"></button><button style="background:#83769c" title="lilac"></button><button style="background:#ff77a8" title="pink"></button><button style="background:#ffccaa" title="peach"></button>
+            <div class="swatches" aria-label="Palette">
+              <button aria-pressed="true" style="background:#000000" title="black"></button><button style="background:#1d2b53" title="navy"></button><button style="background:#7e2553" title="maroon"></button><button style="background:#008751" title="green"></button><button style="background:#ab5236" title="brown"></button><button style="background:#5f574f" title="slate"></button><button style="background:#c2c3c7" title="silver"></button><button style="background:#fff1e8" title="white"></button><button style="background:#ff004d" title="red"></button><button style="background:#ffa300" title="orange"></button><button style="background:#ffec27" title="yellow"></button><button style="background:#00e436" title="lime"></button><button style="background:#29adff" title="blue"></button><button style="background:#83769c" title="lilac"></button><button style="background:#ff77a8" title="pink"></button><button style="background:#ffccaa" title="peach"></button>
             </div>
           </div>
-          <div class="knob">
+          <div class="knob color">
             <label><code>--pico-accent</code></label>
-            <span class="field"><span class="swatch" style="background:#ff77a8"></span> p8-pink</span>
-            <span class="site">a role over the palette · <button>pico-tokens.css:99</button></span>
-            <span class="status">Written to pico-tokens.css:99 at 13:41.</span>
+            <div class="swatches" aria-label="Palette">
+              <button style="background:#000000"></button><button style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button aria-pressed="true" style="background:#ff77a8"></button><button style="background:#ffccaa"></button>
+            </div>
           </div>
-          <p class="skipped">Skipped: <code>--pico-px</code> is computed with <code>max()</code>; <code>--pico-cycle</code> is set inside <code>@keyframes</code>.</p>
+          <details class="skipped"><summary>2 outputs skipped ▾</summary><span><code>--pico-px</code> is computed, <code>--pico-cycle</code> is animated</span></details>
         </div>
 
         <div class="kgroup"><h3>Thresholds <span class="n">2 reach this part</span></h3>
-          <div class="knob">
-            <label class="thr"><code>@container pico-stage (height &lt; <b>16em</b>)</code></label>
-            <span class="field">16 <span class="unit">em</span></span>
-            <span class="site">stacks the facts under the cover · <button>PicoGameFacts.css:27</button></span>
+          <div class="knob t">
+            <label><code>pico-stage</code> height</label>
+            <div class="thr"><div class="track"></div><div class="below" style="width:44%"></div><span class="mark" style="left:44%"></span><span class="now" data-l="now 19em" style="left:58%"></span></div>
+            <span class="val">16<span class="unit">em</span></span>
           </div>
-          <div class="knob">
-            <label class="thr"><code>@container pico-launch (height &lt; <b>22em</b>)</code></label>
-            <span class="field">22 <span class="unit">em</span></span>
-            <span class="site">hides the hint row · <button>PicoLaunchStage.css:118</button></span>
+          <div class="knob t">
+            <label><code>pico-launch</code> height</label>
+            <div class="thr"><div class="track"></div><div class="below" style="width:62%"></div><span class="mark" style="left:62%"></span><span class="now" data-l="now 19em" style="left:52%"></span></div>
+            <span class="val">22<span class="unit">em</span></span>
           </div>
         </div>
 
-        <div class="kgroup"><h3>Plain properties <span class="n">6 this part reads</span></h3>
-          <div class="knob">
+        <div class="kgroup"><h3>This part reads <span class="n">3</span></h3>
+          <div class="knob color">
             <label><code>--pico-go</code></label>
-            <span class="field"><span class="swatch" style="background:#ffec27"></span> p8-yellow</span>
-            <span class="site">read by <code>.pico-button--go</code> · <button>pico-tokens.css:109</button></span>
+            <div class="swatches"><button style="background:#000000"></button><button style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button aria-pressed="true" style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button style="background:#ff77a8"></button><button style="background:#ffccaa"></button></div>
           </div>
-          <div class="knob">
+          <div class="knob color">
             <label><code>--pico-plate</code></label>
-            <span class="field"><span class="swatch" style="background:#1d2b53"></span> p8-navy</span>
-            <span class="site">read by <code>.pico-row</code>, <code>.pico-chip</code> · <button>pico-tokens.css:105</button></span>
+            <div class="swatches"><button style="background:#000000"></button><button aria-pressed="true" style="background:#1d2b53"></button><button style="background:#7e2553"></button><button style="background:#008751"></button><button style="background:#ab5236"></button><button style="background:#5f574f"></button><button style="background:#c2c3c7"></button><button style="background:#fff1e8"></button><button style="background:#ff004d"></button><button style="background:#ffa300"></button><button style="background:#ffec27"></button><button style="background:#00e436"></button><button style="background:#29adff"></button><button style="background:#83769c"></button><button style="background:#ff77a8"></button><button style="background:#ffccaa"></button></div>
           </div>
           <div class="knob">
             <label><code>--pico-u</code></label>
-            <span class="field">4 <span class="unit">px</span></span>
-            <span class="site">read by 11 rules · <button>pico-tokens.css:180</button></span>
+            <input type="range" min="2" max="8" value="4">
+            <span class="val">4<span class="unit">px</span></span>
           </div>
         </div>
 
-        <div class="kgroup"><h3>Literals <span class="n">1 could be a token</span></h3>
+        <div class="kgroup"><h3>Literals <span class="n">1</span></h3>
           <div class="literal">
-            <span><code>gap: 6px</code> in <code>.pico-game-facts__row</code></span>
-            <span class="site">PicoGameFacts.css:14 · the only raw length in this part</span>
-            <div class="literal-form">
-              <label>Token name<input value="--pico-facts-gap"></label>
-              <label>Put it in<select><option>.pico-theme (pico-tokens.css), beside 41 sibling tokens</option><option>:root</option></select></label>
-              <span class="preview-line">gap: var(--pico-facts-gap);  /* --pico-facts-gap: 6px */</span>
-              <div class="actions"><button class="btn">Cancel</button><button class="btn amber">Create token</button></div>
-            </div>
+            <span><code>gap: 6px</code><br><span class="where">.pico-game-facts__row</span></span>
+            <button class="btn">Make a token</button>
           </div>
         </div>
       </div>
     </section>
-
     <!-- ===================== code pane ===================== -->
     <section class="panel p-code">
       <div class="sheet-handle"></div>
@@ -297,30 +261,30 @@
     <section class="panel p-checks" role="dialog" aria-label="Checks">
       <header>Checks <button class="close">Close</button></header>
       <div class="checks-body">
-        <div class="summary">
-          <div class="ring"></div>
-          <div><h3>9 of 10 passed</h3><p>10 state/device results · Real files · 28 Sep 2026, 13:40</p></div>
-          <button class="btn primary">Run again</button>
+        <div class="sum"><b>9 of 10 passed</b><span>real files · 13:40</span><button class="btn primary">Run again</button></div>
+        <div class="cg failed">
+          <span class="g no">✕</span><span class="h"><b>Confirm removal</b> <span class="dev">RG353M</span></span>
+          <span></span><span class="l reason">threw while rendering: Cannot read properties of undefined (reading 'title')</span>
+          <span class="g na">–</span><span class="l">cancel keeps the game <span class="dim">not run</span></span>
         </div>
-        <div class="res">
-          <div class="head"><b>Game Detail</b><span class="sub">Default · RG353M</span><span class="badge good">Passed</span></div>
-          <div class="line">Render, browser errors, overflow, accessibility, repeat renders<span class="badge good">Passed</span></div>
-          <div class="line">Accepted image<span class="badge good">Matches</span></div>
-          <div class="line auth">play launches or asks where<span class="badge good">Passed</span></div>
-          <div class="line auth">back returns to the library<span class="badge good">Passed</span></div>
+        <div class="cg">
+          <span class="g ok">✓</span><span class="h"><b>Default</b> <span class="dev">RG353M</span></span>
+          <span class="g ok">✓</span><span class="l">render, errors, overflow, accessibility, repeat</span>
+          <span class="g ok">✓</span><span class="l">matches the accepted image</span>
+          <span class="g ok">✓</span><span class="l">play launches or asks where</span>
+          <span class="g ok">✓</span><span class="l">back returns to the library</span>
         </div>
-        <div class="res">
-          <div class="head"><b>Game Detail</b><span class="sub">Confirm removal · RG353M</span><span class="badge bad">Failed</span></div>
-          <div class="line">Render<span class="badge bad">Failed</span></div>
-          <div class="reason">src/pages/PicoGameDetail.page.part.tsx threw while rendering: Cannot read properties of undefined (reading 'title')</div>
-          <div class="line auth">cancel keeps the game<span class="badge">Not run</span></div>
+        <div class="cg">
+          <span class="g ok">✓</span><span class="h"><b>Default</b> <span class="dev">ODIN 2 PORTAL</span></span>
+          <span class="g ok">✓</span><span class="l">render, errors, overflow, accessibility, repeat</span>
+          <span class="g na">–</span><span class="l">no accepted image yet <span class="dim">approve this render</span></span>
         </div>
-        <div class="res">
-          <div class="head"><b>Game Detail</b><span class="sub">Default · ODIN 2 PORTAL</span><span class="badge good">Passed</span></div>
-          <div class="line">Render, browser errors, overflow, accessibility, repeat renders<span class="badge good">Passed</span></div>
-          <div class="line">Accepted image<span class="badge warn">No baseline yet</span></div>
+        <div class="cg">
+          <span class="g ok">✓</span><span class="h"><b>No art or history</b> <span class="dev">RG353M</span></span>
+          <span class="g ok">✓</span><span class="l">render, errors, overflow, accessibility, repeat</span>
+          <span class="g ok">✓</span><span class="l">matches the accepted image</span>
         </div>
-        <div class="checks-foot"><span>Both device sizes. Renders twice, then runs declared checks. Covers named scenarios only. Does not block Replace.</span></div>
+        <div class="checks-foot">Named scenarios only, both devices. Does not block Replace.</div>
       </div>
     </section>
   </main>
@@ -336,10 +300,12 @@
 </div>
 <script>
 // ?state= picks the state. Everything is in the DOM; b.css shows the right parts.
-const state = new URLSearchParams(location.search).get("state") ?? "takes";
+const q = new URLSearchParams(location.search);
+const state = q.get("state") ?? "takes";
+if (q.get("accent")) document.documentElement.dataset.accent = q.get("accent");
 const app = document.querySelector(".app");
 app.dataset.state = state;
-const on = { parts: ["parts"], code: ["code"], takes: ["takes"], empty: ["takes"], knobs: ["knobs"], checks: ["checks"], calibrate: ["calibrate"], grid: ["takes"], compare: ["takes"], error: [] }[state] ?? ["takes"];
+const on = { parts: ["parts"], code: ["code"], takes: ["takes"], empty: ["takes"], knobs: ["knobs"], checks: ["checks"], calibrate: ["calibrate"], grid: [], error: [] }[state] ?? ["takes"];
 for (const b of document.querySelectorAll("[data-tool]")) {
   const t = b.dataset.tool;
   const pressed = on.includes(t) || (t === "parts" && b.closest(".rail")) || (t === "preview" && state !== "parts" && state !== "checks");
@@ -358,7 +324,7 @@ if (state === "checks") {
 }
 // On the phone, the single frame shows the other device, which cannot fit at
 // true size, so the caption must say so.
-if (document.body.clientWidth < 44 * 16 && ["takes", "empty", "knobs", "code", "parts"].includes(state)) {
+if (document.body.clientWidth < 44 * 16 && ["knobs", "code", "parts"].includes(state)) {
   const d = document.querySelectorAll(".caption.s-single .devices button");
   d[0].setAttribute("aria-pressed", "false"); d[1].setAttribute("aria-pressed", "true");
   const c = document.querySelector(".caption.s-single");

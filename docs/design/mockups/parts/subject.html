@@ -1,0 +1,95 @@
+    <!-- ===================== subject ===================== -->
+    <figure class="subject" style="margin:0">
+      <!-- single frame -->
+      <div class="slate s-single"><b>Game Detail</b><span>Default</span></div>
+      <img class="screen s-single" src="assets/pico-game-detail.png" alt="Game Detail, Default state">
+      <div class="caption s-single">
+        <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+        <span><span class="k">Width </span><span class="v">72 mm</span></span>
+        <span><span class="k">Viewport </span><span class="v">640 × 480</span></span>
+        <span class="true">True size</span>
+      </div>
+
+      <!-- takes on the canvas: the real files and every take, side by side -->
+      <div class="s-takes">
+        <div class="slate"><b>Game Detail</b><span>Default</span><span class="sep"></span><span>3 takes</span></div>
+        <div class="frames">
+          <figure class="fr orig"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Real files</b></figcaption></figure>
+          <figure class="fr focus">
+            <img class="screen" src="assets/pico-game-detail.png" alt="">
+            <div class="pins"><span class="pin" style="left:22%;top:48%"><span>1</span></span><span class="pin" style="left:66%;top:39%"><span>2</span></span></div>
+            <figcaption><b>1</b> Cover art two thirds wide <span class="dot good"></span></figcaption>
+            <div class="notes">
+              <div class="note"><i>1</i><span>Too wide. The cover should not push the title down.</span></div>
+              <div class="note"><i>2</i><span>This stat row is right. Keep it.</span></div>
+              <input placeholder="Click the take to add a note">
+            </div>
+          </figure>
+          <figure class="fr"><img class="screen t2" src="assets/pico-game-detail.png" alt=""><figcaption><b>2</b> Stats in one row <span class="dot"></span></figcaption></figure>
+          <figure class="fr running"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>3</b> Actions as chips <span class="dim">rendering</span></figcaption></figure>
+        </div>
+        <div class="caption">
+          <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+          <span class="true">True size</span>
+        </div>
+      </div>
+
+      <!-- grid: every state -->
+      <div class="s-grid">
+        <div class="slate"><b>Game Detail</b><span>All 5 states</span></div>
+        <div class="frames">
+          <figure class="fr focus"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Default</b></figcaption></figure>
+          <figure class="fr"><img class="screen v2" src="assets/pico-game-detail.png" alt=""><figcaption><b>No art or history</b></figcaption></figure>
+          <figure class="fr"><img class="screen v3" src="assets/pico-game-detail.png" alt=""><figcaption><b>Multiple locations</b></figcaption></figure>
+          <figure class="fr"><img class="screen v4" src="assets/pico-game-detail.png" alt=""><figcaption><b>Choose location</b></figcaption></figure>
+          <figure class="fr"><img class="screen v5" src="assets/pico-game-detail.png" alt=""><figcaption><b>Confirm removal</b> <span class="dot"></span></figcaption></figure>
+        </div>
+        <div class="caption">
+          <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+          <span class="true">True size</span>
+        </div>
+      </div>
+
+      <!-- error: the frame carries its own failure -->
+      <div class="s-error">
+        <div class="slate"><b>Game Detail</b><span>Confirm removal</span></div>
+        <div class="errframe">
+          <b>src/pages/PicoGameDetail.page.part.tsx threw while rendering</b>
+          TypeError: Cannot read properties of undefined (reading 'title')<br>
+          &nbsp;&nbsp;at ConfirmRemoval (src/pages/PicoGameDetail.page.part.tsx:41:22)<br>
+          &nbsp;&nbsp;at renderWithHooks (react-dom_client.js:5908:24)<br>
+          &nbsp;&nbsp;at updateFunctionComponent (react-dom_client.js:7729:21)<br>
+          &nbsp;&nbsp;at beginWork (react-dom_client.js:8779:20)<br>
+          &nbsp;&nbsp;at performUnitOfWork (react-dom_client.js:12815:98)
+        </div>
+        <div class="caption">
+          <span class="devices"><button aria-pressed="true">RG353M</button><button>ODIN 2 PORTAL</button></span>
+          <span><span class="k">Width </span><span class="v">72 mm</span></span>
+          <span class="true">True size</span>
+        </div>
+        <div class="err-copy">
+          <b>Confirm removal: src/pages/PicoGameDetail.page.part.tsx threw while rendering</b>
+          <pre>TypeError: Cannot read properties of undefined (reading 'title')
+    at ConfirmRemoval (src/pages/PicoGameDetail.page.part.tsx:41:22)
+    at renderWithHooks (node_modules/.vite/deps/react-dom_client.js:5908:24)</pre>
+        </div>
+      </div>
+
+      <!-- calibrate -->
+      <div class="s-calib">
+        <div class="card-outline">Match a credit card<span>85.6 × 53.98 mm</span></div>
+        <div class="calib-card">
+          <p>Set the browser zoom to 100%. Hold a credit card against the screen, and move the slider until the outline matches the card.</p>
+          <label class="scale"><span>Scale</span><input type="range" min="2" max="12" step="0.01" value="3.875"><output>3.88 px/mm</output></label>
+          <div class="actions"><button class="btn">Reset</button><button class="btn primary">Done</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- the bar under the takes canvas -->
+    <div class="bar-composer">
+      <div class="focused"><b>Take 1</b><button class="btn primary">Accept</button><button class="btn">Discard</button><button class="btn">Revise from notes</button></div>
+      <textarea placeholder="Describe a change to Game Detail"></textarea>
+      <div class="go"><span class="count">Takes <b>1</b> ▾</span><span class="hint">Ctrl+Enter</span><button class="btn primary">New take</button></div>
+      <p class="empty-hint">An agent edits copies of the real files and renders them here beside the original. Nothing touches your files until you accept.</p>
+    </div>
