@@ -14,10 +14,11 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "out");
-export const STATES = ["takes", "mark", "draft", "agent", "empty", "knobs", "code", "grid", "checks", "calibrate", "error", "parts"];
+export const STATES = ["takes", "mark", "draft", "plan", "menu", "log", "agent", "empty", "knobs", "code", "grid", "checks", "calibrate", "error", "parts"];
 const states = process.argv.slice(2).length ? process.argv.slice(2) : STATES;
 const sizes = [
   { name: "desk", width: 1600, height: 1000, scale: 1 },
+  { name: "fold", width: 1000, height: 680, scale: 2 },   // Galaxy Z Fold unfolded, Chrome, less browser chrome
   { name: "phone", width: 416, height: 640, scale: 3 },
 ];
 const types = { ".html": "text/html", ".css": "text/css", ".png": "image/png", ".ttf": "font/ttf", ".mjs": "text/javascript" };

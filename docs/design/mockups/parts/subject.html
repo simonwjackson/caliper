@@ -40,16 +40,14 @@
                   <span class="pin" style="left:63%;top:44%"><span>A</span></span>
                   <span class="region" style="left:22%;top:16%;width:26%;height:26%"><span>B</span></span>
                 </div>
-                <figcaption><b>6</b> Cover at half, title beside it <span class="dot good"></span></figcaption>
+                <figcaption><b>6</b> <button class="open-take">Cover at half, title beside it</button> <span class="dot good"></span></figcaption>
                 <!-- the note editor, open at the newest mark -->
                 <div class="editor">
                   <span class="id">6B</span>
-                  <input value="Too heavy. Thin the border to one pixel" autofocus>
-                  <div class="refs">
-                    <span class="dim">Point at</span>
-                    <button class="chip">0A</button><button class="chip">6A</button><button class="chip">5A</button><button class="chip lost">3A</button>
-                    <span class="dim end"><kbd>Enter</kbd> saves</span>
-                  </div>
+                  <div class="field"><span class="typed">Too heavy. Thin the border to one pixel, like <span class="ref">0</span></span><i class="caret"></i></div>
+                  <ul class="suggest" role="listbox">
+                    <li aria-selected="true"><span class="crop" style="background-position:32% 71%"></span><b>0A</b><span class="q">the old actions list was clearer</span></li>
+                  </ul>
                 </div>
               </figure>
             </div>
@@ -84,6 +82,30 @@
         </div>
       </div>
 
+      <!-- the plan (decisions 16 and 33): the directions wait on the canvas, in the places their takes will fill -->
+      <div class="s-plan">
+        <div class="title"><b>Game Detail</b><span>Default</span><span class="ask">“Give the cover more room and let the title breathe.”</span></div>
+        <div class="frames">
+          <figure class="fr orig"><img class="screen" src="assets/pico-game-detail.png" alt=""><figcaption><b>Real files</b></figcaption></figure>
+          <div class="slot">
+            <input class="dir-title" value="Cover two thirds wide">
+            <textarea class="dir-brief">Grow the cover to two thirds of the width and wrap the title under it. Keep the stats and actions as they are.</textarea>
+            <button class="remove" aria-label="Remove this direction">×</button>
+          </div>
+          <div class="slot">
+            <input class="dir-title" value="Cover at half, title beside it">
+            <textarea class="dir-brief">Cover and title share the top half side by side; the actions move to one row under both.</textarea>
+            <button class="remove" aria-label="Remove this direction">×</button>
+          </div>
+          <div class="slot strange">
+            <input class="dir-title" value="The cover is the screen">
+            <textarea class="dir-brief">Full-bleed cover art as the background, title and CONTINUE laid over it, the stats in the corner like a HUD.</textarea>
+            <p class="why">Strange on purpose: breaks the current two-column pattern.</p>
+            <button class="remove" aria-label="Remove this direction">×</button>
+          </div>
+        </div>
+      </div>
+
       <!-- what the agent sees (decision 1 and 4): the screenshot with the pins drawn on it, plus the brief -->
       <div class="s-agent">
         <div class="title"><b>Take 9</b><span>what its agent received</span></div>
@@ -105,7 +127,7 @@
             </div>
             <div class="bsec now"><h4>Marks on take 6 <span class="dim">this pass</span></h4>
               <div class="bmark"><span class="pin inline"><span>A</span></span><span class="q">love this</span><span class="el">button.pico-button--go “CONTINUE”</span></div>
-              <div class="bmark"><span class="pin inline"><span>B</span></span><span class="q">too heavy. thin the border to one pixel</span><span class="el">region 166 × 125 at 141, 77 · div.pico-game-detail__cover, img.pico-cover-art</span></div>
+              <div class="bmark"><span class="pin inline"><span>B</span></span><span class="q">too heavy. thin the border to one pixel, like <span class="ref">0A</span></span><span class="el">region 166 × 125 at 141, 77 · div.pico-game-detail__cover, img.pico-cover-art</span></div>
             </div>
             <div class="bsec"><h4>May read</h4><p>Take 5, because its mark 5A says “restore 0A here”.</p></div>
             <div class="bsec"><h4>May write</h4><p><code>.caliper/takes/9</code>, a copy of take 6. Nowhere else.</p></div>
@@ -162,7 +184,7 @@
       </div>
     </figure>
 
-    <!-- the bar under the takes canvas: the composer, the draft, and Send -->
+    <!-- the bar under the takes canvas: the focused take, the composer, the draft, and one primary button -->
     <div class="bar-composer">
       <div class="draft" hidden>
         <div class="draft-head"><b>7 marks</b><span class="dim">on 3 takes</span><button class="btn small">Clear all</button></div>
@@ -179,7 +201,7 @@
             <div class="dbody">
               <div class="dhead"><b>6</b> Cover at half, title beside it<span class="will">→ take 9</span></div>
               <div class="dmark"><span class="pin inline"><span>A</span></span><span class="q">love this</span><span class="el">button.pico-button--go</span></div>
-              <div class="dmark"><span class="pin inline"><span>B</span></span><span class="q">too heavy. thin the border to one pixel</span><span class="el">region</span></div>
+              <div class="dmark"><span class="pin inline"><span>B</span></span><span class="q">too heavy. thin the border to one pixel, like <span class="ref">0A</span></span><span class="el">region</span></div>
             </div>
           </div>
           <div class="dtake">
@@ -198,14 +220,30 @@
           </div>
         </div>
       </div>
+      <div class="split-menu" hidden role="menu">
+        <button role="menuitemradio" aria-checked="true">1 take</button>
+        <button role="menuitemradio" aria-checked="false">2 takes, planned</button>
+        <button role="menuitemradio" aria-checked="false">3 takes, planned</button>
+        <button role="menuitemradio" aria-checked="false">4 takes, planned</button>
+        <hr>
+        <button role="menuitem">Send to take 6 <kbd>Shift+Enter</kbd></button>
+        <hr>
+        <p class="agent-line">claude-opus-5-5 · reasoning medium · 3 skills</p>
+      </div>
       <div class="bar-row">
         <button class="markbtn" aria-pressed="false" title="Mark mode (M)"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 16s5-4.2 5-8.5A5 5 0 0 0 4 7.5C4 11.8 9 16 9 16z"/><circle cx="9" cy="7.5" r="1.6" fill="currentColor" stroke="none"/></svg></button>
         <div class="focused"><b>Take 6</b><button class="btn primary">Accept</button><button class="btn">Discard</button></div>
-        <textarea placeholder="Describe a change to Game Detail"></textarea>
+        <div class="field-wrap">
+          <ul class="attachments"><li><img src="assets/pico-game-detail.png" alt=""><button aria-label="Remove image">×</button></li></ul>
+          <div class="field-row">
+            <button class="clip" title="Add an image. You can also paste or drop one." aria-label="Add image"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12.5 7 7.8 11.7a1.7 1.7 0 0 1-2.4-2.4L10.6 4a3 3 0 0 1 4.2 4.2l-5.6 5.6a4.2 4.2 0 0 1-6-6L8 3"/></svg></button>
+            <textarea placeholder="Describe a change to Game Detail"></textarea>
+          </div>
+        </div>
         <div class="go">
           <button class="btn draft-toggle" aria-expanded="false">7 marks</button>
-          <button class="btn primary send">Send · 2 new takes</button>
-          <button class="btn primary newtake">New take</button>
+          <span class="split"><button class="btn primary main">Send · 2 new takes</button><button class="btn primary more" aria-label="More ways to send"><i class="chev down"></i></button></span>
         </div>
+        <div class="plan-go"><button class="btn">Back</button><button class="btn primary">Start 3 takes</button></div>
       </div>
     </div>

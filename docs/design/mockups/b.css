@@ -69,7 +69,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .room { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .room::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 60% 55% at 50% 46%, color-mix(in srgb, var(--ink) 5%, transparent), transparent 70%); }
 
-.panel { position: absolute; background: var(--card); border-radius: 8px; box-shadow: var(--lift); display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
+.panel { position: absolute; background: var(--card); border-radius: 8px; box-shadow: var(--lift); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
 .panel > header { display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem; border-bottom: 1px solid var(--edge); font-weight: 600; font-size: var(--fs-2); }
 .panel > header .sub { color: var(--ink-3); font-weight: 400; margin-left: auto; font-size: var(--fs-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel > header .close { margin-left: auto; border: 0; background: none; color: var(--ink-2); font-weight: 500; font-size: var(--fs-1); }
@@ -113,10 +113,15 @@ code { font-family: var(--mono); font-size: .92em; }
   display: grid; gap: .9rem; justify-items: center;
 }
 /* states with no right panel centre in the room minus the parts panel */
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="agent"], [data-state="grid"], [data-state="error"], [data-state="checks"], [data-state="calibrate"]) .subject { left: calc(var(--free-l) + (100% - var(--free-l) - var(--gutter)) / 2); max-width: calc(100% - var(--free-l) - var(--gutter)); }
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="agent"], [data-state="grid"], [data-state="error"], [data-state="checks"], [data-state="calibrate"]) .p-side { display: none; }
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="grid"], [data-state="agent"]) .subject { top: 45%; width: calc(100% - var(--free-l) - var(--gutter)); max-width: none; }
-.app[data-state="draft"] .subject { top: 4rem; transform: translate(-50%, 0); }
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="plan"], [data-state="menu"], [data-state="agent"], [data-state="grid"], [data-state="error"], [data-state="checks"], [data-state="calibrate"]) .subject { left: calc(var(--free-l) + (100% - var(--free-l) - var(--gutter)) / 2); max-width: calc(100% - var(--free-l) - var(--gutter)); }
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="plan"], [data-state="menu"], [data-state="agent"], [data-state="grid"], [data-state="error"], [data-state="checks"], [data-state="calibrate"]) .p-side { display: none; }
+/* the takes canvas is a scroll region between the top gutter and the bar; it centres only when it fits */
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="plan"], [data-state="menu"], [data-state="log"], [data-state="grid"], [data-state="agent"]) .subject {
+  top: var(--gutter); bottom: calc(var(--gutter) * 2 + 3.5rem); left: var(--free-l); right: var(--gutter); transform: none;
+  width: auto; max-width: none; overflow: auto; align-content: safe center; padding: 1rem 0;
+}
+.app:is([data-state="grid"], [data-state="agent"]) .subject { bottom: var(--gutter); }
+.app[data-state="draft"] .subject { bottom: calc(var(--gutter) * 2 + 3.5rem + 19rem); }
 
 .title { display: flex; align-items: baseline; gap: .6rem; font-size: var(--fs-2); color: var(--ink-3); }
 .title b { color: var(--ink); font-weight: 600; font-size: var(--fs-3); }
@@ -133,14 +138,14 @@ code { font-family: var(--mono); font-size: .92em; }
 
 /* subject variants */
 .s-takes, .s-grid, .s-error, .s-calib { display: none; }
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"]) .s-single, .app[data-state="grid"] .s-single, .app[data-state="error"] .s-single, .app[data-state="calibrate"] .s-single { display: none; }
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"]) .s-takes, .app[data-state="grid"] .s-grid, .app[data-state="error"] .s-error, .app[data-state="calibrate"] .s-calib { display: grid; }
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="plan"], [data-state="menu"], [data-state="log"]) .s-single, .app[data-state="grid"] .s-single, .app[data-state="error"] .s-single, .app[data-state="calibrate"] .s-single { display: none; }
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="menu"], [data-state="log"]) .s-takes, .app[data-state="plan"] .s-plan, .app[data-state="grid"] .s-grid, .app[data-state="error"] .s-error, .app[data-state="calibrate"] .s-calib { display: grid; }
 .app[data-state="empty"] .s-takes .fr:not(.orig) { display: none; }
 .app[data-state="empty"] .s-takes .title .mark-only { display: none; }
 
 /* takes on the canvas: the original, then each chain as a before-and-after pair */
-.s-takes, .s-grid, .s-agent { gap: 1.4rem; width: 100%; justify-items: center; width: 100%; }
-.s-agent { display: none; }
+.s-takes, .s-grid, .s-agent, .s-plan { gap: 1.4rem; justify-items: center; width: 100%; }
+.s-agent, .s-plan { display: none; }
 .app[data-state="agent"] .s-agent { display: grid; }
 .app[data-state="agent"] .s-single { display: none; }
 /* every frame is one column of the same width. The grid has two rows per band:
@@ -189,22 +194,29 @@ code { font-family: var(--mono); font-size: .92em; }
 .frames > * { margin-bottom: var(--gap); }
 .frames { padding: 0 var(--gap); }
 
-/* marks: a lettered pin for a click, a region for a drag. Named by take and letter. */
+/* marks: a lettered pin for a click, a region for a drag. Named by take and letter.
+   Marks sit on the product, not on the chrome, so they do not follow the chrome's scheme:
+   white with a black ring reads on any product colour, and it is what the agent sees too. */
+.pin, .region { --mark: #fff; --mark-ink: #111; --mark-ring: #111; }
 .marks { position: absolute; top: 0; left: 0; width: var(--col, calc(var(--mm) * 72)); aspect-ratio: 4/3; pointer-events: none; }
-.pin { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px rgba(0,0,0,.6); display: grid; place-items: center; font: 700 10px/1 var(--sans); }
+.pin { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--mark); color: var(--mark-ink); box-shadow: 0 0 0 1.5px var(--mark-ring), 0 1px 3px rgba(0,0,0,.5); display: grid; place-items: center; font: 700 10px/1 var(--sans); }
 .pin span { transform: rotate(45deg); }
 .pin.lost { background: var(--card); color: var(--ink-3); border: 1px dashed var(--ink-3); box-shadow: none; }
-.region { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.region span { position: absolute; left: -2px; top: -2px; transform: translateY(-100%); background: var(--accent); color: var(--accent-ink); font: 700 10px/1 var(--sans); padding: 3px 5px; border-radius: 3px 3px 3px 0; }
-.marks.model .pin, .marks.model .region { --accent: #fff; --accent-ink: #000; }
+.pin.inline.lost { box-shadow: none; }
+.region { position: absolute; border: 2px solid var(--mark); box-shadow: 0 0 0 1px var(--mark-ring), inset 0 0 0 1px var(--mark-ring); background: rgb(255 255 255 / .1); }
+.region span { position: absolute; left: -2px; top: -2px; transform: translateY(-100%); background: var(--mark); color: var(--mark-ink); box-shadow: 0 0 0 1px var(--mark-ring); font: 700 10px/1 var(--sans); padding: 3px 5px; border-radius: 3px 3px 3px 0; }
 
 /* the note editor, opened at the newest mark */
-.editor { position: absolute; left: 0; width: calc(var(--col) + 6rem); top: calc(100% + .6rem); z-index: 2; background: var(--card); border-radius: 8px; box-shadow: var(--lift); padding: .5rem .6rem; display: grid; grid-template-columns: auto 1fr; gap: .35rem .5rem; align-items: center; font-size: var(--fs-1); }
+.editor { position: absolute; left: 0; width: calc(var(--col) + 6rem); top: calc(100% + .6rem); z-index: 2; background: var(--card); border-radius: 8px; box-shadow: var(--lift); padding: .6rem .7rem; display: grid; grid-template-columns: auto 1fr; gap: .5rem .6rem; align-items: center; font-size: var(--fs-1); }
 .editor .id { font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 2px 5px; }
-.editor input { border: 0; border-bottom: 1px solid var(--edge-2); background: none; padding: .3rem 0; color: var(--ink); font-size: var(--fs-2); }
-.editor input:focus { outline: 0; border-bottom-color: var(--accent); }
-.editor .refs { grid-column: 1 / -1; display: flex; gap: .3rem; align-items: center; }
-.editor .refs .end { margin-left: auto; }
+.editor .field { display: flex; align-items: center; min-width: 0; border-bottom: 1px solid var(--accent); padding: .3rem 0; font-size: var(--fs-2); color: var(--ink); white-space: nowrap; overflow: hidden; }
+.editor .caret { width: 1.5px; height: 1.1em; background: var(--ink); margin-left: 1px; flex: none; }
+/* typing a take number offers that take's marks, each with a crop of the take around the mark */
+.suggest { grid-column: 2; list-style: none; margin: 0; padding: .25rem; background: var(--card-2); border-radius: 6px; }
+.suggest li { display: grid; grid-template-columns: 40px auto 1fr; gap: .5rem; align-items: center; padding: .3rem .4rem; border-radius: 4px; font-size: var(--fs-1); color: var(--ink-2); }
+.suggest li[aria-selected="true"] { background: var(--card); color: var(--ink); }
+.suggest li b { font-weight: 700; color: var(--ink); }
+.suggest .crop { width: 40px; height: 30px; border-radius: 2px; background: #000 url(assets/pico-game-detail.png) no-repeat; background-size: 400%; image-rendering: pixelated; box-shadow: 0 0 0 1px rgba(0,0,0,.7); }
 .chip { border: 1px solid var(--edge-2); background: var(--card-2); border-radius: 4px; padding: 1px 6px; font: 600 11px/1.5 var(--sans); color: var(--ink); }
 .chip.lost { color: var(--ink-3); border-style: dashed; }
 .txt .ref, .ref { display: inline-block; border: 1px solid var(--edge-2); border-radius: 3px; padding: 0 4px; font-weight: 600; color: var(--ink); font-size: 11px; line-height: 1.4; }
@@ -213,7 +225,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .mark-only { display: none; }
 .app[data-mark="on"] .mark-only { display: inline; }
 .app[data-mark="on"] .fr .screen { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 4px; }
-.app[data-state="mark"] .frames > .chain:has(.editor) { margin-bottom: calc(var(--gap) + 4.4rem); }
+.app[data-state="mark"] .frames > .chain:has(.editor) { margin-bottom: calc(var(--gap) + 5.6rem); }
 .app[data-mark="on"] .fr.focus .screen { box-shadow: 0 0 0 1px rgba(0,0,0,.8); }
 .app[data-mark="on"] .markbtn { background: var(--accent); color: var(--accent-ink); }
 .markbtn { width: 2.2rem; height: 2.2rem; border: 1px solid var(--edge-2); border-radius: 6px; background: none; color: var(--ink-2); display: grid; place-items: center; }
@@ -227,14 +239,16 @@ code { font-family: var(--mono); font-size: .92em; }
 .agent .shot p { margin: 0; font-size: 11px; }
 
 /* the bar under the canvas: composer, focused take, draft and Send */
-.bar-composer { display: none; position: absolute; left: var(--free-l); right: var(--gutter); bottom: var(--gutter); background: var(--card); border-radius: 8px; box-shadow: var(--lift); padding: .55rem .7rem; }
-.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"]) .bar-composer { display: block; }
+.bar-composer { display: none; position: absolute; left: var(--free-l); right: var(--gutter); bottom: var(--gutter); background: var(--card); border-radius: 8px; box-shadow: var(--lift); padding: .55rem .7rem; container: bar / inline-size; }
+.app:is([data-state="takes"], [data-state="empty"], [data-state="mark"], [data-state="draft"], [data-state="plan"], [data-state="menu"], [data-state="log"]) .bar-composer { display: block; }
+/* with a take's record open, the canvas and the bar stop at the side panel */
+.app[data-state="log"] .subject, .app[data-state="log"] .bar-composer { right: var(--free-r); }
+.app[data-state="log"] .p-take { display: grid; }
 .bar-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: .6rem; align-items: center; }
 .bar-composer .focused { display: flex; gap: .3rem; align-items: center; padding-right: .6rem; border-right: 1px solid var(--edge); font-size: var(--fs-1); color: var(--ink-2); }
 .bar-composer .focused b { color: var(--ink); font-weight: 600; margin-right: .3rem; }
 .app[data-state="empty"] .bar-row { grid-template-columns: 1fr auto; }
-.app[data-state="empty"] :is(.markbtn, .focused, .draft-toggle, .send) { display: none; }
-.app:not([data-state="empty"]) .newtake { display: none; }
+.app[data-state="empty"] :is(.markbtn, .focused, .draft-toggle) { display: none; }
 .bar-composer textarea { width: 100%; min-height: 2.3rem; max-height: 6rem; resize: none; border: 1px solid var(--edge); background: var(--room); border-radius: 6px; padding: .45rem .6rem; color: var(--ink); }
 .bar-composer textarea::placeholder { color: var(--ink-3); }
 .bar-composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -266,7 +280,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .dmark .el { display: none; }
 .dmark .el.warn { display: block; grid-column: 2; color: var(--warn); }
 .dtake.lost .dthumb img { opacity: .5; }
-.pin.inline { position: static; display: inline-grid; width: 16px; height: 16px; margin: 0; font-size: 9px; vertical-align: -3px; }
+.pin.inline { position: static; box-shadow: 0 0 0 1px var(--mark-ring); display: inline-grid; width: 16px; height: 16px; margin: 0; font-size: 9px; vertical-align: -3px; }
 .pin.inline.lost { background: none; }
 
 /* the agent brief, in the chrome's own type */
@@ -413,7 +427,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   .rail, .p-parts { display: none; }
   .room { grid-row: 1; }
   .app[data-state] .subject { left: 0; right: 0; top: 0; bottom: 40%; transform: none; width: auto; max-width: none; overflow: auto; align-content: start; padding: .75rem 0; gap: .5rem; }
-  .app:is([data-state="takes"], [data-state="mark"]) .subject { bottom: 8.6rem; }
+  .app:is([data-state="takes"], [data-state="mark"], [data-state="menu"], [data-state="log"]) .subject { bottom: 11.4rem; }
+  .app[data-state="plan"] .subject { bottom: 8rem; }
   .app[data-state="draft"] .subject { bottom: 60%; }
   .app[data-state="agent"] .subject { bottom: 0; }
   .app[data-state="empty"] .subject { bottom: 6.4rem; }
@@ -434,24 +449,17 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   .chain-head .hist { margin-left: 0; flex-basis: 100%; }
   .chain-head .hist::before { content: "parent · "; }
   .history { display: none; }
-  .editor { position: fixed; left: .5rem; right: .5rem; width: auto; bottom: calc(8.6rem + 3.4rem + env(safe-area-inset-bottom)); top: auto; z-index: 5; }
+  .editor { position: fixed; left: .5rem; right: .5rem; width: auto; bottom: calc(11.4rem + 3.4rem + env(safe-area-inset-bottom)); top: auto; z-index: 5; }
   .app[data-state="mark"] .frames > .chain:has(.editor) { margin-bottom: var(--gap); }
   .agent { grid-template-columns: 1fr; }
   .agent .shot { justify-items: center; }
   .agent .shot .marks { left: 50%; transform: translateX(-50%); }
   .bar-composer { left: .5rem; right: .5rem; bottom: .5rem; padding: .45rem .5rem; }
   .p-code { left: 0; right: 0; }
-  .bar-row { grid-template-columns: auto auto 1fr; }
-  .bar-composer .focused { border: 0; padding: 0; }
-  .bar-composer .go { grid-column: 1 / -1; }
-  .app[data-state="empty"] .bar-composer .go { grid-column: auto; }
   .caption { gap: .4rem; }
   .devices { gap: .45rem; }
-  .app[data-state="empty"] .bar-row { grid-template-columns: 1fr auto; }
-  .bar-composer .go { flex-wrap: wrap; }
-  .bar-composer .go .count { display: none; }
   .bar-composer .send { white-space: normal; text-align: left; }
-  .draft { max-height: 44dvh; }
+  .draft { max-height: 44dvh; margin-inline: -.5rem; padding-inline: .5rem; }
   .draft-takes { flex-direction: column; gap: 1.2rem; overflow: visible; }
   .dtake { width: auto; grid-template-columns: calc(var(--mm) * 72 * .5) 1fr; gap: .7rem; }
   .dthumb .pin { width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; font-size: 8px; }
@@ -460,6 +468,9 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   .title .mark-only { flex-basis: 100%; margin: 0; }
   .title { flex-wrap: wrap; padding: 0 .75rem; justify-content: center; }
   .p-side, .p-code { left: 0; right: 0; bottom: 0; top: auto; width: auto; height: 40%; border-radius: 14px 14px 0 0; }
+  .p-take { height: 70%; z-index: 4; }
+  .app[data-state="log"] .subject, .app[data-state="log"] .bar-composer { right: .5rem; }
+  .split-menu { right: .5rem; left: .5rem; min-width: 0; }
   .p-knobs, .p-code { grid-template-rows: auto auto 1fr; }
   .p-code { height: 46%; grid-template-rows: auto auto auto 1fr; }
   .sheet-handle { display: block; width: 2.4rem; height: 4px; border-radius: 2px; background: var(--edge-2); margin: .5rem auto 0; }
@@ -479,3 +490,101 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   .dock .pip { position: absolute; top: 6px; right: calc(50% - 14px); width: 7px; height: 7px; border-radius: 50%; background: var(--good); border: 2px solid var(--card); }
   .dock .pip.bad { background: var(--bad); }
 }
+
+/* --- the plan: directions wait on the canvas in the slots their takes will fill ----------- */
+.title .ask { color: var(--ink-2); font-style: italic; margin-left: .6rem; }
+.slot { position: relative; width: var(--col); aspect-ratio: 4/3; border-radius: 4px; border: 1px solid var(--edge-2); background: var(--card); padding: .8rem .9rem; display: grid; grid-template-rows: auto 1fr auto; gap: .5rem; margin-bottom: var(--gap); align-self: start; }
+.s-plan .frames > .fr.orig { grid-row: auto; }
+.slot.strange { border-style: dashed; border-color: var(--ink-2); }
+.slot .dir-title { border: 0; border-bottom: 1px solid var(--edge-2); background: none; padding: 0 1.6rem .35rem 0; min-width: 0; text-overflow: ellipsis; color: var(--ink); font-size: var(--fs-2); font-weight: 600; }
+.slot .dir-brief { border: 0; background: none; resize: none; color: var(--ink-2); font-size: var(--fs-1); line-height: 1.5; padding: 0; }
+.slot .why { margin: 0; font-size: 11px; color: var(--ink-3); }
+.slot .remove { position: absolute; top: .55rem; right: .6rem; border: 0; background: none; color: var(--ink-3); font-size: 15px; line-height: 1; padding: 0; }
+.plan-go { display: none; gap: .4rem; }
+.app[data-state="plan"] .plan-go { display: flex; }
+
+/* the plan on the phone: after the base rules, so source order does not undo it */
+@container app (width < 44rem) {
+  .title .ask { flex-basis: 100%; margin: 0; }
+  .slot { padding: .55rem .6rem; aspect-ratio: auto; min-height: calc(var(--col) * .75); }
+  .slot .dir-title { font-size: var(--fs-1); }
+  .slot .dir-brief { font-size: 11px; field-sizing: content; }
+}
+.app[data-state="plan"] :is(.markbtn, .focused, .go, .clip) { display: none; }
+.app[data-state="plan"] .bar-row { grid-template-columns: 1fr auto; }
+.app[data-state="plan"] .bar-composer textarea { color: var(--ink-3); }
+
+/* The bar reads its own width, not the page's. Under 48rem one row crushes the field,
+   so the rows stack: the field; the focused take's buttons; the draft and Send.
+   A row exists only when it has something in it. */
+@container bar (width < 48rem) {
+  .bar-row { grid-template-columns: auto 1fr; row-gap: .45rem; }
+  .bar-row .field-wrap { grid-column: 1 / -1; grid-row: 1; }
+  .bar-row .markbtn { grid-row: 2; grid-column: 1; }
+  .bar-row .focused { grid-row: 2; grid-column: 2; border: 0; padding: 0; }
+  .bar-row .go { grid-row: 3; grid-column: 1 / -1; justify-content: end; flex-wrap: nowrap; }
+  .app[data-state="empty"] .bar-row .go { grid-row: 2; }
+  .app[data-state="plan"] .bar-row .plan-go { grid-row: 2; grid-column: 1 / -1; justify-content: end; }
+}
+
+/* Between the phone and the desk, a take's record, the canvas and the parts panel do not
+   all fit. The record wins; the parts panel becomes the drawer the rail opens, as on the phone. */
+@container app (44rem <= width < 72rem) {
+  .app[data-state="log"] { --free-l: var(--gutter); }
+  .app[data-state="log"] .p-parts { display: none; }
+  .app[data-state="log"] .rail [data-tool="parts"] { background: none; box-shadow: none; color: var(--ink-3); }
+}
+
+/* --- the bar's field: attachments above, a clip beside --------------------------------------- */
+.field-wrap { display: grid; gap: .4rem; min-width: 0; }
+.field-row { display: flex; gap: .3rem; align-items: stretch; border: 1px solid var(--edge); background: var(--room); border-radius: 6px; }
+.field-row:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; }
+.field-row textarea { border: 0; background: none; outline: 0 !important; flex: 1; min-width: 0; }
+.clip { border: 0; background: none; color: var(--ink-3); width: 2rem; display: grid; place-items: center; flex: none; }
+.clip svg { width: 16px; height: 16px; }
+.attachments { display: none; list-style: none; margin: 0; padding: 0; gap: .4rem; }
+.app[data-state="menu"] .attachments { display: flex; }
+.attachments li { position: relative; }
+.attachments img { display: block; height: 2.2rem; border-radius: 3px; box-shadow: 0 0 0 1px var(--edge-2); image-rendering: pixelated; }
+.attachments button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: var(--ink); color: var(--card); font-size: 11px; line-height: 16px; padding: 0; }
+
+/* --- one primary button, and its menu: how many takes, or send to the focused take ------------ */
+.split { display: inline-flex; }
+.split .main { border-radius: 5px 0 0 5px; white-space: nowrap; }
+.split .more { border-radius: 0 5px 5px 0; border-left: 1px solid color-mix(in srgb, var(--accent-ink) 25%, transparent); padding: .42rem .5rem; display: grid; place-items: center; }
+.chev.down { transform: rotate(135deg); margin-top: -3px; }
+.app[data-state="empty"] .split .main::after { content: ""; }
+.split-menu { position: absolute; right: .7rem; bottom: calc(100% + .5rem); min-width: 15rem; background: var(--card); border-radius: 8px; box-shadow: var(--lift); padding: .35rem; display: grid; gap: 1px; font-size: var(--fs-1); }
+.split-menu[hidden] { display: none; }
+.app[data-state="menu"] .split-menu { display: grid; }
+.split-menu button { border: 0; background: none; text-align: left; padding: .45rem .6rem; border-radius: 5px; color: var(--ink-2); display: flex; gap: .5rem; align-items: center; }
+.split-menu button[aria-checked="true"] { color: var(--ink); background: var(--card-2); }
+.split-menu button[aria-checked="true"]::after { content: ""; margin-left: auto; width: 8px; height: 4px; border: solid currentColor; border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg) translateY(-2px); }
+.split-menu kbd { margin-left: auto; }
+.split-menu hr { border: 0; border-top: 1px solid var(--edge); margin: .3rem .2rem; }
+.split-menu .agent-line { padding: .45rem .6rem .25rem; color: var(--ink-3); font-size: 11px; }
+
+/* --- a take's record ------------------------------------------------------------------------ */
+.p-take { display: none; grid-template-rows: auto 1fr; }
+.p-take > header .close { margin-left: .6rem; font-size: 15px; line-height: 1; }
+.take-body { overflow: auto; min-height: 0; padding: .9rem 1rem 1.1rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: .9rem; align-content: start; font-size: var(--fs-1); }
+.facts { display: flex; flex-wrap: wrap; gap: .3rem .8rem; color: var(--ink-2); }
+.facts .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: .35rem; vertical-align: 1px; }
+.facts .dot.good { background: var(--good); }
+.facts .lineage { color: var(--ink-3); }
+.direction { margin: 0; color: var(--ink-2); line-height: 1.5; }
+.direction b { color: var(--ink); font-weight: 600; }
+.context { margin: 0; color: var(--ink-3); }
+.log { list-style: none; margin: 0; padding: .9rem 0 0; border-top: 1px solid var(--edge); display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+.log p { margin: 0; line-height: 1.5; }
+.log .you { background: var(--card-2); border-radius: 6px; padding: .55rem .7rem; }
+.log .you .who { display: block; font-size: 11px; color: var(--ink-3); margin-bottom: .15rem; }
+.log .reply p { color: var(--ink); }
+.log .call { display: flex; gap: .5rem; align-items: baseline; color: var(--ink-3); font-size: 11px; }
+.log .call .t { width: 2.8rem; flex: none; }
+.log .call code { color: var(--ink-2); }
+.log .call .ok { margin-left: auto; color: var(--ink-3); }
+.take-actions { display: flex; gap: .4rem; padding-top: .3rem; }
+.open-take { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.open-take:hover { text-decoration-color: currentColor; }
+.app[data-state="log"] .fr.focus .open-take { color: var(--ink); text-decoration-color: currentColor; }

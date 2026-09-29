@@ -67,3 +67,28 @@
         </div>
       </div>
     </section>
+
+    <!-- ===================== a take's record ===================== -->
+    <section class="panel p-side p-take">
+      <div class="sheet-handle"></div>
+      <header>Take 6 <span class="sub">Cover at half, title beside it</span><button class="close" aria-label="Close">×</button></header>
+      <div class="take-body">
+        <div class="facts">
+          <span><span class="dot good"></span>Ready</span><span>2 files</span><span>Default</span><span>RG353M</span><span class="lineage">← from 1 (4 discarded)</span>
+        </div>
+        <p class="direction"><b>Direction.</b> Cover and title share the top half side by side; the actions move to one row under both.</p>
+        <p class="context">Made in isolation. Shared source edits can affect other states.</p>
+        <ol class="log">
+          <li class="you"><span class="who">You</span><p>Give the cover more room and let the title breathe.</p></li>
+          <li class="call"><span class="t">read</span><code>PicoGameDetail.tsx</code></li>
+          <li class="call"><span class="t">read</span><code>PicoGameDetail.css</code></li>
+          <li class="reply"><p>I will put the cover and the title side by side and move the actions under both, so the title keeps its size.</p></li>
+          <li class="call"><span class="t">edit</span><code>PicoGameDetail.css</code><span class="ok">+8 −3</span></li>
+          <li class="call"><span class="t">edit</span><code>PicoGameDetail.tsx</code><span class="ok">+3 −1</span></li>
+          <li class="call"><span class="t">render</span><code>Default on RG353M</code><span class="ok">fits, no errors</span></li>
+          <li class="reply"><p>Done. The title now sits beside the cover at its old size; nothing reaches past the screen.</p></li>
+        </ol>
+        <div class="take-actions"><button class="btn">Review alternate</button><button class="btn">Open the diff</button></div>
+      </div>
+    </section>
+
