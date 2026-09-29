@@ -1,6 +1,7 @@
 # Take markup (draft, interview in progress)
 
-Status: being settled with the user. Not built. When the interview ends, the
+Status: behaviour settled (decisions 1 to 13 below). Not built. Waiting for a
+visual design pass before the build order is chosen. When that is done, the
 settled parts become a numbered decision in `docs/decisions.md`.
 
 ## Problem
@@ -175,7 +176,45 @@ exact places, as fast as possible, with no screenshots passed by hand.
 
 ## Open
 
-- Build order: marks on takes first, then marks on the original (decision 8).
+- Build order. Undecided until the visual design pass is done. Options put to
+  the user: all at once; three usable slices (marks on takes with chains,
+  then references between takes, then marks on the original); or a thinner
+  first slice with takes shown flat, and the pair view and chain rules in
+  slice 2.
+
+## For the visual designer
+
+The decisions above fix behaviour, not appearance. Design these surfaces.
+Read `~/.agents/skills/frontend-design/SKILL.md` and
+`~/.agents/skills/intrinsic-design/SKILL.md` first. Caliper's chrome is plain
+DOM (decision 10), and its layout is one function of the chrome's own size
+(decision 22). It must work on a desk monitor and on a Galaxy Z Fold, with a
+mouse and with touch. Nothing may become unreachable at any size.
+
+- **Mark mode.** The bar button, and how every frame shows that the mode is
+  on (decision 9).
+- **A mark.** The lettered pin for a click, and the region for a drag. Names
+  are take number plus letter: "2A", and "0A" on the original.
+- **The note editor.** It opens at a new mark, takes typed text only
+  (decision 2), and must be fast to write and close.
+- **A reference in a note.** How "use 2A here" looks, and how you pick the
+  mark you point to (decision 6).
+- **A lost mark.** A mark whose element is gone after a change or restart
+  (decision 10).
+- **The draft and Send.** Where the whole draft is listed, and the Send
+  button with its count, for example "Send 7 marks, 2 new takes" (decisions 5
+  and 7).
+- **The pair view.** Each chain as a before and after pair beside the
+  original, the chain history you can open, and the fallback to the newest
+  take only at small sizes (decision 11).
+- **Chain labels.** For example "5 ← from 2" and "7 ← from 3 (5
+  discarded)" (decision 13), and the flag "made before take N was accepted"
+  (decision 12).
+- **What the agent sees.** The take's screenshot with the pins drawn on it
+  (decision 1). This image is for the model, not only for the user.
+
+A separate visual direction for Caliper's chrome was in progress in another
+session (handoff `d8ee1657`). Match it if it has landed.
 
 ## Facts checked
 
