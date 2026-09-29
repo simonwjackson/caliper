@@ -20,6 +20,12 @@ dark.
 | Checks modal: less slop | Donut, badge pills and footer copy removed. One total line, then a glyph column (tick, cross, dash) per group. Failed group first with its reason inline. |
 | Knobs: show, do not tell | Sliders for numbers. The whole 16-colour palette is the control for a colour. A container threshold is a bar with the threshold mark and a "now" line for the part's current size. Only the live knob shows its source path. Skipped outputs fold into one line. |
 
+## Sixth pass: the canvas as one grid
+
+Red mark: the original's top edge sat lower than the chains' frames, because each chain was a free flex item with its own head. Orange: the gap inside a pair (1.25 rem) was half the gap between chains (3 rem), so pairs read as glued.
+
+The takes canvas is now one CSS grid. Every frame is one column of the same width. Each band has two rows: a head row that every chain shares, and a frame row. The original has no head, so it starts on the frame row and its top edge lines up with every other frame. A chain spans two columns with subgrid, so the gap inside a pair is the same `--gap` (2.5 rem) as the gap between chains. The history strip and the note editor both sit inside the band so nothing overlaps the next one.
+
 ## Fifth pass: three marks
 
 | Mark | Feedback | Change |
