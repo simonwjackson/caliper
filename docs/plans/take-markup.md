@@ -80,9 +80,19 @@ exact places, as fast as possible, with no screenshots passed by hand.
      takes, and can get it wrong when both takes changed the same file. The
      base is always the take where you wrote the note.
 
+7. **A take whose marks are all pointed to makes no new take.** A marked
+   take gets a new take only when it has at least one mark that no other
+   note points to. Its pointed-to marks also go to that new take. The Send
+   button shows the result, for example "Send 7 marks, 2 new takes".
+   - Rejected: a new take for every marked take (wasted runs, and an agent
+     that may change what you only pointed at), and a checklist at Send (an
+     extra step on every pass).
+   - Cost: Caliper works out intent from the references. To change a take
+     whose marks are all pointed to, add one more mark on it. A wrong guess
+     shows in the button count, not as a question.
+
 ## Open
 
-- Whether a mark that other notes only point to also makes a new take.
 - Lineage display and cleanup. Decision 3 makes the chain of takes the
   version history, so no versions inside a take are needed.
 - Whether you can mark the original, not only takes.
