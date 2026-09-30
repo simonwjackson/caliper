@@ -66,11 +66,16 @@ async function revealDarkroom(page, control) {
       code: node.closest(".dr-code")?.hasAttribute("hidden") ?? false,
       bar: node.closest(".dr-bar")?.hasAttribute("hidden") ?? false,
       menu: node.closest("[role=menu]") !== null,
+      // A closed popover, such as a token list: its opener names it with aria-controls.
+      popover: (() => { const pop = node.closest("[popover]"); return pop && !pop.matches(":popover-open") ? pop.id : null })(),
+      popoverSide: node.closest("[popover]")?.closest(".dr-side")?.hasAttribute("hidden") ?? false,
     })) : null
     const drawerOpen = await root.getAttribute("data-drawer") === "open"
     /** @type {import("playwright-core").Locator | null} */
     let tap = null
-    if (where?.nav) {
+    const opener = where?.popover && !where.popoverSide ? page.locator(`[aria-controls="${where.popover}"]`).first() : null
+    if (opener && await opener.isVisible()) tap = opener
+    else if (where?.nav) {
       // The parts panel is mounted but closed: its toggle opens the column or the drawer.
       const parts = page.locator(`${cal.navToggle}[aria-expanded="false"]`)
       if (await parts.count() && await parts.first().isVisible()) tap = parts.first()

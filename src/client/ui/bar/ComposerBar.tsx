@@ -57,11 +57,12 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
     {agent._tag === "Failed" && <p className="dr-bar__agent dr-bar__agent--failed" data-cal={CAL.agent} role="alert">
       <b>The agent did not load.</b> {agent.reason} <span className="dr-bar__hint">{agent.hint}</span>
     </p>}
-    {agent._tag === "Off" && <p className="dr-bar__agent" data-cal={CAL.agent} role="status">No agent is set up. {agent.hint} Takes you have stay reviewable.</p>}
+    {agent._tag === "Off" && <p className="dr-bar__agent" data-cal={CAL.agent} role="status">No agent. {agent.hint}</p>}
     <Notices notices={composer.notices} />
     <div className="dr-bar__row">
       {focused && <div ref={lead} className="dr-bar__lead"><TakeActions take={focused} actions={actions} /></div>}
       <div className="dr-bar__field">
+        <div className="dr-bar__input" data-disabled={composer.edit._tag === "Disabled" || undefined}>
         {composer.attachments.length > 0 && <ul className="dr-bar__attachments" data-cal={CAL.attachments} aria-label="Images">
           {composer.attachments.map(image => <li key={image.id}>
             <img src={image.url} alt={image.name} title={image.name} />
@@ -70,7 +71,6 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
               onClick={() => actions.onRemoveAttachment(image.id)}><Icon name="close" /></button>
           </li>)}
         </ul>}
-        <div className="dr-bar__input" data-disabled={composer.edit._tag === "Disabled" || undefined}>
           {plan._tag === "None" && <>
             <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden
               onChange={event => { actions.onAttach([...event.currentTarget.files ?? []]); event.currentTarget.value = "" }} />

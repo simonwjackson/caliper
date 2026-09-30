@@ -56,13 +56,18 @@ function navigation(state: AppState, regions: Regions): NavigationView {
         badge: badge(part.file, item.export), takes: partTakes(state, part.file, item.export).map(navTake), comparing: part.file === state.part && state.shown._tag === "Takes" && item.export === state.shown.export })),
     })),
     scenario: subject && preview ? { _tag: "Selected", subject, editingLabel: `Editing ${refLabel(state, subject)}`, choices: [null, ...contexts].map(ref => ({ key: contextKey(ref), label: ref ? refLabel(state, ref) : `Isolated · ${refLabel(state, subject)}`, context: ref })), chosen: contextKey(state.context),
-      note: state.contextNote || (contexts.length === 0 && subjectsOf(parts, preview).length === 0 ? "No composed scenarios declared. Add composition to a part file to connect its real scenarios to child states." : ""),
+      note: state.contextNote,
       whole: state.context ? { ref: preview, label: refLabel(state, preview) } : null,
       children: subjectsOf(parts, preview).map(ref => ({ ref, label: refLabel(state, ref), selected: sameState(subject, ref) })),
     } : { _tag: "None" }, unavailable: [...unavailable.values()],
     setup: project ? [setupRow("Entry", project.entry, entry => [entry.file]), setupRow("Global CSS", project.css, css => [css.stylesheets.length ? css.stylesheets.map(sheet => `${sheet.file}${sheet.importedAt ? ` from ${sheet.importedAt.file}:${sheet.importedAt.line}` : " from caliper({ css })"}`).join("\n") : "No global stylesheets injected. Components load their own CSS.", ...css.unresolved.map(miss => `${miss.specifier} at ${miss.at.file}:${miss.at.line}`)]), setupRow("Wrapper", project.wrapper, wrapper => [wrapper.elements.length ? wrapper.elements.map(element => `<${element.tag}${element.className ? ` class=\"${element.className}\"` : ""}>`).join("") : "None: parts render straight into the page.", ...(wrapper.renderedAt ? [`App rendered at ${wrapper.renderedAt.file}:${wrapper.renderedAt.line}`] : [])])] : [],
     setupProblems: parts.flatMap(part => [...part.compositionProblems ?? [], ...part.expectationProblems ?? [], ...part.authoredCheckProblems ?? []]),
   }
+}
+/** The state's own label, as the canvas shows it beside the part's name; a composed preview names its scenario. */
+function selectionLabel(state: AppState, subject: StateRef) {
+  const own = state.project?.parts.find(part => part.file === subject.part)?.states.find(item => item.export === subject.state)?.label ?? subject.state
+  return state.context ? `${own} in ${refLabel(state, state.context)}` : own
 }
 function canvas(state: AppState): CanvasView {
   const part = currentPart(state), subject = subjectRef(state), preview = previewRef(state)
@@ -75,18 +80,18 @@ function canvas(state: AppState): CanvasView {
   }
   if (state.shown._tag === "All" && part.states.length > 1) {
     for (const item of part.states) add({ part: part.file, state: item.export }, { part: part.file, state: item.export }, null, item.label)
-    return { _tag: "Frames", mode: "All", title: `${part.name} · All ${part.states.length} states`, frames }
+    return { _tag: "Frames", mode: "All", title: part.name, frames }
   }
   const editing = subject ?? { part: part.file, state: "default" }
   const viewed = preview ?? editing
   const takes = partTakes(state)
   if (state.shown._tag === "Takes" && takes.length) {
-    add(viewed, editing, null, "Original")
+    add(viewed, editing, null, sameState(viewed, editing) ? "Real files" : refLabel(state, viewed))
     for (const take of takes) add(take.integration?._tag === "Review" ? take.integration.proposal.preview : viewed, editing, take, takeName(take))
-    return { _tag: "Frames", mode: "Takes", title: `${refLabel(state, editing)} · Original and ${takes.length} takes`, frames }
+    return { _tag: "Frames", mode: "Takes", title: part.name, frames }
   }
-  add(viewed, editing, null, refLabel(state, viewed))
-  return { _tag: "Frames", mode: "One", title: refLabel(state, editing), frames }
+  add(viewed, editing, null, sameState(viewed, editing) ? "Real files" : refLabel(state, viewed))
+  return { _tag: "Frames", mode: "One", title: part.name, frames }
 }
 /** No I/O, DOM reads or state mutation. Controllers supply derived region snapshots. */
 export function toChromeView(state: AppState, regions: Regions): ChromeView {
@@ -99,12 +104,12 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
   const attach = edit._tag === "Enabled" && state.attachments.length < MAX_IMAGES && !busy ? enabled : disabled("The composer cannot attach more images now.")
   const valid = state.plan._tag === "Review" ? state.plan.directions.filter(item => item.direction.title.trim() && item.direction.brief.trim()).length : 0
   const snapshot: ChromeView = {
-    connection: state.connection, selection: subject && preview ? { _tag: "State", subject, preview, label: refLabel(state, subject) } : state.part ? { _tag: "All", part: state.part } : { _tag: "None" },
+    connection: state.connection, selection: subject && preview ? { _tag: "State", subject, preview, label: selectionLabel(state, subject) } : state.part ? { _tag: "All", part: state.part } : { _tag: "None" },
     navigation: navigation(state, regions), devices: DEVICES, device: state.device, pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: canvas(state),
     plan: state.plan._tag === "Planning" ? { _tag: "Planning", prompt: state.plan.ask.prompt, count: state.plan.count, message: `Asking the model for ${state.plan.count} different directions…` } : state.plan._tag === "Review" ? { _tag: "Review", prompt: state.plan.ask.prompt, note: state.plan.note, directions: state.plan.directions, start: !busy && valid && agentReady && state.connection._tag === "Ready" && askAvailable(state, state.plan.ask) ? enabled : disabled("No valid directions, unavailable planned subject/context, disconnected Vite, or pending request."), startLabel: `Start ${valid} ${valid === 1 ? "take" : "takes"}` } : { _tag: "None" },
-    composer: { prompt: state.prompt, placeholder: "Describe a change to this part. Paste or drop reference images.", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
+    composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
-      notices: [...state.notices, ...(agentReady && subject ? [{ kind: "info" as const, text: `Editing ${refLabel(state, subject)}${state.context ? ` in ${refLabel(state, state.context)}` : ""} on ${state.device.name}. Ctrl+Enter starts or plans takes${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.` }] : [])], agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
+      notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet." },
     focusedTake: summary,
     record: take && summary && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },

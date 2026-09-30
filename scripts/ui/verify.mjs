@@ -222,6 +222,8 @@ await gate("actions: knobs preview, commit once, cancel, tokens, literals", asyn
     await value.fill("9")
     await value.press("Escape")
     assert.deepEqual((await called(page, "onKnobCancel")).map(call => call.args[0]), ["u"])
+    // A token opens as a list from its field; a click writes it once.
+    await page.locator(`${cal("knob")}[data-knob="bg"] .dr-token__trigger`).click()
     await page.locator(`${cal("knob-token")}[data-knob="bg"][data-token="--pico-navy"]`).click()
     assert.deepEqual((await called(page, "onKnobCommit")).at(-1)?.args, ["bg", "var(--pico-navy)"])
     await page.locator(`${cal("knob-choice")}[data-knob="shape"]`).selectOption("round")
@@ -408,12 +410,25 @@ await gate("focus: typing through stream updates keeps focus and every character
     assert(await title.evaluate(node => node === document.activeElement))
   } finally { await plan.close() }
 })
-await gate("keyboard: palette tokens move with arrows and commit", async () => {
+await gate("keyboard: token lists preview with arrows, write on Enter, restore on Escape", async () => {
   const { page, close } = await open(desk, "knobs")
   try {
-    await page.locator(`${cal("knob-token")}[data-knob="accent"][aria-checked="true"]`).focus()
-    await page.keyboard.press("ArrowRight")
-    assert.deepEqual((await called(page, "onKnobCommit")).at(-1)?.args, ["accent", "var(--pico-peach)"])
+    const trigger = page.locator(`${cal("knob")}[data-knob="accent"] .dr-token__trigger`)
+    await trigger.focus()
+    await page.keyboard.press("ArrowDown")
+    await page.locator(`${cal("knob-token")}[data-knob="accent"][aria-selected="true"]`).waitFor({ state: "visible" })
+    assert(await page.evaluate(() => document.activeElement?.getAttribute("data-token") === "--pico-pink"), "The list opens on the chosen token")
+    await page.keyboard.press("ArrowDown")
+    assert.deepEqual((await called(page, "onKnobInput")).at(-1)?.args, ["accent", "var(--pico-peach)"], "An arrow previews the next token")
+    assert.equal((await called(page, "onKnobCommit")).filter(call => call.args[0] === "accent").length, 0, "An arrow writes nothing")
+    await page.keyboard.press("Enter")
+    assert.deepEqual((await called(page, "onKnobCommit")).at(-1)?.args, ["accent", "var(--pico-peach)"], "Enter writes the previewed token")
+    assert(await trigger.evaluate(node => node === document.activeElement), "Focus returns to the field")
+    await page.keyboard.press("ArrowDown")
+    await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "option")
+    await page.keyboard.press("ArrowUp")
+    await page.keyboard.press("Escape")
+    assert.deepEqual((await called(page, "onKnobCancel")).at(-1)?.args, ["accent"], "Escape puts the value back")
   } finally { await close() }
 })
 

@@ -18,6 +18,7 @@
 @property --dr-parts-w { syntax: "<length>"; inherits: true; initial-value: 264px; }
 @property --dr-side-w { syntax: "<length>"; inherits: true; initial-value: 336px; }
 @property --dr-radius { syntax: "<length>"; inherits: true; initial-value: 8px; }
+@property --dr-control-h { syntax: "<length>"; inherits: true; initial-value: 36px; }
 @property --dr-fs-1 { syntax: "<length>"; inherits: true; initial-value: 12px; }
 @property --dr-fs-2 { syntax: "<length>"; inherits: true; initial-value: 13px; }
 @property --dr-fs-3 { syntax: "<length>"; inherits: true; initial-value: 15px; }
@@ -45,6 +46,8 @@
   --dr-side-w: 21rem;
   /** Corner radius of every card. @label Card radius @min 0 @max 16 @step 1 */
   --dr-radius: 8px;
+  /** One height for every control on a shared row, so rows line up. The dock raises it to a touch target. @label Control height @min 1.75 @max 3 @step 0.125 */
+  --dr-control-h: 2.25rem;
   /** Small type: captions, meta lines and buttons. @label Small type @min 10 @max 14 @step 0.5 */
   --dr-fs-1: 12px;
   /** Body type. @label Body type @min 11 @max 16 @step 0.5 */

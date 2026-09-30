@@ -33,11 +33,14 @@ body:has(> #caliper > .dr-root) { background: #121316; }
 /* --- the stage: canvas, code pane and bar, between the panels ---------------------------- */
 .dr-stage {
   position: absolute; top: 0; bottom: 0; left: var(--dr-free-l); right: var(--dr-free-r);
-  display: grid; grid-template-rows: minmax(min(10rem, 45%), 1fr) auto auto; grid-template-columns: minmax(0, 1fr);
+  /* One explicit row for the canvas. The code pane and the bar add rows only when they are there,
+     so an absent pane adds no gap, and the bar ends one gutter from the room's edge like every panel. */
+  display: grid; grid-template-rows: minmax(min(10rem, 45%), 1fr); grid-auto-rows: auto; grid-template-columns: minmax(0, 1fr);
   gap: var(--dr-gutter); padding-bottom: var(--dr-gutter);
   /* Only a room too short for the canvas floor and the bar scrolls; the canvas keeps its floor above them. */
   overflow-y: auto; overscroll-behavior: contain;
 }
+.dr-root[data-tools="dock"] { --dr-control-h: 2.75rem; }
 .dr-root[data-tools="dock"] .dr-stage { gap: .5rem; padding-bottom: .5rem; }
 .dr-root[data-tools="dock"] .dr-stage > .dr-bar { margin-inline: .5rem; }
 .dr-root[data-bar="off"][data-code="closed"] .dr-stage,

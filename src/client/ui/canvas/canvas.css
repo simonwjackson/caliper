@@ -33,22 +33,35 @@
 .dr-frame__note--warn { color: var(--dr-warn); }
 .dr-frame__note--quiet { color: var(--dr-ink-3); }
 
-/* A direction waiting in the slot its take will fill. */
-.dr-slot { position: relative; width: var(--dr-col); min-height: var(--dr-row); margin: 0; min-width: 0; border-radius: 4px; border: 1px solid var(--dr-edge-2); background: var(--dr-card); padding: .8rem .9rem; display: grid; grid-template-rows: auto 1fr auto; gap: .5rem; align-self: start; }
-.dr-slot--strange { border-style: dashed; border-color: var(--dr-ink-2); }
-.dr-slot__title { border: 0; border-bottom: 1px solid var(--dr-edge-2); background: none; padding: 0 1.6rem .35rem 0; min-width: 0; text-overflow: ellipsis; color: var(--dr-ink); font-size: var(--dr-fs-2); font-weight: 600; }
-.dr-slot__title:focus-visible, .dr-slot__brief:focus-visible { outline: none; border-bottom-color: var(--dr-ink); }
-.dr-slot__brief { border: 0; background: none; resize: none; color: var(--dr-ink-2); font-size: var(--dr-fs-1); line-height: 1.5; padding: 0; min-height: 4.5em; field-sizing: content; }
-.dr-slot__brief:focus-visible { box-shadow: inset 0 -1px 0 var(--dr-ink); }
-.dr-slot__why { font-size: 11px; color: var(--dr-ink-3); }
-.dr-slot__remove { position: absolute; top: .55rem; right: .6rem; border: 0; background: none; color: var(--dr-ink-3); padding: .1rem; border-radius: 4px; display: grid; place-items: center; }
+/* A direction waiting where its take will appear: a take's shape, not a text card.
+   The plate is the frame's screen before it is exposed: device black, faintly
+   ruled, the brief written on it. The caption under it holds the title, as a
+   take's caption holds its name. */
+.dr-slot { display: grid; gap: .7rem; align-content: start; width: var(--dr-col); min-width: 0; margin: 0; }
+.dr-root[data-tools="dock"] .dr-slot { gap: .45rem; }
+.dr-slot__plate { --plate-ink: rgb(236 236 238 / .74); position: relative; width: var(--dr-col); height: var(--dr-row); border-radius: 2px; overflow: hidden;
+  background: repeating-linear-gradient(135deg, rgb(255 255 255 / .035) 0 1px, transparent 1px 9px), #0B0C0E;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .09), 0 0 0 1px rgb(0 0 0 / .8); display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.dr-slot:focus-within .dr-slot__plate { box-shadow: 0 0 0 1px rgb(0 0 0 / .8), 0 0 0 3px var(--dr-accent); }
+/* The strange one: a dashed rule inside the plate. */
+.dr-slot[data-strange] .dr-slot__plate::after { content: ""; position: absolute; inset: 6px; border: 1px dashed rgb(255 255 255 / .32); border-radius: 1px; pointer-events: none; }
+.dr-slot__brief { border: 0; background: none; resize: none; outline: 0; min-height: 0; width: 100%; height: 100%; overflow: auto;
+  padding: 1.1rem 1.2rem; color: var(--plate-ink); caret-color: #fff; font-size: var(--dr-fs-2); line-height: 1.55; }
+.dr-slot__brief::selection { background: rgb(255 255 255 / .22); }
+.dr-slot__why { margin: 0; padding: 0 1.2rem 1rem; font-size: 11px; color: rgb(236 236 238 / .45); }
+.dr-slot__caption { display: flex; gap: .45rem; align-items: center; width: 100%; min-width: 0; font-size: var(--dr-fs-1); }
+.dr-slot__title { flex: 1; min-width: 0; border: 0; background: none; padding: .1rem 0; color: var(--dr-ink); font-size: var(--dr-fs-1); font-weight: 600; text-overflow: ellipsis; }
+.dr-slot__title:focus-visible { outline: none; box-shadow: inset 0 -1px 0 var(--dr-ink); }
+.dr-slot__remove { flex: none; border: 0; background: none; color: var(--dr-ink-3); padding: .2rem; border-radius: 4px; display: grid; place-items: center; position: relative; }
+.dr-slot__remove::after { content: ""; position: absolute; inset: -10px; }
 .dr-slot__remove:hover { color: var(--dr-ink); background: var(--dr-card-2); }
 .dr-slot__remove .dr-icon { width: 12px; height: 12px; }
-.dr-slot--planning { grid-template-rows: 1fr auto; align-content: center; place-items: center; border-style: dashed; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
-.dr-slot--planning .dr-working { width: 60%; }
-.dr-root[data-tools="dock"] .dr-slot { padding: .55rem .6rem; }
-.dr-root[data-tools="dock"] .dr-slot__title { font-size: var(--dr-fs-1); }
-.dr-root[data-tools="dock"] .dr-slot__brief { font-size: 11px; }
+/* Being planned: the plate is still developing. */
+.dr-slot--planning .dr-slot__plate { grid-template-rows: 1fr auto; place-items: center; }
+.dr-slot__planning { color: rgb(236 236 238 / .5); font-size: var(--dr-fs-1); padding: 0 1rem; text-align: center; }
+.dr-slot--planning .dr-working { width: calc(100% - 2.4rem); margin-bottom: 1rem; background: rgb(255 255 255 / .08); }
+.dr-slot__pending { display: block; width: 45%; height: .6rem; border-radius: 3px; background: var(--dr-edge); }
+.dr-root[data-tools="dock"] .dr-slot__brief { font-size: var(--dr-fs-1); padding: .8rem .9rem; }
 
 /* One line in the dimmest ink: the devices as the switch, the width, true size. */
 .dr-caption { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .25rem .5rem; font-size: var(--dr-fs-1); color: var(--dr-ink-3); max-width: 100%; }

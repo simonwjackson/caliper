@@ -27,6 +27,6 @@ export function Caption({ view, actions, geometry }: { readonly view: ChromeView
       ? <span className="dr-caption__fit dr-caption__fit--scaled" role="status">Scaled to {scaled}%: the canvas is too small for true size</span>
       : view.calibrated
         ? <span className="dr-caption__fit">True size</span>
-        : <span className="dr-caption__fit">True size at 96 dpi until <button type="button" className="dr-caption__calibrate" onClick={() => actions.onTool("calibrate")}>calibration</button></span>}
+        : <button type="button" className="dr-caption__fit dr-caption__calibrate" title="Sizes assume 96 dpi. Calibrate for true size." onClick={() => actions.onTool("calibrate")}>Not calibrated</button>}
   </div>
 }

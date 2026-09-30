@@ -93,7 +93,7 @@ try {
     assert.deepEqual(await page.locator(cal.directionTitle).evaluateAll(nodes => nodes.map(node => /** @type {HTMLInputElement} */ (node).value)), planned.directions.map(direction => direction.title))
     assert.deepEqual(await page.locator(cal.directionBrief).evaluateAll(nodes => nodes.map(node => /** @type {HTMLTextAreaElement} */ (node).value)), planned.directions.map(direction => direction.brief))
     if (planned.note) assert((await page.locator(cal.plan).innerText()).includes(planned.note), "the planner's explanation is visible")
-    if (planned.directions.some(direction => direction.strange)) assert.match(await page.locator(cal.plan).innerText(), /Strange direction: it breaks/)
+    if (planned.directions.some(direction => direction.strange)) assert.match(await page.locator(cal.plan).innerText(), /Strange: it breaks/)
     console.log(`planned in ${Math.round((Date.now() - started) / 1000)} s: ${JSON.stringify(planned, null, 1)}`)
     await page.screenshot({ path: join(out, "plan.png") })
     startedTakes = planned.directions.length
