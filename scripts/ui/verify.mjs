@@ -455,9 +455,12 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
   try {
     await page.locator(`${cal("code-editor")} .cm-content`).waitFor()
     await page.locator(`${cal("code-editor")} .cm-content`).click()
+    // The click must give the editor focus before typing, or the keys go elsewhere.
+    await page.waitForFunction(() => document.activeElement?.closest(".cm-content") !== null)
     await page.keyboard.press("Control+Home")
     await page.keyboard.type("/* kept */")
     const text = () => page.locator(`${cal("code-editor")} .cm-content`).textContent()
+    await page.waitForFunction(() => /kept/.test(document.querySelector('[data-cal="code-editor"] .cm-content')?.textContent ?? ""))
     await page.evaluate(() => window.gallery.tick())
     assert.match(await text() ?? "", /kept/, "A stream update keeps the editor's text")
     await page.setViewportSize(phone)

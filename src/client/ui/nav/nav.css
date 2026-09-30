@@ -1,6 +1,6 @@
 /* The parts panel. */
-.dr-parts .dr-panel__body { overflow: hidden; display: grid; grid-template-rows: minmax(0, 1fr); }
-.dr-parts__body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; }
+.dr-parts .dr-panel__body { overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.dr-parts__body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
 .dr-parts__filter { margin: .6rem .85rem 0; border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: 6px; padding: .4rem .6rem; color: var(--dr-ink); min-width: 0; }
 .dr-parts__filter::placeholder { color: var(--dr-ink-3); }
 .dr-parts__scenario { margin: .5rem .85rem 0; display: grid; gap: .4rem; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
@@ -13,7 +13,7 @@
 .dr-parts__children { display: flex; flex-wrap: wrap; gap: .3rem; }
 .dr-parts__child { border: 1px solid var(--dr-edge); background: none; border-radius: 4px; padding: .1rem .45rem; font-size: 11px; color: var(--dr-ink-2); }
 .dr-parts__child[aria-current="true"] { color: var(--dr-ink); border-color: var(--dr-ink-3); background: var(--dr-card-2); }
-.dr-parts__tree { overflow: auto; overscroll-behavior: contain; padding: .4rem 0 .5rem; min-height: 0; }
+.dr-parts__tree { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: .4rem 0 .5rem; min-height: 0; }
 .dr-parts__empty { padding: .6rem .85rem; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
 .dr-layer__name { margin: .6rem .85rem .2rem; font-size: 11px; font-weight: 600; color: var(--dr-ink-3); letter-spacing: .02em; }
 .dr-layer__parts { list-style: none; padding: 0; }
