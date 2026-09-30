@@ -244,7 +244,7 @@ export async function startCentral(options = {}) {
     headers.host = target.host
     headers.authorization = `Bearer ${entry.token}`
     if (body !== undefined) headers["content-length"] = String(body.length)
-    const upstream = httpRequest({ host: target.hostname, port: target.port, method: request.method, path, headers }, answer => {
+    const upstream = httpRequest({ host: socketHost(target), port: target.port, method: request.method, path, headers }, answer => {
       /** @type {Record<string, string | string[]>} */
       const out = {}
       for (const [name, value] of Object.entries(answer.headers)) if (value !== undefined && !HOP.has(name)) out[name] = value
@@ -337,7 +337,7 @@ export async function startCentral(options = {}) {
     const entry = match ? routable(/** @type {string} */ (match[1])) : null
     if (entry === null) { socket.end("HTTP/1.1 404 Not Found\r\n\r\n"); return }
     const target = new URL(entry.url)
-    const upstream = connect(Number(target.port), target.hostname, () => {
+    const upstream = connect(Number(target.port), socketHost(target), () => {
       const lines = [`${request.method} ${request.url} HTTP/1.1`]
       for (let index = 0; index < request.rawHeaders.length; index += 2) {
         const name = /** @type {string} */ (request.rawHeaders[index])
@@ -428,4 +428,14 @@ function sendJson(response, status, body) {
 function redirect(response, location) {
   response.writeHead(302, { location })
   response.end()
+}
+
+/**
+ * The host a socket connects to. A URL keeps an IPv6 address in brackets,
+ * such as `[::1]` for a dev server that listens on localhost; a socket needs it bare.
+ *
+ * @param {URL} url
+ */
+export function socketHost(url) {
+  return url.hostname.replace(/^\[(.*)\]$/, "$1")
 }

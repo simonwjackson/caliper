@@ -6,7 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { caliper } from "../src/plugin.js"
 import { newToken, projectId, PROTOCOL, readRegistry, tokenMatches, writeEntry } from "../src/central/registry.js"
-import { projectViews } from "../src/central/server.js"
+import { projectViews, socketHost } from "../src/central/server.js"
 import { decode, encode } from "../src/host/wire.js"
 import { readSettings } from "../src/central/config.js"
 import { manifest, withProject } from "./project-server.js"
@@ -139,6 +139,13 @@ describe("the Caliper app", () => {
     expect(() => readSettings(join(dir, "key.json"))).toThrow("apiKey")
     writeFileSync(join(dir, "extra.json"), JSON.stringify({ agents: {} }))
     expect(() => readSettings(join(dir, "extra.json"))).toThrow("agents")
+  })
+})
+
+describe("the proxy", () => {
+  test("connects to a dev server on an IPv6 address without its brackets", () => {
+    expect(socketHost(new URL("http://[::1]:5173/"))).toBe("::1")
+    expect(socketHost(new URL("http://127.0.0.1:5173/"))).toBe("127.0.0.1")
   })
 })
 
