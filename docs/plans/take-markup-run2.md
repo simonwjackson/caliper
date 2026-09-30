@@ -1,7 +1,8 @@
 # Take markup, Run 2: build plan
 
-Status: phase 4 Step 0 is built. Production markup is not connected.
-Phase cut B is confirmed. The user also confirmed that Send waits for every
+Status: phase 4 is merged (`8883251` to `5578e65`), deployed to Pico and
+pinned in the recovery tool. See "Phase 4 merge record". Phases 5 and 6 are
+not started. Phase cut B is confirmed. The user also confirmed that Send waits for every
 marked take: lost marks and running parents block the entire pass.
 The remaining planner choices are not user-confirmed.
 
@@ -306,8 +307,49 @@ These remain phase 4 integration gates. Step 0 does not move the recovery-tool
 pin or deploy an unfinished markup feature. Re-pin and deploy after the full
 phase lands, as required above.
 
+## Phase 4 merge record
+
+Merged on 2026-09-30. Core (`8883251`, `44478fd`) and UI (`10e8849`) touched
+no common file. Worker notes: `react-chrome-core-notes.md` (Run 2 section) and
+`take-markup-ui-notes.md`.
+
+| Commit | What integration needed |
+|---|---|
+| `2e9ea40` | `verify-markup.mjs --darkroom` runs the core gate on the production Darkroom, not only the reference renderer. On Darkroom a region's letter tab covered the part's button, so the gate's "repeat the input" click hit the tab; the gate now clicks an uncovered point, as a user would. Two draft tests got the 30 s timeout of the other server tests (1 in 3 runs hit bun's 5 s under load). |
+| `f17aeb0` | UI contract requests 1 and 2. `SendMark` carries the display name, so a blocked Send reads "2A: Element not found", not "Mark 48c523ff-…". The contract records that a `Point` rect has zero size at the clicked point. |
+| `5578e65` | `verify-markup-model.mjs`: the real-model pass on a scratch copy of Pico. |
+
+Gate evidence at `5578e65`: typecheck; `verify:chrome-contract` 17 scenarios
+and 106 hooks; `scripts/ui/verify.mjs` 226 of 226; `verify-markup.mjs` 7 of 7
+on both renderers; `bun test` 586 pass, 1 skip, 1 fail (the known 60 s
+timeout in `test/authored-execution.test.js`).
+
+Real-model pass (`verify-markup-model.mjs`, `claude-opus-5-5`, Pico's
+`PicoCard` part at RG353M): 2 marks on takes 1 and 2 of 3, one Send. Send
+answered in 0.8 s and both agents stopped 32 s later. Take 4 (from 1, "make
+this title about half as big") halved the title and kept take 1's hand edit.
+Take 5 (from 2, "make this kicker text red") changed the ask kicker token to
+red and reported that red on yellow fails contrast (3.22:1). Each brief held
+only its own mark, and each picture showed the pin.
+
+Deploy: `bun run build` in the main checkout, and Pico's Vite restarted with
+`nix develop <caliper> -c node node_modules/.bin/vite --host 0.0.0.0 --port
+5173 --strictPort` in `~/code/sandbox/korri/surfaces/pico`. Server code
+changes need that restart; a chrome-only change needs only the build.
+`/__caliper/marks.json` answers 200 on `zao.hummingbird-lake.ts.net:5173`.
+The recovery tool is pinned to `5578e65`.
+
+Open after phase 4:
+
+- UI contract request 3 (a thumbnail URL per draft group instead of a second
+  iframe) and 4 ("Clear all" in the draft head) are not answered.
+- Not tried by hand: Alt-drag on the user's desktop, touch on the Fold, and
+  M while focus is inside a frame (it goes to the frame).
+- Planner choices 2, 3 and 5 to 11 are built as proposed. The user has
+  confirmed only the blocking rule.
+
 ## Next stop point
 
-Step 0 is the frozen basis for the phase 4 UI and core workers. Do not start
-phase 5, add references, or mark the original as part of phase 4. The next work
-is the production implementation, followed by the full phase gate.
+Phase 4 is done. Phase 5 starts with its Step 0 contract. Confirm planner
+choice 15 (the accept flag) with the user before it. Phase 6 needs choices 13
+and 14 confirmed before its Step 0.
