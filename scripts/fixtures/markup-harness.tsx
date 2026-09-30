@@ -9,9 +9,11 @@ import Chrome from "caliper-markup-renderer"
 import { createChromeApp } from "../../src/client/app/runtime"
 import { validateResponse } from "../../src/client/app/wire"
 
+// What core asked the user to confirm; the harness always answers yes.
+const confirms: string[] = []
 const app = createChromeApp({
   hash: location.hash, storage: localStorage, origin: location.origin,
-  saveLocation: hash => history.replaceState(null, "", hash), confirm: () => true,
+  saveLocation: hash => history.replaceState(null, "", hash), confirm: text => { confirms.push(text); return true },
   request: async <T,>(path: string, data?: object): Promise<T> => {
     const response = await fetch(path.replace(/^\//, ""), data === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) })
     const value = await response.json()
@@ -21,7 +23,7 @@ const app = createChromeApp({
   },
 })
 // Read-only access for the gate's assertions. Actions go through the rendered controls.
-Object.assign(window, { caliperHarness: { snapshot: () => app.getSnapshot() } })
+Object.assign(window, { caliperHarness: { snapshot: () => app.getSnapshot(), confirms: () => [...confirms] } })
 function App() {
   const view = useSyncExternalStore(app.subscribe, app.getSnapshot)
   return <Chrome view={view} actions={app.actions} />
