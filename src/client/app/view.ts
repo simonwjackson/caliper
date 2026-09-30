@@ -15,13 +15,12 @@ export type MarkupRegion = {
 }
 export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
 const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }) }
-/**
- * Phase 5 Step 0: the wire does not carry `chain`, `lineage` or the accept log
- * yet, so every take is a chain of one and no take is flagged. The core worker
- * adds them to `TakeView` and `TakesSnapshot` and passes them here.
- */
-const chainTake = (take: TakeView): ChainTake => ({ take: take.take, created: take.created, part: take.part, state: take.state, files: take.files })
-const accepted: readonly AcceptRecord[] = []
+/** A take as the chain policy reads it: its subject, files, and the chain fields of its record. */
+const chainTake = (take: TakeView): ChainTake => ({
+  take: take.take, created: take.created, part: take.part, state: take.state, files: take.files,
+  ...(take.chain ? { chain: take.chain } : {}), ...(take.lineage ? { lineage: take.lineage } : {}),
+})
+const acceptLog = (state: AppState): readonly AcceptRecord[] => state.takes?.accepted ?? []
 const flagView = (flag: ChainFlag): AcceptFlag => {
   const words = flagWords(flag)
   return flag._tag === "Before" && words ? { _tag: "Before", take: flag.take, ...words } : { _tag: "Current" }
@@ -48,8 +47,12 @@ function chainFacts(state: AppState, take: TakeView): Pick<TakeSummary, "lineage
   const chain = chainWith(state, take)
   return {
     lineage: chain && (chain.parent || chain.discarded) ? lineageLabel(chain) : "",
-    flag: flagView(acceptFlag(chainTake(take), accepted)),
+    flag: flagView(acceptFlag(chainTake(take), acceptLog(state))),
   }
+}
+/** Whether the chain has a pair to swap, so `onChainSolo` may choose its parent. */
+export function chainHasParent(state: AppState, id: string): boolean {
+  return planChains(partTakes(state).map(chainTake), currentTake(state)).some(chain => chain.id === id && chain.parent !== null)
 }
 /** Planner choice 20 (answered B): what Accept also removes, said only in its confirmation. */
 export function acceptConfirmNote(state: AppState, take: TakeView): string {
@@ -132,10 +135,14 @@ function canvas(state: AppState, markup: MarkupRegion): CanvasView {
       const parentKey = parent ? addTake(parent) : null
       chains.push({
         id: chain.id, shown: addTake(shown), parent: parentKey, take: shown.take, label: lineageLabel(chain),
-        history: chain.steps.length > 1 ? { _tag: "Folded", label: historyLabel(chain.steps.length) } : { _tag: "None" },
-        flag: flagView(acceptFlag(chainTake(shown), accepted)),
-        // Phase 5 core keeps the swap per chain (choice 19); until then a pair that does not fit shows its newest take.
-        solo: "Shown",
+        history: chain.steps.length < 2 ? { _tag: "None" }
+          : state.chainsOpen.has(chain.id) ? { _tag: "Open", label: historyLabel(chain.steps.length), steps: chain.steps.map(step => step.present
+            ? { _tag: "Present", take: step.take, label: `Take ${step.take}`, selected: step.take === chain.shown.take && step.created === chain.shown.created }
+            : { _tag: "Discarded", take: step.take, label: `Take ${step.take}, discarded` }) }
+          : { _tag: "Folded", label: historyLabel(chain.steps.length) },
+        flag: flagView(acceptFlag(chainTake(shown), acceptLog(state))),
+        // Planner choice 19 (answered B): core remembers the side per chain; a chain with no parent shows its take.
+        solo: parentKey !== null && state.chainSolo.has(chain.id) ? "Parent" : "Shown",
       })
     }
     return { _tag: "Frames", mode: "Takes", title: part.name, frames, chains }

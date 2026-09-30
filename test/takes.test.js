@@ -116,6 +116,38 @@ describe("the take store", () => {
     })
   })
 
+  test("accept records the take, its part and the files it wrote in the accept log", async () => {
+    await inFolder({ "src/a.css": "real", "src/b.css": "real" }, root => {
+      const store = createTakeStore(root)
+      expect(store.accepted()).toEqual([])
+      const first = store.create(ask)
+      store.write(first, "src/a.css", "one")
+      const created = /** @type {import("../src/takes/store.js").TakeRecord} */ (store.record(first)).created
+      const before = Date.now()
+      store.accept(first)
+      const second = store.create({ ...ask, part: "src/Other.part.tsx" })
+      store.write(second, "src/b.css", "two")
+      store.accept(second)
+      const log = store.accepted()
+      expect(log.map(({ at: _at, created: _created, ...rest }) => rest)).toEqual([
+        { take: first, part: ask.part, state: "default", files: ["src/a.css"] },
+        { take: second, part: "src/Other.part.tsx", state: "default", files: ["src/b.css"] },
+      ])
+      expect(log[0]?.created).toBe(created)
+      expect(log[0]?.at).toBeGreaterThanOrEqual(before)
+      expect(JSON.parse(readFileSync(join(root, ".caliper/accepted.json"), "utf8"))).toHaveLength(2)
+    })
+  })
+
+  test("a damaged accept log reads as empty entries skipped, never as an error", async () => {
+    await inFolder({ ".caliper/accepted.json": "[{\"take\":\"1\"}, 3, {\"take\":\"2\",\"created\":5,\"part\":\"p\",\"state\":\"s\",\"files\":[\"a\"],\"at\":9}]" }, root => {
+      expect(createTakeStore(root).accepted()).toEqual([{ take: "2", created: 5, part: "p", state: "s", files: ["a"], at: 9 }])
+    })
+    await inFolder({ ".caliper/accepted.json": "not json" }, root => {
+      expect(createTakeStore(root).accepted()).toEqual([])
+    })
+  })
+
   test("discard removes the take and leaves the real files", async () => {
     await inFolder({ "src/a.css": "real" }, root => {
       const store = createTakeStore(root)

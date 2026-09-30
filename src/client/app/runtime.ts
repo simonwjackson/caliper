@@ -5,7 +5,8 @@ import { Type } from "typebox"
 import { ChecksViewSchema, CodeChangeSchema, FrameReportSchema, PlanSchema, parseProject, parseTakes, parseWire } from "./wire"
 import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable } from "./state"
 import type { AppState, Ask, Plan, Preferences, Submission } from "./state"
-import { toChromeView, takeSummary, disabled, acceptConfirmNote } from "./view"
+import { toChromeView, takeSummary, disabled, acceptConfirmNote, chainHasParent } from "./view"
+import { identityKey } from "../../takes/chains.js"
 import { sameState, subjectsOf, stateExists } from "../scenarios.js"
 import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
 import { imageName, imageProblem, MAX_IMAGES } from "../images.js"
@@ -237,9 +238,20 @@ export function createChromeApp(input: RuntimeInput) {
   }
   const actions: ChromeActions = {
     ...markup.actions,
-    // Phase 5 Step 0: every chain has one step until the wire carries lineage, so there is no history to open.
-    onChainHistory: () => notify(new Error("Chain history is not connected yet.")),
-    onChainSolo: () => notify(new Error("Chain history is not connected yet.")),
+    onChainHistory: (chain, open) => {
+      const chainsOpen = new Set(state.chainsOpen)
+      if (open) chainsOpen.add(chain); else chainsOpen.delete(chain)
+      set({ ...state, chainsOpen })
+    },
+    onChainSolo: (chain, solo) => {
+      if (solo === "Parent" && !chainHasParent(state, chain)) return
+      const chainSolo = new Set(state.chainSolo)
+      if (solo === "Parent") chainSolo.add(chain); else chainSolo.delete(chain)
+      // Keep only chains that still exist, so the preference does not grow with every take ever made.
+      const alive = new Set((state.takes?.takes ?? []).map(take => identityKey(take.chain ?? take)))
+      remember("chain-solo", JSON.stringify([...chainSolo].filter(id => alive.has(id))))
+      set({ ...state, chainSolo })
+    },
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
       // An open pane that another pane covers comes to the front; only a pane already in front closes.

@@ -2,7 +2,9 @@
 import { execFileSync } from "node:child_process"
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path"
+import { Check } from "typebox/value"
 import { IMAGE_TYPES } from "../client/images.js"
+import { AcceptRecordSchema, MAX_ACCEPTED } from "./accepted-contract.js"
 
 /**
  * Where takes live, and what an agent may read and write.
@@ -40,6 +42,8 @@ import { IMAGE_TYPES } from "../client/images.js"
  *   Names, planner directions, and integration review metadata remain independent of that context.
  *   `prompt` is the first prompt. A take made from marks has `parent`, `chain` (the chain's first
  *   take), `history` and the `marks` it was sent, and no prompt of its own.
+ * @typedef {import("typebox").Static<typeof AcceptRecordSchema>} AcceptRecord
+ *   One accept: the take, its subject, the real files it wrote, and when.
  */
 
 export const CALIPER_DIR = ".caliper"
@@ -300,14 +304,37 @@ export function createTakeStore(root) {
    * @returns {string[]} the real files that changed
    */
   const accept = take => {
+    const accepting = record(take)
     const changed = files(take)
     for (const file of changed) {
       const inside = fence(file)
       mkdirSync(dirname(join(root, inside)), { recursive: true })
       cpSync(join(folder(take), inside), join(root, inside))
     }
+    if (accepting !== null) {
+      const entry = { take, created: accepting.created, part: accepting.part, state: accepting.state, files: changed, at: Date.now() }
+      writeFileSync(acceptedFile(), `${JSON.stringify([...accepted(), entry].slice(-MAX_ACCEPTED), null, 2)}\n`)
+    }
     discard(take)
     return changed
+  }
+
+  const acceptedFile = () => safeTakePath(join(root, CALIPER_DIR, "accepted.json"))
+
+  /**
+   * The accept log, oldest first. A damaged file or entry is skipped, not an
+   * error: the log only feeds a warning.
+   * @returns {AcceptRecord[]}
+   */
+  const accepted = () => {
+    const file = acceptedFile()
+    if (!existsSync(file)) return []
+    try {
+      const entries = JSON.parse(readFileSync(file, "utf8"))
+      return Array.isArray(entries) ? entries.filter(entry => Check(AcceptRecordSchema, entry)) : []
+    } catch {
+      return []
+    }
   }
 
   /**
@@ -357,7 +384,7 @@ export function createTakeStore(root) {
       .sort()
   }
 
-  return { root, list, create, fork, record, update, addImages, image, original, reset, read, write, files, listFiles, accept, discard }
+  return { root, list, create, fork, record, update, addImages, image, original, reset, read, write, files, listFiles, accept, accepted, discard }
 }
 
 /** @typedef {ReturnType<typeof createTakeStore>} TakeStore */

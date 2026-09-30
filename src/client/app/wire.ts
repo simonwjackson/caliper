@@ -7,6 +7,8 @@ import { CheckDeclarationSchema } from "../../authored/contract.js"
 import { ChecksViewSchema } from "../../checks/contract.js"
 import { integrationProposalSchema } from "../../takes/integration-contract.js"
 import { KnobHintsSchema } from "../../knobs/contract.js"
+import { TakeIdentitySchema } from "../../takes/marks-contract.js"
+import { AcceptRecordSchema } from "../../takes/accepted-contract.js"
 import type { Project, TakesSnapshot } from "../../types"
 
 const text = Type.String()
@@ -53,6 +55,7 @@ export const TakesSchema = Type.Object({
   takes: Type.Array(Type.Object({
     take: Type.String({ pattern: "^[1-9][0-9]*$" }), part: text, state: text, context: Type.Optional(StateRefSchema), device: text, created: Type.Number({ minimum: 0, maximum: 8.64e15 }),
     name: Type.Optional(text), nameIssue: Type.Optional(text), direction: Type.Optional(DirectionSchema),
+    parent: Type.Optional(TakeIdentitySchema), chain: Type.Optional(TakeIdentitySchema), lineage: Type.Optional(Type.Array(TakeIdentitySchema)),
     integration: Type.Optional(Type.Union([
       Type.Object({ _tag: tag("Preparing"), sourceTake: text }),
       Type.Object({ _tag: tag("Review"), sourceTake: text, proposal: integrationProposalSchema }),
@@ -66,6 +69,7 @@ export const TakesSchema = Type.Object({
       Type.Object({ _tag: tag("Tool"), id: text, name: text, subject: text, outcome: Type.Union([tag("Running"), tag("Done"), tag("Failed")]), detail: text }),
     ])),
   })),
+  accepted: Type.Array(AcceptRecordSchema),
 })
 export const CodeChangeSchema = Type.Object({ file: text, take: Type.Union([text, Type.Null()]) })
 export const FrameReportSchema = Type.Object({

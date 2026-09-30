@@ -297,6 +297,14 @@ export type TakeView = {
   readonly integration?: { readonly _tag: "Preparing"; readonly sourceTake: string } | { readonly _tag: "Review"; readonly sourceTake: string; readonly proposal: import("./takes/integration.js").IntegrationProposal }
   /** The planner's direction for this take, when one prompt started several. */
   readonly direction?: Direction
+  /**
+   * Only for a take made from marks: the take it was made from, the chain's
+   * first take, and every ancestor from that first take to the parent. The
+   * ancestors may since be discarded.
+   */
+  readonly parent?: { readonly take: string; readonly created: number }
+  readonly chain?: { readonly take: string; readonly created: number }
+  readonly lineage?: readonly { readonly take: string; readonly created: number }[]
   readonly run: TakeRun
   /** The files the take changes, root-relative. */
   readonly files: readonly string[]
@@ -310,6 +318,8 @@ export type TakesSnapshot = {
   readonly agent: AgentStatus
   readonly skills: SkillsStatus
   readonly takes: readonly TakeView[]
+  /** The accept log, oldest first (`.caliper/accepted.json`). */
+  readonly accepted: readonly import("./takes/store.js").AcceptRecord[]
 }
 
 /** One file the code pane lists for a part. */

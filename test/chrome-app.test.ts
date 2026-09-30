@@ -123,7 +123,7 @@ describe("stable app actions", () => {
       const actions = app.actions
       try {
         app.receiveProject(project)
-        app.receiveTakes({ agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost", reasoning: "off", api: "chat-completions", baseUrlFrom: "test", keyFrom: "test" }, skills: { skills: [], problems: [] }, takes: [] })
+        app.receiveTakes({ agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost", reasoning: "off", api: "chat-completions", baseUrlFrom: "test", keyFrom: "test" }, skills: { skills: [], problems: [] }, accepted: [], takes: [] })
         actions.onPrompt("Describe the state")
         actions.onCount(3)
         const first = app.getSnapshot()
@@ -149,7 +149,7 @@ describe("stable app actions", () => {
       const app = createChromeApp({ hash: `#part=${part}&state=Busy`, request: async <T>() => await pending as T })
       try {
         app.receiveProject(project)
-        app.receiveTakes({ agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost", reasoning: "off", api: "chat-completions", baseUrlFrom: "test", keyFrom: "test" }, skills: { skills: [], problems: [] }, takes: [] })
+        app.receiveTakes({ agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost", reasoning: "off", api: "chat-completions", baseUrlFrom: "test", keyFrom: "test" }, skills: { skills: [], problems: [] }, accepted: [], takes: [] })
         app.actions.onPrompt("Keep the prompt")
         app.actions.onCount(3)
         app.actions.onStart()

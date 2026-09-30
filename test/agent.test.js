@@ -446,6 +446,73 @@ describe("a take's agent", () => {
   })
 })
 
+describe("chains of takes", () => {
+  /**
+   * Take 1 from a prompt, take 2 made from 1, take 3 made from 2, and take 4
+   * from another prompt. Each chain take edits the chip.
+   * @param {ReturnType<typeof createTakeStore>} store
+   */
+  const chainOfThree = store => {
+    /** @param {string} take */
+    const identity = take => ({ take, created: /** @type {import("../src/takes/store.js").TakeRecord} */ (store.record(take)).created })
+    /** @param {string[]} lineage */
+    const from = lineage => {
+      const ids = lineage.map(identity)
+      return { ...ask, parent: /** @type {{ take: string, created: number }} */ (ids.at(-1)), chain: /** @type {{ take: string, created: number }} */ (ids[0]), history: { prompt: null, lineage: ids, passes: [] }, marks: [] }
+    }
+    const one = store.create({ ...ask, prompt: "Red" })
+    store.write(one, "src/chip.css", ".chip { color: red }\n")
+    const two = store.fork(one, from([one]))
+    store.write(two, "src/chip.css", ".chip { color: darkred }\n")
+    const three = store.fork(two, from([one, two]))
+    const four = store.create({ ...ask, prompt: "Green" })
+    store.write(four, "src/chip.css", ".chip { color: green }\n")
+    return { one, two, three, four, identity }
+  }
+
+  test("views carry each take's parent, chain and lineage", async () => {
+    await inFolder(projectFiles, root => {
+      const { agents, store } = setup(root)
+      const { one, two, three, four, identity } = chainOfThree(store)
+      const view = (/** @type {string} */ take) => agents.views().find(candidate => candidate.take === take)
+      expect(view(one)).not.toHaveProperty("chain")
+      expect(view(four)).not.toHaveProperty("lineage")
+      expect(view(three)).toMatchObject({ parent: identity(two), chain: identity(one), lineage: [identity(one), identity(two)] })
+    })
+  })
+
+  test("accept copies the accepted take and removes its whole chain; other chains stay", async () => {
+    await inFolder(projectFiles, root => {
+      const { agents, store } = setup(root)
+      const { two, four } = chainOfThree(store)
+      expect(agents.accept(two)).toEqual(["src/chip.css"])
+      expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("darkred")
+      expect(agents.views().map(view => view.take)).toEqual([four])
+      expect(store.accepted().map(record => record.take)).toEqual([two])
+    })
+  })
+
+  test("accepting the chain's first take removes the takes made from it", async () => {
+    await inFolder(projectFiles, root => {
+      const { agents, store } = setup(root)
+      const { one, four } = chainOfThree(store)
+      agents.accept(one)
+      expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("color: red")
+      expect(agents.views().map(view => view.take)).toEqual([four])
+    })
+  })
+
+  test("discard removes one take; the takes made from it keep their lineage", async () => {
+    await inFolder(projectFiles, root => {
+      const { agents, store } = setup(root)
+      const { one, two, three, four, identity } = chainOfThree(store)
+      agents.discard(two)
+      expect(agents.views().map(view => view.take)).toEqual([one, three, four])
+      expect(agents.views().find(view => view.take === three)).toMatchObject({ lineage: [identity(one), { take: two }] })
+    })
+  })
+})
+
 describe("hand edits in a take", () => {
   test("a hand edit saves to the take, and the real file does not change", async () => {
     await inFolder(projectFiles, async root => {

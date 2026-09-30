@@ -35,6 +35,19 @@ export type AppState = {
   attachments: { id: string; name: string; mimeType: string; data: string; url: string }[]
   notices: ChromeView["composer"]["notices"]
   reports: ReadonlyMap<string, FrameReport>
+  /** Chains whose history is open. Not remembered. */
+  chainsOpen: ReadonlySet<string>
+  /** Chains whose pair shows the parent when it does not fit (planner choice 19). Remembered. */
+  chainSolo: ReadonlySet<string>
+}
+/** Chain ids are `take@created` of the chain's first take; a damaged preference reads as none. */
+function savedChainSolo(storage: Preferences): ReadonlySet<string> {
+  try {
+    const saved: unknown = JSON.parse(storage.getItem("caliper:chain-solo") ?? "[]")
+    return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string" && /^[1-9]\d*@\d+$/.test(id)) : [])
+  } catch {
+    return new Set()
+  }
 }
 export type Preferences = { getItem(key: string): string | null }
 export function createAppState(hash = "", storage: Preferences = { getItem: () => null }): AppState {
@@ -54,6 +67,7 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     // navOpen is the docked parts column, a remembered preference. The UI owns the small-screen drawer.
     tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
+    chainsOpen: new Set(), chainSolo: savedChainSolo(storage),
   }
 }
 export function clampShare(value: number) { return Math.min(0.8, Math.max(0.2, value)) }

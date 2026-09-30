@@ -106,6 +106,8 @@ describe("the takes API", () => {
       const accepted = await post(url, `/__caliper/takes/${take}/accept`, {})
       expect(await accepted.json()).toEqual({ take, files: ["src/app.css"] })
       expect(readFileSync(join(root, "src/app.css"), "utf8")).toContain("red")
+      const snapshot = await (await get("/__caliper/takes.json")).json()
+      expect(snapshot.accepted).toMatchObject([{ take, part: "src/Chip.part.tsx", files: ["src/app.css"] }])
     })
   })
 

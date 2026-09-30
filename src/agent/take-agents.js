@@ -7,6 +7,13 @@ import { metadataTools } from "./metadata-tools.js"
 import { createIntegrationReview } from "../takes/integration.js"
 import { skillPrompt, skillSession } from "./skills.js"
 import { imageContent } from "./images.js"
+import { identityKey } from "../takes/chains.js"
+
+/**
+ * The chain a take belongs to: its record's `chain`, or the take itself.
+ * @param {{ take: string, created: number, chain?: { take: string, created: number } }} take
+ */
+const chainKey = ({ take, created, chain }) => identityKey(chain ?? { take, created })
 
 /**
  * @typedef {import("./model.js").Engine} Engine
@@ -173,9 +180,22 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   /** @param {string} take */
   const accept = take => {
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it before you accept it.`)
-    if (store.record(take)?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
+    const accepting = store.record(take)
+    if (accepting?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
+    // Plan decision 12: accept removes the accepted take's whole chain. Check every member before the first write.
+    const chain = accepting ? chainKey({ take, created: accepting.created, chain: accepting.chain }) : null
+    const members = store.list().filter(other => {
+      const record = other === take ? null : store.record(other)
+      return record !== null && chainKey({ take: other, created: record.created, chain: record.chain }) === chain
+    })
+    const running = members.find(other => live.get(other)?.run._tag === "Running")
+    if (running) throw new Error(`Take ${running} of this chain is still working. Stop it before you accept take ${take}.`)
     const changed = store.accept(take)
     live.delete(take)
+    for (const other of members) {
+      live.delete(other)
+      store.discard(other)
+    }
     onChange()
     return changed
   }
@@ -204,6 +224,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       ...(record.name ? { name: record.name } : {}),
       ...(!record.name && !record.direction && state?.run._tag !== "Running" ? { nameIssue: "No generated name. Ask the agent to name this take." } : {}),
       ...(record.integration ? { integration: integration.summary(take) } : {}),
+      ...(record.parent ? { parent: record.parent } : {}),
+      ...(record.chain ? { chain: record.chain } : {}),
+      ...(record.history ? { lineage: record.history.lineage } : {}),
       run: state?.run ?? { _tag: "Idle" },
       files: store.files(take),
       images: record.images ?? [],

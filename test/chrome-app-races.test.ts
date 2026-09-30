@@ -30,7 +30,7 @@ function take(overrides: Partial<TakeView> = {}): TakeView {
 function takes(list: readonly TakeView[] = []): TakesSnapshot {
   return {
     agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost:8080/v1", reasoning: "off", api: "chat-completions", baseUrlFrom: "test configuration", keyFrom: "test environment" },
-    skills: { skills: [], problems: [] }, takes: list,
+    skills: { skills: [], problems: [] }, accepted: [], takes: list,
   }
 }
 function deferred<T>() {

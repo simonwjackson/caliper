@@ -210,7 +210,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
   }
 
   /** @returns {TakesSnapshot} */
-  const snapshot = () => ({ agent: status, skills: status._tag === "Ready" ? skillsStatus(skills()) : { skills: [], problems: [] }, takes: agents.views() })
+  const snapshot = () => ({ agent: status, skills: status._tag === "Ready" ? skillsStatus(skills()) : { skills: [], problems: [] }, takes: agents.views(), accepted: store.accepted() })
 
   /**
    * @param {string} path below `/__caliper`
