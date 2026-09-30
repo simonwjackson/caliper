@@ -1,9 +1,9 @@
 # Take markup, Run 2: build plan
 
 Status: phase 4 is merged (`8883251` to `5578e65`), deployed to Pico and
-pinned in the recovery tool. See "Phase 4 merge record". Phase 5 Step 0 (the
-chain contract) is built; its workers have not started. Phase 6 is not
-started. Phase cut B is confirmed. The user also confirmed that Send waits for every
+pinned in the recovery tool. See "Phase 4 merge record". Phase 5 is merged;
+see "Phase 5 merge record". Phase 6 is next; the user left choices 13 and 14
+to the coordinator, who took A for both. Phase cut B is confirmed. The user also confirmed that Send waits for every
 marked take: lost marks and running parents block the entire pass.
 The remaining planner choices are not user-confirmed.
 
@@ -465,8 +465,40 @@ The gate above, plus: a real accept through the served Darkroom removes its
 chain and flags a take of another part that shares a file; a Vite restart
 keeps the flags.
 
+## Phase 5 merge record
+
+Merged on 2026-09-30 by cherry-picking core (`markup/p5-core`) and UI
+(`markup/p5-ui`, a subagent worker) onto `78df06c`. No file overlap.
+
+Core: the server sends `parent`, `chain` and `lineage` on each take and the
+accept log (`.caliper/accepted.json`, schema `src/takes/accepted-contract.js`,
+newest 200 kept). Accept copies the accepted take, then removes every other
+take of its chain; it refuses while another take of the chain runs. The
+chrome keeps open histories per chain (not remembered) and the fallback side
+per chain (`caliper:chain-solo`, remembered). UI: `Chain`, `ChainHead`,
+`ChainHistory`, `Flag`; the pair, gap label, history strip, flag and the
+per-device fallback.
+
+Gates on the combined tree: typecheck; full suite 630 pass, 1 skip, 1 fail
+(the known 60 s `authored-execution` timeout); `verify:chrome-contract` 19
+scenarios, 111 hooks; `scripts/ui/verify.mjs` 268 of 268;
+`scripts/verify-chains.mjs` 5 of 5 on both renderers (pair and heading, a
+discarded middle take, history with an inert discarded step, accept that names
+and removes its chain and flags a same-part and an other-part take, flags after
+a Vite restart); `scripts/verify-markup.mjs` 7 of 7 on both renderers.
+
+Open from the UI worker (`docs/plans/take-markup-ui-notes.md`, Phase 5):
+- The gap label counts discarded takes ("7 ← from 3 (1 discarded)"). The
+  example in decision 13 reads "(5 discarded)" for one discarded take 5. The
+  count is kept: it stays true when more than one take is missing. Record the
+  other reading here if the user prefers it.
+- History steps have no thumbnail; `ChainStepView` carries no picture.
+- After an accept on the same part every older take is flagged and dimmed.
+- The canvas reserves scroll-bar space on both edges, and frames keep at
+  least 6 rem of height, in every mode.
+
 ## Next stop point
 
-Phase 5 Step 0 is done. Next: the phase 5 UI and core workers, in parallel
-worktrees from `main`. Phase 6 needs choices 13 and 14 confirmed before its
-Step 0.
+Phase 5 is done. Phase 6 (references and marks on the original) is built on
+`markup/p6` by the coordinator: contract and core. Next: its UI worker, then
+its gate.
