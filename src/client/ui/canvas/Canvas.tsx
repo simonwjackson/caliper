@@ -9,6 +9,7 @@ import { Caption } from "./Caption"
 import { Calibration } from "./Calibration"
 import "../tokens.css"
 import "./canvas.css"
+import "./marks.css"
 
 /** Height the canvas spends on words around one frame: the title, the frame's name and the caption, in rem. */
 const WORDS_H = 8.5
@@ -46,6 +47,9 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
   const plan = view.plan
   const label = view.selection._tag === "State" ? view.selection.label : view.selection._tag === "All" ? `All ${frames.length} states` : ""
   const problems = frames.flatMap(frame => frame.problems.map((problem, index) => ({ frame, problem, index })))
+  const markup = view.markup._tag === "Ready" ? view.markup : null
+  const mode = markup?.mode ?? { _tag: "Off" as const }
+  const replacing = mode._tag === "Replacing" ? markup?.groups.flatMap(group => group.marks).find(mark => mark.id === mode.id) : undefined
   const style = geometry ? { "--dr-col": `${geometry.width}px`, "--dr-row": `${geometry.height}px` } as CSSProperties : undefined
   return <section className="dr-canvas" data-cal={CAL.canvas} data-mode={canvas._tag === "Frames" ? canvas.mode : "Empty"} data-calibrating={calibrating || undefined} aria-label="Canvas">
     <div ref={scroll} className="dr-canvas__scroll">
@@ -56,9 +60,11 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
             <h1>{canvas.title}</h1>
             {label && <span className="dr-canvas__label">{label}</span>}
             {plan._tag !== "None" && <q className="dr-canvas__ask">{plan.prompt}</q>}
+            {mode._tag === "Marking" && <span className="dr-canvas__marking" role="status">Mark mode. Click or drag on a frame. <kbd>M</kbd> leaves.</span>}
+            {mode._tag === "Replacing" && <span className="dr-canvas__marking" role="status">Re-place {replacing?.name ?? "the mark"}: click or drag on its take. <kbd>Esc</kbd> cancels.</span>}
           </header>
           <div className="dr-frames" data-cal={plan._tag === "None" ? undefined : CAL.plan} aria-label={plan._tag === "None" ? undefined : "Take plan"} role={plan._tag === "None" ? undefined : "group"}>
-            {geometry && frames.map(frame => <DeviceFrame key={frame.key} frame={frame} geometry={geometry} css={{ width: view.device.cssWidth, height: view.device.cssHeight }} actions={actions} />)}
+            {geometry && frames.map(frame => <DeviceFrame key={frame.key} frame={frame} geometry={geometry} css={{ width: view.device.cssWidth, height: view.device.cssHeight }} actions={actions} markup={view.markup} />)}
             {plan._tag === "Review" && plan.directions.map(({ id, direction }, index) => <PlanSlot key={id} _tag="Direction" id={id} index={index} direction={direction} actions={actions} />)}
             {plan._tag === "Planning" && Array.from({ length: plan.count }, (_, index) => <PlanSlot key={`planning-${index}`} _tag="Planning" index={index} message={plan.message} />)}
           </div>

@@ -101,6 +101,20 @@ export function codeHeight(height: number, share: number, bar: boolean): number 
   return Math.max(CODE_H, Math.min(share * height, budget))
 }
 
+/** The unfolded draft's tallest share of the chrome's height. It scrolls inside itself past this. */
+export const DRAFT_SHARE = 0.42
+/** The draft's height cap: the mockup's desk draft. */
+export const DRAFT_MAX = 24
+/** The draft's floor: one thumbnail row's head and a mark. */
+export const DRAFT_MIN = 8
+/**
+ * The tallest the draft may grow above the bar, in rem: a share of the
+ * chrome's height between a floor and a cap, so the canvas keeps its room.
+ */
+export function draftHeight(height: number): number {
+  return Math.max(DRAFT_MIN, Math.min(DRAFT_MAX, height * DRAFT_SHARE))
+}
+
 export type Sheet = "side" | "code" | null
 /**
  * The sheet in front: the one the active tool names. Code names the code

@@ -31,3 +31,7 @@ export function Calibrate() { return <Chrome fixture="calibrate" /> }
 export function Alternate() { return <Chrome fixture="alternate" /> }
 export function Unreachable() { return <Chrome fixture="unreachable" /> }
 export function Nothing() { return <Chrome fixture="none" /> }
+export function MarkMode() { return <Chrome fixture="mark" /> }
+export function DraftOpen() { return <Chrome fixture="draft" /> }
+export function Sending() { return <Chrome fixture="sending" /> }
+export function SendFailed() { return <Chrome fixture="sendFailed" /> }

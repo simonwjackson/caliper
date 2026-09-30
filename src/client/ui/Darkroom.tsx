@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 import type { ChromeProps, ChromeView } from "./contract"
 import { CAL } from "./hooks"
-import { REM_PX, codeHeight, frontSheet, planLayout } from "./layout"
+import { REM_PX, codeHeight, draftHeight, frontSheet, planLayout } from "./layout"
 import { useBox } from "./useBox"
 import { ToolNav } from "./tools/ToolNav"
 import { PartsPanel } from "./nav/PartsPanel"
@@ -73,6 +73,7 @@ export default function Darkroom({ view, actions, scheme }: DarkroomProps) {
 
   const style = {
     "--dr-code-h": `${codeHeight(height || 62.5, view.tools.codeShare, bar)}rem`,
+    "--dr-draft-h": `${draftHeight(height || 62.5)}rem`,
   } as CSSProperties
   return <div ref={root} className="dr-root" data-cal={CAL.root} data-scheme={scheme}
     data-tools={plan.tools} data-nav={drawerOpen ? "drawer" : navShown ? "docked" : "hidden"} data-side={side ? plan.side : "closed"} data-code={code ? plan.code : "closed"}

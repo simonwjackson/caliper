@@ -8,6 +8,9 @@
 import type { ChromeActions, ChromeView, KnobView, Tool } from "../contract"
 import { DEFAULT_PX_PER_MM } from "../../device-frame.js"
 import { frameSource } from "./views"
+import { frameIdentity, markupState, nextLetter, readMarks, withMarkup } from "./markup"
+import type { LocalMark, MarkupState } from "./markup"
+import type { MarkRect } from "../contract"
 
 export type Call = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
 export type Scenario = {
@@ -44,13 +47,51 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     return { ...view, tools }
   }
 
+  // Take markup: every change goes through the shared Send policy, and a change to the draft moves its revision.
+  const markup = (change: (marks: LocalMark[], state: MarkupState) => { readonly marks?: LocalMark[]; readonly state?: Partial<MarkupState> } | null) => {
+    if (view.markup._tag !== "Ready") return
+    const marks = readMarks(view)
+    const state = markupState(view)
+    const next = change(marks, state)
+    if (!next) return
+    update(withMarkup(view, next.marks ?? marks, { ...state, ...(next.marks ? { revision: state.revision + 1 } : {}), ...next.state }))
+  }
+  const editable = (marks: readonly LocalMark[], id: string) => view.markup._tag === "Ready" && view.markup.send._tag !== "Sending" && marks.some(mark => mark.id === id)
+  const place = (frameKey: string, kind: LocalMark["kind"], rect: MarkRect) => markup((marks, state) => {
+    const frame = view.canvas._tag === "Frames" ? view.canvas.frames.find(item => item.key === frameKey) : undefined
+    const source = frame ? frameIdentity(frame) : null
+    if (!frame || !source || frame.markable._tag !== "Enabled" || state.mode._tag === "Off") return null
+    const mode = state.mode
+    if (mode._tag === "Replacing") {
+      const moving = marks.find(mark => mark.id === mode.id)
+      if (!moving || moving.source.take !== source.take || moving.source.created !== source.created) return null
+      return { marks: marks.map(mark => mark.id === mode.id ? { ...mark, frame: frameKey, kind, rect, location: { _tag: "Located" } } : mark), state: { mode: { _tag: "Off" }, editor: mode.id } }
+    }
+    const letter = nextLetter(marks.filter(mark => mark.source.take === source.take && mark.source.created === source.created).map(mark => mark.letter))
+    const id = `local-${source.take}-${letter}-${marks.length}`
+    const previewLabel = view.selection._tag === "State" ? view.selection.label : ""
+    return { marks: [...marks, { id, source, frame: frameKey, letter, kind, rect, location: { _tag: "Located" }, note: "", previewLabel, deviceLabel: view.device.name }], state: { editor: id } }
+  })
+
   const record = <K extends keyof ChromeActions>(name: K, effect?: (...args: Parameters<ChromeActions[K]>) => void) =>
     ((...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args }); effect?.(...args) }) as ChromeActions[K]
 
   const actions: ChromeActions = {
-    onMarkMode: record("onMarkMode"), onMarkPoint: record("onMarkPoint"), onMarkRegion: record("onMarkRegion"),
-    onMarkEdit: record("onMarkEdit"), onMarkNote: record("onMarkNote"), onMarkRemove: record("onMarkRemove"),
-    onMarkReplace: record("onMarkReplace"), onDraftOpen: record("onDraftOpen"), onSend: record("onSend"),
+    onMarkMode: record("onMarkMode", on => markup((_, state) => state.send?._tag === "Sending" ? null : { state: { mode: { _tag: on ? "Marking" : "Off" } } })),
+    onMarkPoint: record("onMarkPoint", (key, point) => place(key, "Point", { ...point, width: 0, height: 0 })),
+    onMarkRegion: record("onMarkRegion", (key, rect) => place(key, "Region", rect)),
+    onMarkEdit: record("onMarkEdit", id => markup(marks => id === null ? { state: { editor: null } } : editable(marks, id) ? { state: { editor: id } } : null)),
+    onMarkNote: record("onMarkNote", (id, note) => markup(marks => editable(marks, id) ? { marks: marks.map(mark => mark.id === id ? { ...mark, note } : mark) } : null)),
+    onMarkRemove: record("onMarkRemove", id => markup((marks, state) => editable(marks, id) ? {
+      marks: marks.filter(mark => mark.id !== id),
+      state: { editor: state.editor === id ? null : state.editor, mode: state.mode._tag === "Replacing" && state.mode.id === id ? { _tag: "Off" } : state.mode },
+    } : null)),
+    onMarkReplace: record("onMarkReplace", id => markup(marks => editable(marks, id) ? { state: { mode: { _tag: "Replacing", id } } } : null)),
+    onDraftOpen: record("onDraftOpen", draftOpen => markup(() => ({ state: { draftOpen } }))),
+    onSend: record("onSend", revision => {
+      const ready = view.markup._tag === "Ready" && view.markup.revision === revision && view.markup.send._tag !== "Sending" && view.markup.send.availability._tag === "Enabled"
+      if (ready) markup(marks => ({ state: { editor: null, send: { _tag: "Sending", label: `Sending ${marks.length} ${marks.length === 1 ? "mark" : "marks"}` } } }))
+    }),
     onTool: record("onTool", active => update(tool(active))),
     onNavOpen: record("onNavOpen", navOpen => update({ ...view, tools: { ...view.tools, navOpen } })),
     onFilter: record("onFilter", filter => update({ ...view, navigation: { ...view.navigation, filter } })),

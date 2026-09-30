@@ -39,6 +39,34 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
     if (view.canvas.frames.length) add(CAL.frame, CAL.frameSelect)
     if (view.canvas.frames.some(frame => frame.problems.length)) add(CAL.frameProblem)
   }
+  // Take markup (decision 35). Pins show on every frame that has marks; the surface and its key
+  // controls only in mark mode, on frames that can take a mark.
+  const markup = view.markup._tag === "Ready" ? view.markup : null
+  const frames = view.canvas._tag === "Frames" ? view.canvas.frames : []
+  if (markup) {
+    if (frames.some(frame => frame.marks.length)) add(CAL.markPin)
+    if (markup.mode._tag !== "Off" && frames.some(frame => frame.markable._tag === "Enabled")) add(CAL.markSurface, CAL.markPoint, CAL.markRegion)
+  }
+  const barMarkup = layout.bar && view.plan._tag === "None" ? markup : null
+  const drafted = markup ? markup.groups.flatMap(group => group.marks) : []
+  if (markup && markup.editor._tag === "Open") {
+    const id = markup.editor.id
+    // In the draft when it is open, under the frame that shows the mark, or else in the bar.
+    const where = markup.draftOpen ? (barMarkup && drafted.length ? "draft" : null) : frames.some(frame => frame.marks.some(mark => mark.id === id)) ? "frame" : barMarkup ? "bar" : null
+    if (where) add(CAL.markNote, CAL.markEditorClose)
+  }
+  if (barMarkup) {
+    if (frames.some(frame => frame.markable._tag === "Enabled") || barMarkup.mode._tag !== "Off" || drafted.length) add(CAL.markup, CAL.markMode)
+    if (drafted.length) add(CAL.draftOpen, CAL.send)
+    if (barMarkup.draftOpen && drafted.length) {
+      add(CAL.draft, CAL.markRemove)
+      const editing = barMarkup.editor._tag === "Open" ? barMarkup.editor.id : null
+      if (drafted.some(mark => mark.id !== editing)) add(CAL.markEdit)
+      const replacing = barMarkup.mode._tag === "Replacing" ? barMarkup.mode.id : null
+      if (drafted.some(mark => mark.location._tag !== "Located" && mark.id !== replacing)) add(CAL.markReplace)
+    }
+  }
+
   if (view.plan._tag !== "None") add(CAL.plan)
   if (view.plan._tag === "Review" && view.plan.directions.length) add(CAL.directionTitle, CAL.directionBrief, CAL.directionRemove)
 

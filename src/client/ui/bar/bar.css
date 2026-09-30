@@ -60,6 +60,19 @@
 .dr-bar__planning { display: inline-flex; gap: .45rem; align-items: center; margin-right: .3rem; }
 .dr-bar .dr-btn--primary { padding-inline: .8rem; }
 
+/* Take markup in the bar: the pin button, the draft's count, a note whose mark is not on the canvas. */
+.dr-bar__take { display: flex; gap: .5rem; align-items: center; }
+.dr-bar__mark { display: inline-flex; }
+.dr-markbtn { width: var(--dr-control-h); height: var(--dr-control-h); flex: none; border: 1px solid var(--dr-edge-2); border-radius: 6px; background: none; color: var(--dr-ink-2); display: grid; place-items: center; }
+.dr-markbtn:hover:not(:disabled) { color: var(--dr-ink); border-color: var(--dr-ink-3); }
+.dr-markbtn[aria-pressed="true"] { background: var(--dr-accent); border-color: var(--dr-accent); color: var(--dr-accent-ink); }
+.dr-markbtn:disabled { color: var(--dr-ink-3); border-color: var(--dr-edge); }
+.dr-markbtn .dr-icon { width: 17px; height: 17px; }
+.dr-draftbtn { color: var(--dr-ink-2); }
+.dr-draftbtn .dr-chev { transform: rotate(-45deg); margin-top: 3px; }
+.dr-bar .dr-draftbtn[aria-expanded="true"] > .dr-chev { transform: rotate(135deg); margin-top: -3px; }
+.dr-bar__note { margin-bottom: var(--dr-bar-pad); }
+
 /* What you can do with one take. */
 .dr-take-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
 .dr-take-actions__name { display: inline-flex; gap: .5rem; align-items: center; margin-right: .3rem; white-space: nowrap; }

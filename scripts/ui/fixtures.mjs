@@ -36,6 +36,14 @@ export const SHOTS = [
   { fixture: "unreachable", mockup: null },
   { fixture: "setup", mockup: null, note: "Setup problems, a composed scenario and an unavailable state." },
   { fixture: "takes", mockup: "parts", act: "drawer" },
+  { fixture: "mark", mockup: "mark" },
+  { fixture: "draft", mockup: "draft" },
+  { fixture: "marked", mockup: null, note: "Marks on the takes with mark mode off: the pins stay." },
+  { fixture: "draftReady", mockup: null, note: "Every mark found: Send is ready." },
+  { fixture: "replacing", mockup: null, note: "Undrawn: Re-place 3A. The next click or drag on take 3 moves it." },
+  { fixture: "sending", mockup: null, note: "Undrawn: Send is running; nothing in the draft can change." },
+  { fixture: "sendFailed", mockup: null, note: "Undrawn: the server refused the pass; the reason is an alert in the bar." },
+  { fixture: "markRunning", mockup: null, note: "Undrawn: take 5 is still working, so the whole pass waits." },
 ]
 
 export const FIXTURE_NAMES = [...new Set(SHOTS.map(shot => shot.fixture))]

@@ -62,7 +62,8 @@ const called = async (page, name) => (await calls(page)).filter(call => call.nam
 /** @param {string} hook */
 const cal = hook => `[data-cal="${hook}"]`
 
-const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-skills"])
+/** In the New take menu. While the draft holds marks the menu also holds New take (take-start). */
+const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-skills", "take-start"])
 /**
  * Read every hook, opening the UI-owned disclosures first. A menu behind a
  * sheet in front, or anything behind the modal Checks window, is one tap
@@ -351,6 +352,169 @@ await gate("actions: calibrate, reset and done; record close", async () => {
   } finally { await log.close() }
 })
 
+// ---------------------------------------------------------------- 2b. take markup
+/** @param {import("playwright-core").Page} page @param {string} take */
+const surfaceOf = (page, take) => page.locator(`${cal("mark-surface")}[data-frame-key^="${take}@"]`)
+/** Press, move and release on a frame's surface, at fractions of its drawn box. @param {import("playwright-core").Page} page @param {string} take @param {[number, number]} from @param {[number, number] | null} to */
+async function gesture(page, take, from, to = null) {
+  await surfaceOf(page, take).scrollIntoViewIfNeeded()
+  const box = await surfaceOf(page, take).boundingBox()
+  assert(box, `Take ${take} has a mark surface`)
+  const at = (/** @type {[number, number]} */ [x, y]) => ({ x: box.x + box.width * x, y: box.y + box.height * y })
+  await page.mouse.move(at(from).x, at(from).y)
+  await page.mouse.down()
+  if (to) await page.mouse.move(at(to).x, at(to).y, { steps: 6 })
+  await page.mouse.up()
+}
+/** @param {unknown} value */
+const parsed = value => JSON.parse(String(value))
+/** @param {number} actual @param {number} expected @param {string} what */
+const near = (actual, expected, what) => assert(Math.abs(actual - expected) <= 2, `${what}: ${actual} is not ${expected}`)
+
+await gate("markup: mark mode, a click is a pin and a drag a box in device px, notes, the draft and Send", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    assert.equal(await page.locator(cal("mark-surface")).count(), 0, "No surface until mark mode is on")
+    await page.locator(cal("mark-mode")).click()
+    assert.deepEqual((await called(page, "onMarkMode")).map(call => call.args[0]), [true])
+    assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true")
+    assert.match(await page.locator(".dr-canvas__marking").textContent() ?? "", /M leaves/)
+    assert.equal(await page.locator(cal("mark-surface")).count(), 5, "Every take takes marks; the real files do not")
+    await gesture(page, "6", [0.25, 0.5])
+    const point = (await called(page, "onMarkPoint")).at(-1)
+    assert.equal(point?.args[0], "6@2026-09-29T13:06")
+    near(parsed(point?.args[1]).x, 160, "x"); near(parsed(point?.args[1]).y, 240, "y")
+    const note = page.locator(cal("mark-note"))
+    await note.waitFor()
+    assert(await note.evaluate(node => node === document.activeElement), "The note editor takes focus at the new mark")
+    await page.keyboard.type("Tighter")
+    assert.equal((await called(page, "onMarkNote")).at(-1)?.args[1], "Tighter")
+    await page.evaluate(() => window.gallery.tick())
+    assert(await note.evaluate(node => node === document.activeElement), "A stream update keeps the note's focus")
+    await page.keyboard.press("Enter")
+    assert.deepEqual((await called(page, "onMarkEdit")).at(-1)?.args, [null])
+    await page.waitForFunction(() => document.activeElement?.getAttribute("data-cal") === "mark-pin")
+    assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true", "Closing a note does not leave mark mode")
+    await gesture(page, "5", [0.1, 0.1], [0.4, 0.3])
+    const region = parsed((await called(page, "onMarkRegion")).at(-1)?.args[1])
+    near(region.x, 64, "left"); near(region.y, 48, "top"); near(region.width, 192, "width"); near(region.height, 96, "height")
+    await gesture(page, "2", [0.6, 0.6], [0.5, 0.4])
+    const reverse = parsed((await called(page, "onMarkRegion")).at(-1)?.args[1])
+    near(reverse.x, 320, "a reverse drag's left"); near(reverse.width, 64, "a reverse drag's width")
+    await page.keyboard.press("Escape")
+    assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true", "Escape in a note closes the note, not mark mode")
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
+    await page.keyboard.press("m")
+    assert.deepEqual((await called(page, "onMarkMode")).map(call => call.args[0]).slice(-1), [false], "M leaves mark mode")
+    await page.locator(cal("draft-open")).click()
+    assert.equal(await page.locator(`${cal("mark-draft")} .dr-dmark`).count(), 3)
+    const send = page.locator(cal("marks-send"))
+    assert.equal(await send.textContent(), "Send · 3 new takes")
+    assert.equal(await page.locator(cal("take-start")).count(), 0, "New take moves into the menu while the draft holds marks")
+    const revision = Number(await send.getAttribute("data-revision"))
+    await send.click()
+    assert.deepEqual((await called(page, "onSend")).map(call => call.args[0]), [revision])
+    assert.equal(await send.isDisabled(), true, "Sending locks Send")
+  } finally { await close() }
+})
+await gate("markup: marking keeps the frame's reached state; the press never reaches the page", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    const frame = page.frameLocator(`${cal("frame")}[data-take="6"]`)
+    await frame.locator("body").click()
+    const taps = () => frame.locator("body").getAttribute("data-taps")
+    assert.equal(await taps(), "1")
+    await page.locator(cal("mark-mode")).click()
+    await gesture(page, "6", [0.5, 0.5])
+    await gesture(page, "6", [0.2, 0.2], [0.3, 0.3])
+    assert.equal(await taps(), "1", "The page did not get the marking presses and was not reloaded")
+    const mounts = (await called(page, "onFrameMount")).filter(call => call.args[0] === "6@2026-09-29T13:06" && call.args[1] !== null)
+    assert.equal(mounts.length, 1, "The frame mounted once")
+    await page.locator(cal("mark-mode")).click()
+    // Away from the new marks: a pin sits over the page and takes its own press.
+    const screen = await page.locator(`${cal("frame")}[data-take="6"]`).boundingBox()
+    assert(screen)
+    await page.mouse.click(screen.x + screen.width * 0.94, screen.y + screen.height * 0.92)
+    assert.equal(await taps(), "2", "With mark mode off the page takes clicks again")
+  } finally { await close() }
+})
+await gate("markup: a phone-sized frame converts a press to device px", async () => {
+  const { page, close } = await open(phone, "mark")
+  try {
+    await gesture(page, "1", [0.5, 0.5])
+    const point = parsed((await called(page, "onMarkPoint")).at(-1)?.args[1])
+    near(point.x, 320, "x at 416 px"); near(point.y, 240, "y at 416 px")
+  } finally { await close() }
+})
+await gate("markup: pins open their note; the keyboard places a pin and an area", async () => {
+  const { page, close } = await open(desk, "mark")
+  try {
+    assert.equal(await page.locator(`${cal("mark-note")}[data-mark-id="m-6b"]`).count(), 1, "The editor opens under take 6 at 6B")
+    await page.locator(`${cal("mark-pin")}[data-mark-id="m-6a"]`).click()
+    assert.deepEqual((await called(page, "onMarkEdit")).at(-1)?.args, ["m-6a"])
+    assert.equal(await page.locator(`${cal("mark-pin")}[data-mark-id="m-3a"]`).getAttribute("data-location"), "Lost")
+    const pin = page.locator(`${cal("mark-point")}[data-frame-key^="1@"]`)
+    await pin.focus()
+    assert(await pin.isVisible(), "The key controls show while one has focus")
+    await page.keyboard.press("ArrowRight")
+    await page.keyboard.press("ArrowDown")
+    await page.keyboard.press("Enter")
+    const point = (await called(page, "onMarkPoint")).at(-1)
+    assert.equal(point?.args[0], "1@2026-09-29T13:01")
+    assert.deepEqual(parsed(point?.args[1]), { x: 340, y: 260 }, "Arrows move the target by a 32nd of the width")
+    const area = page.locator(`${cal("mark-region")}[data-frame-key^="2@"]`)
+    await area.focus()
+    await page.keyboard.press("Shift+ArrowRight")
+    await page.keyboard.press("Shift+ArrowDown")
+    await page.keyboard.press("Enter")
+    assert.deepEqual(parsed((await called(page, "onMarkRegion")).at(-1)?.args[1]), { x: 320, y: 240, width: 20, height: 20 })
+  } finally { await close() }
+})
+await gate("markup: a lost mark blocks Send, says why, and Re-place moves it", async () => {
+  const { page, close } = await open(desk, "draft")
+  try {
+    const send = page.locator(cal("marks-send"))
+    assert.equal(await send.isDisabled(), true)
+    assert.match(await send.getAttribute("title") ?? "", /Element not found/)
+    assert.match(await page.locator(`.dr-dmark[data-mark-id="m-3a"]`).textContent() ?? "", /Element not found after the restart/)
+    assert.equal(await page.locator(cal("draft-open")).getAttribute("data-blocked"), "true")
+    await page.locator(`${cal("mark-replace")}[data-mark-id="m-3a"]`).click()
+    assert.deepEqual((await called(page, "onMarkReplace")).at(-1)?.args, ["m-3a"])
+    assert.match(await page.locator(".dr-canvas__marking").textContent() ?? "", /Re-place 3A/)
+    assert.equal(await page.locator(cal("mark-surface")).count() > 0, true)
+    await gesture(page, "3", [0.3, 0.5])
+    assert.equal((await called(page, "onMarkPoint")).at(-1)?.args[0], "3@2026-09-29T13:03")
+    assert.equal(await send.isDisabled(), false, "With every mark found, Send is ready")
+    await page.locator(`${cal("mark-edit")}[data-mark-id="m-5a"]`).click()
+    await page.locator(`${cal("mark-note")}[data-mark-id="m-5a"]`).fill("Keep this row")
+    assert.deepEqual((await called(page, "onMarkNote")).at(-1)?.args, ["m-5a", "Keep this row"])
+    await page.locator(cal("mark-editor-close")).click()
+    await page.locator(`${cal("mark-remove")}[data-mark-id="m-2a"]`).click()
+    assert.deepEqual((await called(page, "onMarkRemove")).at(-1)?.args, ["m-2a"])
+    assert.equal(await send.textContent(), "Send · 3 new takes")
+    await page.locator(cal("draft-open")).click()
+    assert.deepEqual((await called(page, "onDraftOpen")).at(-1)?.args, [false])
+  } finally { await close() }
+})
+await gate("markup: while Send runs nothing in the draft changes; a refused Send is an alert", async () => {
+  const { page, close } = await open(desk, "sending")
+  try {
+    assert.equal(await page.locator(cal("marks-send")).isDisabled(), true)
+    for (const hook of ["mark-edit", "mark-remove"]) assert.equal(await page.locator(`${cal(hook)}:not([disabled])`).count(), 0, `${hook} waits`)
+    assert.equal(await page.locator(cal("mark-mode")).isDisabled(), true, "No frame takes marks while Send runs")
+  } finally { await close() }
+  const failed = await open(desk, "sendFailed")
+  try {
+    assert.match(await failed.page.locator('.dr-bar [role="alert"]').textContent() ?? "", /Take 5 changed/)
+    assert.equal(await failed.page.locator(cal("marks-send")).isDisabled(), false, "Send can be tried again")
+  } finally { await failed.close() }
+  const running = await open(desk, "markRunning")
+  try {
+    assert.equal(await running.page.locator(cal("marks-send")).isDisabled(), true, "A running take stops the whole pass")
+    assert.match(await running.page.locator('.dr-dtake[data-take="5"]').textContent() ?? "", /still running/)
+  } finally { await running.close() }
+})
+
 // ---------------------------------------------------------------- 3. keyboard and focus
 await gate("keyboard: the New take menu opens, moves, chooses and returns focus", async () => {
   const { page, close } = await open(desk, "prompt")
@@ -518,7 +682,7 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
 
 // ---------------------------------------------------------------- 5. reachability
 for (const size of [...LADDER, ...SIZES]) {
-  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate"]) {
+  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)
       try {

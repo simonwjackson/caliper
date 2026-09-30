@@ -1,7 +1,7 @@
 import { ComposerBar } from "./ComposerBar"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
-import { agentFailedView, agentOffView, emptyView, planView, planningView, promptView, runningView, takesView } from "../fixtures/views"
+import { agentFailedView, agentOffView, draftView, emptyView, markedView, planView, planningView, promptView, runningView, sendFailedView, sendingView, takesView } from "../fixtures/views"
 import type { ChromeView } from "../contract"
 
 export const name = "Composer bar"
@@ -20,3 +20,8 @@ export function Planning() { return <Bar make={planningView} /> }
 export function Running() { return <Bar make={runningView} /> }
 export function AgentFailed() { return <Bar make={agentFailedView} /> }
 export function AgentOff() { return <Bar make={agentOffView} /> }
+export function Marked() { return <Bar make={markedView} /> }
+export function DraftOpen() { return <Bar make={draftView} /> }
+export function DraftNarrow() { return <Bar make={draftView} width="24rem" /> }
+export function Sending() { return <Bar make={sendingView} /> }
+export function SendFailed() { return <Bar make={sendFailedView} /> }

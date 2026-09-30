@@ -3,7 +3,7 @@ import "./atoms.css"
 
 export type IconName =
   | "mark" | "parts" | "preview" | "takes" | "code" | "knobs" | "checks" | "calibrate" | "more"
-  | "clip" | "image" | "plus" | "close" | "chevron" | "chevron-down" | "stop" | "up" | "down"
+  | "clip" | "image" | "plus" | "close" | "chevron" | "chevron-down" | "stop" | "up" | "down" | "pin" | "area"
 
 const PATHS: Record<Exclude<IconName, "chevron" | "chevron-down">, string> = {
   mark: "M4 7h18M4 7v13M9 7v4M14 7v6M19 7v4",
@@ -22,6 +22,8 @@ const PATHS: Record<Exclude<IconName, "chevron" | "chevron-down">, string> = {
   stop: "M5.5 5.5h7v7h-7z",
   up: "M9 14V4M5 8l4-4 4 4",
   down: "M9 4v10M5 10l4 4 4-4",
+  pin: "M9 16s5-4.2 5-8.5A5 5 0 0 0 4 7.5C4 11.8 9 16 9 16z",
+  area: "M3.5 3.5h11v11h-11z",
 }
 
 /** Line icons drawn in currentColor. The chevron is drawn in CSS so it sits on the x-height. */
@@ -29,9 +31,10 @@ export function Icon({ name }: { readonly name: IconName }) {
   if (name === "chevron" || name === "chevron-down") return <i className={`dr-chev${name === "chevron-down" ? " dr-chev--down" : ""}`} aria-hidden="true" />
   const size = name === "mark" ? 26 : 18
   return <svg className={`dr-icon dr-icon--${name}`} viewBox={`0 0 ${size} ${size}`} fill="none" stroke="currentColor"
-    strokeWidth={name === "more" ? 2.6 : name === "mark" ? 1.8 : 1.5} strokeLinecap={name === "more" ? "round" : undefined} aria-hidden="true">
+    strokeWidth={name === "more" ? 2.6 : name === "mark" ? 1.8 : 1.5} strokeLinecap={name === "more" ? "round" : undefined} strokeDasharray={name === "area" ? "2.5 2" : undefined} aria-hidden="true">
     <path d={PATHS[name]} />
     {name === "knobs" && <><circle cx="7" cy="6" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /></>}
     {name === "stop" && <rect x="5.5" y="5.5" width="7" height="7" fill="currentColor" stroke="none" />}
+    {name === "pin" && <circle cx="9" cy="7.5" r="1.6" fill="currentColor" stroke="none" />}
   </svg>
 }

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import type { DragEvent } from "react"
-import type { ChromeActions, ChromeView } from "../contract"
+import type { Availability, ChromeActions, ChromeView } from "../contract"
 import { CAL } from "../hooks"
 import { fitComposer, type ComposerFit } from "../layout"
 import { Button } from "../atoms/Button"
@@ -8,6 +8,10 @@ import { Icon } from "../atoms/Icon"
 import { Notices } from "../atoms/Notices"
 import { NewTakeMenu } from "./NewTakeMenu"
 import { TakeActions } from "./TakeActions"
+import { MarkModeButton } from "./MarkModeButton"
+import { DraftButton } from "./DraftButton"
+import { Draft } from "./Draft"
+import { NoteEditor } from "../canvas/NoteEditor"
 import "../tokens.css"
 import "./bar.css"
 
@@ -24,17 +28,32 @@ const GAP = 10
  * stacks its text over its buttons. During a plan the prompt is read only and
  * the well holds Back and Start. An agent that failed to load shows above,
  * because this is where it is missed.
+ *
+ * Take markup lives here too (decision 35): the pin button at the left, the
+ * draft's count and Send at the right, and the draft unfolded above. A note
+ * whose mark no frame on the canvas shows is edited here, above the well.
  */
 export function ComposerBar({ view, actions, hidden = false }: { readonly view: ChromeView; readonly actions: ChromeActions; readonly hidden?: boolean }) {
   const composer = view.composer
   const plan = view.plan
   const focused = plan._tag === "None" ? view.focusedTake : null
+  const markup = plan._tag === "None" && view.markup._tag === "Ready" ? view.markup : null
+  const frames = view.canvas._tag === "Frames" ? view.canvas.frames : []
+  const markable = frames.find(frame => frame.markable._tag === "Enabled")
+  const drafted = markup ? markup.groups.reduce((sum, group) => sum + group.marks.length, 0) : 0
+  const marking = markup && (markable || markup.mode._tag !== "Off" || drafted > 0) ? markup : null
+  const why = frames.map(frame => frame.markable).find(item => item._tag === "Disabled")
+  const markAvailability: Availability = markable ? { _tag: "Enabled" } : why ?? { _tag: "Disabled", reason: "No frame here can take a mark" }
+  const editor = markup && !markup.draftOpen && markup.editor._tag === "Open" ? markup.editor : null
+  const stray = editor && !frames.some(frame => frame.marks.some(mark => mark.id === editor.id)) ? editor : null
+  const failed = markup?.send._tag === "Failed" ? markup.send : null
   const form = useRef<HTMLFormElement>(null)
   const lead = useRef<HTMLDivElement>(null)
   const go = useRef<HTMLDivElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   const drags = useRef(0)
   const [fit, setFit] = useState<ComposerFit>("Inline")
+  const [room, setRoom] = useState(0)
   const [dropping, setDropping] = useState(false)
   useLayoutEffect(() => {
     const node = form.current
@@ -44,14 +63,19 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
       const width = node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
       const next = fitComposer(width, { field: FIELD_W, gap: GAP, take: lead.current?.offsetWidth ?? 0, go: go.current?.offsetWidth ?? 0 })
       setFit(previous => previous === next ? previous : next)
+      // The draft unfolds upward over the canvas; it may use the room between the stage's top and the bar.
+      const above = Math.max(0, Math.floor(node.offsetTop))
+      setRoom(previous => previous === above ? previous : above)
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(node)
+    // The room above the bar changes with the stage's height, not only the bar's.
+    if (node.offsetParent) observer.observe(node.offsetParent)
     if (lead.current) observer.observe(lead.current)
     if (go.current) observer.observe(go.current)
     return () => observer.disconnect()
-  }, [focused?.id, plan._tag])
+  }, [focused?.id, plan._tag, marking !== null])
   const canAttach = composer.attach._tag === "Enabled"
   const startNow = () => { if (plan._tag === "None" && composer.start._tag === "Enabled") actions.onStart(); else if (plan._tag === "Review" && plan.start._tag === "Enabled") actions.onStart() }
   const follow = composer.follow
@@ -59,6 +83,7 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
   const pick = () => picker.current?.click()
   const files = (event: DragEvent) => event.dataTransfer.types.includes("Files")
   return <form ref={form} className="dr-bar" data-cal={CAL.composer} data-fit={fit} data-plan={plan._tag} hidden={hidden} aria-label="Composer"
+    style={room > 0 ? { ["--dr-draft-room" as string]: `${room}px` } : undefined}
     onSubmit={event => { event.preventDefault(); startNow() }}
     onDragEnter={event => { if (files(event) && canAttach) { drags.current++; setDropping(true) } }}
     onDragLeave={event => { if (files(event) && --drags.current <= 0) { drags.current = 0; setDropping(false) } }}
@@ -69,8 +94,16 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
     </p>}
     {agent._tag === "Off" && <p className="dr-bar__agent" data-cal={CAL.agent} role="status">No agent. {agent.hint}</p>}
     <Notices notices={composer.notices} />
+    {failed && <p className="dr-bar__agent dr-bar__agent--failed" role="alert"><b>Send did not go through.</b> {failed.reason}</p>}
+    {markup && markup.draftOpen && drafted > 0 && <Draft markup={markup} view={view} actions={actions} />}
+    {stray && <div className="dr-bar__note"><NoteEditor id={stray.id} name={stray.name} note={stray.note} edit={stray.edit} onNote={actions.onMarkNote} onClose={() => actions.onMarkEdit(null)} /></div>}
     <div className="dr-bar__layout">
-      {focused && <div ref={lead} className="dr-bar__take"><TakeActions take={focused} actions={actions} /></div>}
+      {(focused || marking) && <div ref={lead} className="dr-bar__take">
+        {marking && <span className="dr-bar__mark" data-cal={CAL.markup} role="group" aria-label="Take markup">
+          <MarkModeButton mode={marking.mode} availability={markAvailability} onMarkMode={actions.onMarkMode} />
+        </span>}
+        {focused && <TakeActions take={focused} actions={actions} />}
+      </div>}
       <div className="dr-well" data-disabled={composer.edit._tag === "Disabled" || undefined} data-dropping={dropping || undefined}>
         {composer.attachments.length > 0 && <ul className="dr-well__images" data-cal={CAL.attachments} aria-label="Images">
           {composer.attachments.map(image => <li key={image.id} className="dr-well__image" title={image.name}>
@@ -100,7 +133,8 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
             onClick={pick}><Icon name="clip" /></button>
         </>}
         <div ref={go} className="dr-well__go">
-          {plan._tag === "None" && <NewTakeMenu composer={composer} actions={actions} />}
+          {markup && drafted > 0 && <DraftButton marks={drafted} open={markup.draftOpen} blocked={markup.groups.some(group => group.decision._tag === "Blocked")} onDraftOpen={actions.onDraftOpen} />}
+          {plan._tag === "None" && <NewTakeMenu composer={composer} actions={actions} send={markup && drafted > 0 ? { send: markup.send, revision: markup.revision } : null} />}
           {plan._tag === "Review" && <>
             <Button hook={CAL.planBack} onClick={actions.onPlanBack}>Back</Button>
             <Button hook={CAL.planStart} tone="primary" availability={plan.start} onClick={actions.onStart}>{plan.startLabel}</Button>

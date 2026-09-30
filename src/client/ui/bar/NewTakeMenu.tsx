@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { ChromeActions, ComposerView } from "../contract"
+import type { ChromeActions, ComposerView, MarkupSend } from "../contract"
 import { CAL } from "../hooks"
 import { MenuButton } from "../atoms/MenuButton"
 import { Icon } from "../atoms/Icon"
@@ -18,21 +18,40 @@ function agentLine(composer: ComposerView): string {
   return `The agent did not load. ${agent.hint}`
 }
 
+/** The draft's Send, when the draft holds marks. `revision` is the draft the button shows. */
+export type SendChoice = { readonly send: MarkupSend; readonly revision: number }
+
 /**
  * New take is a split button. The main half starts; the menu chooses how many
  * takes (2 to 4 start from a plan), sends the prompt to the focused take, and
  * names the agent and its skills in the dimmest ink.
+ *
+ * While the draft holds marks, the main half is Send, with its count, as
+ * decision 35 draws it, and New take moves to the top of the menu. Ctrl+Enter
+ * in the prompt still starts a new take.
  */
-export function NewTakeMenu({ composer, actions }: { readonly composer: ComposerView; readonly actions: ChromeActions }) {
+export function NewTakeMenu({ composer, actions, send = null }: { readonly composer: ComposerView; readonly actions: ChromeActions; readonly send?: SendChoice | null }) {
   const agent = composer.agent
   const title = agent._tag === "Ready" ? `${agent.baseUrl} (${agent.api}) from ${agent.baseUrlFrom}. Key from ${agent.keyFrom}.` : undefined
   const follow = composer.follow
   const start = composer.start
   const [skillsOpen, setSkillsOpen] = useState(false)
+  const sending = send?.send._tag === "Sending"
+  const sendReason = !send ? undefined : send.send._tag === "Sending" ? "The draft is being sent" : send.send.availability._tag === "Disabled" ? send.send.availability.reason : undefined
   return <span className="dr-split">
-    <button type="button" className="dr-btn dr-btn--primary dr-split__main" data-cal={CAL.start} disabled={start._tag === "Disabled"}
-      title={start._tag === "Disabled" ? start.reason : "Ctrl+Enter"} onClick={() => actions.onStart()}>{composer.startLabel}</button>
+    {send
+      ? <button type="button" className="dr-btn dr-btn--primary dr-split__main" data-cal={CAL.send} data-revision={send.revision} disabled={sendReason !== undefined}
+        aria-busy={sending || undefined} title={sendReason ?? "Make a new take from each marked take"} onClick={() => actions.onSend(send.revision)}>
+        {sending && <i className="dr-dot dr-dot--running" aria-hidden="true" />}{send.send.label}
+      </button>
+      : <button type="button" className="dr-btn dr-btn--primary dr-split__main" data-cal={CAL.start} disabled={start._tag === "Disabled"}
+        title={start._tag === "Disabled" ? start.reason : "Ctrl+Enter"} onClick={() => actions.onStart()}>{composer.startLabel}</button>}
     <MenuButton label="New take options" triggerClass="dr-btn dr-btn--primary dr-split__more" menuClass="dr-split__menu" trigger={<Icon name="chevron-down" />}>
+      {send && <>
+        <button type="button" role="menuitem" className="dr-split__item" data-cal={CAL.start} disabled={start._tag === "Disabled"}
+          title={start._tag === "Disabled" ? start.reason : undefined} onClick={() => actions.onStart()}>{composer.startLabel} from the prompt<kbd>Ctrl+Enter</kbd></button>
+        <hr className="dr-split__rule" />
+      </>}
       <div role="group" aria-label="How many takes" data-cal={CAL.count}>
         {COUNTS.map(count => <button key={count} type="button" role="menuitemradio" className="dr-split__item" aria-checked={composer.count === count}
           data-count={count} onClick={() => actions.onCount(count)}>{countLabel(count)}</button>)}

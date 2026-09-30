@@ -15,6 +15,8 @@ import type {
 } from "../contract"
 import { DEVICES } from "../../device-frame.js"
 import { PICO_GAME_DETAIL } from "./pico"
+import { frameIdentity, withMarkup } from "./markup"
+import type { LocalMark, MarkupState } from "./markup"
 
 export const enabled: Availability = { _tag: "Enabled" }
 const blocked = (reason: string): Availability => ({ _tag: "Disabled", reason })
@@ -48,7 +50,8 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
   return {
     key: take ? `${take}@2026-09-29T13:${take.padStart(2, "0")}` : "real", label: take ? TAKE_NAMES[take] ?? `Take ${take}` : "Real files",
     title: take ? `Take ${take} · ${TAKE_NAMES[take]}` : "The real files", src: frameSource(FILTERS[id]), subject: DEFAULT, preview: DEFAULT,
-    take, selected: take === "6", run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], marks: [], markable: blocked("Take markup is not connected yet"), ...overrides,
+    take, selected: take === "6", run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], marks: [],
+    markable: take ? enabled : blocked("The real files cannot be marked yet. Mark a take."), ...overrides,
   }
 }
 
@@ -144,7 +147,7 @@ export function takesView(): ChromeView {
     focusedTake: take, record: { _tag: "Closed" },
     code: { _tag: "Closed" }, knobs: { _tag: "Closed" }, checks: { _tag: "Closed" }, calibration: { _tag: "Closed" },
   }
-  return structuredClone(view)
+  return structuredClone(withMarkup(view, [], { revision: 1, mode: { _tag: "Off" }, draftOpen: false, editor: null }))
 }
 
 /** First run: the real files, the composer and one sentence. */
@@ -495,6 +498,57 @@ export function setupProblemsView(): ChromeView {
   }
 }
 
+/**
+ * Take markup on the RG353M's 640 x 480 viewport, as the mockup draws it:
+ * 6A on the cover's caption, 6B a box round the title, 5A on the facts, and
+ * 3A, whose element take 3 no longer has. 2A was placed on the ODIN 2 PORTAL,
+ * so no frame on this canvas shows it.
+ */
+function mockupMarks(view: ChromeView, overrides: { readonly lost?: boolean } = {}): LocalMark[] {
+  const on = (take: string) => {
+    const found = view.canvas._tag === "Frames" ? view.canvas.frames.find(item => item.take === take) : undefined
+    const source = found ? frameIdentity(found) : null
+    if (!found || !source) throw new Error(`The takes fixture has no take ${take}`)
+    return { source, frame: found.key }
+  }
+  const point = (x: number, y: number) => ({ x, y, width: 0, height: 0 })
+  const located = { _tag: "Located" } as const
+  const base = { previewLabel: "Default", deviceLabel: rg353m.name }
+  return [
+    { id: "m-6a", ...on("6"), letter: "A", kind: "Point", rect: point(403, 211), location: located, note: "Love this", ...base },
+    { id: "m-6b", ...on("6"), letter: "B", kind: "Region", rect: { x: 141, y: 77, width: 166, height: 125 }, location: located, note: "Too heavy. Thin the border to one pixel", ...base },
+    { id: "m-5a", ...on("5"), letter: "A", kind: "Point", rect: point(448, 307), location: located, note: "Restore the old row here", ...base },
+    { id: "m-3a", ...on("3"), letter: "A", kind: "Point", rect: point(307, 384),
+      location: overrides.lost === false ? located : { _tag: "Lost", reason: "Element not found after the restart. Re-place or remove 3A." }, note: "Keep the chip shape", ...base },
+    { id: "m-2a", ...on("2"), frame: null, letter: "A", kind: "Region", rect: { x: 960, y: 700, width: 640, height: 240 }, location: located,
+      note: "The stats need this much room on the big screen", previewLabel: "Default", deviceLabel: odin.name },
+  ]
+}
+function marked(state: Partial<MarkupState>, options: { readonly lost?: boolean; readonly change?: (view: ChromeView) => ChromeView } = {}): ChromeView {
+  const view = (options.change ?? (item => item))(takesView())
+  return withMarkup(view, mockupMarks(view, options), { revision: 7, mode: { _tag: "Off" }, draftOpen: false, editor: null, ...state })
+}
+/** The mockup's mark state: mark mode on, the note editor open at 6B. 3A is lost, so Send waits. */
+export function markView(): ChromeView { return marked({ mode: { _tag: "Marking" }, editor: "m-6b" }) }
+/** Marks on the takes with mark mode off: the pins stay, and the frames take clicks again. */
+export function markedView(): ChromeView { return marked({}) }
+/** The mockup's draft state: the draft unfolded above the bar, 3A lost. */
+export function draftView(): ChromeView { return marked({ draftOpen: true }) }
+/** Every mark found: Send is ready. */
+export function draftReadyView(): ChromeView { return marked({ draftOpen: true }, { lost: false }) }
+/** Not drawn: Re-place 3A. The next click or drag on take 3 moves it. */
+export function replacingView(): ChromeView { return marked({ mode: { _tag: "Replacing", id: "m-3a" }, draftOpen: true }) }
+/** Not drawn: Send is running. Nothing in the draft can change. */
+export function sendingView(): ChromeView { return marked({ draftOpen: true, send: { _tag: "Sending", label: "Sending 5 marks" } }, { lost: false }) }
+/** Not drawn: the server refused the pass. The reason is an alert in the bar; Send can be tried again. */
+export function sendFailedView(): ChromeView {
+  return marked({ send: { _tag: "Failed", label: "Send · 4 new takes", reason: "Take 5 changed after you marked it. Check its marks, then send again.", availability: enabled } }, { lost: false })
+}
+/** Not drawn: take 5 is still working, so the whole pass waits. */
+export function markRunningView(): ChromeView {
+  return marked({ draftOpen: true }, { lost: false, change: view => ({ ...view, canvas: view.canvas._tag === "Frames" ? { ...view.canvas, frames: view.canvas.frames.map(item => item.take === "5" ? { ...item, run: { _tag: "Running" } as const } : item) } : view.canvas }) })
+}
+
 export type FixtureName = keyof typeof FIXTURES
 /** Every fixture by name. The gallery and the gates walk this list. */
 export const FIXTURES = {
@@ -503,4 +557,6 @@ export const FIXTURES = {
   knobs: knobsView, knobsFinding: knobsFindingView, code: codeView, codeWatching: codeWatchingView, codeLoading: codeLoadingView, codeFailed: codeFailedView,
   grid: gridView, error: errorView, odin: odinView, checks: checksView, checksRunning: checksRunningView, calibrate: calibrateView,
   alternate: alternateView, unreachable: unreachableView, setup: setupProblemsView,
+  mark: markView, marked: markedView, draft: draftView, draftReady: draftReadyView, replacing: replacingView,
+  sending: sendingView, sendFailed: sendFailedView, markRunning: markRunningView,
 } satisfies Record<string, () => ChromeView>

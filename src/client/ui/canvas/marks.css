@@ -1,0 +1,74 @@
+/* Take markup (decision 35): pins, boxes, mark mode, the note editor.
+   A mark's colours do not follow the chrome's scheme. White with a dark ring
+   reads on any product colour, and it is what the agent sees too. */
+
+/* --- the glyph ------------------------------------------------------------------------- */
+.dr-pin { --pin: 18px; --pin-fs: 10px; --mark: #fff; --mark-ink: #111; --mark-ring: #111;
+  display: inline-grid; place-items: center; box-sizing: border-box; flex: none;
+  font: 700 var(--pin-fs)/1 var(--dr-sans); color: var(--mark-ink); background: var(--mark); }
+.dr-pin[data-kind="Point"] { width: var(--pin); height: var(--pin); border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  box-shadow: 0 0 0 1.5px var(--mark-ring), 0 1px 3px rgb(0 0 0 / .5); }
+.dr-pin[data-kind="Point"] .dr-pin__letter { transform: rotate(45deg); }
+.dr-pin[data-kind="Region"] { min-height: var(--pin); padding: 0 5px; border-radius: 3px 3px 3px 0; box-shadow: 0 0 0 1px var(--mark-ring); }
+.dr-pin[data-size="thumb"] { --pin: 15px; --pin-fs: 9px; }
+.dr-pin[data-size="inline"] { --pin: 16px; --pin-fs: 9px; vertical-align: -3px; }
+.dr-pin[data-size="inline"][data-kind="Point"] { box-shadow: 0 0 0 1px var(--mark-ring); }
+.dr-pin:is([data-size="thumb"], [data-size="inline"])[data-kind="Region"] { padding: 0 4px; }
+/* Lost: hollow and dashed. It stays where it was last found, and never disappears quietly. */
+.dr-pin[data-location="Lost"] { background: var(--dr-card); color: var(--dr-ink-3); box-shadow: none; outline: 1px dashed var(--dr-ink-3); outline-offset: -1px; }
+.dr-pin[data-location="Unresolved"] { opacity: .55; }
+
+/* --- marks on a screen ------------------------------------------------------------------ */
+.dr-marks { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.dr-mark { position: absolute; margin: 0; padding: 0; border: 0; background: none; color: inherit; }
+/* A pin's tip is on its point. Its hit area is 28 px round the glyph, whatever its drawn size. */
+.dr-mark--point { width: 28px; height: 28px; display: grid; place-items: center; transform: translate(-50%, calc(-50% - var(--pin, 18px) * .707)); }
+.dr-mark--point[data-size="thumb"] { --pin: 15px; }
+.dr-mark--region { pointer-events: none; border: 2px solid #fff; box-shadow: 0 0 0 1px #111, inset 0 0 0 1px #111; background: rgb(255 255 255 / .1); }
+.dr-mark--region[data-location="Lost"] { border: 1px dashed var(--dr-ink-3); box-shadow: none; background: none; }
+.dr-mark__tab { position: absolute; left: -2px; top: -2px; transform: translateY(-100%); margin: 0; padding: 0; border: 0; background: none; display: flex; }
+.dr-mark--region[data-inside] .dr-mark__tab { transform: none; left: 0; top: 0; }
+button.dr-mark--point, button.dr-mark__tab { pointer-events: auto; cursor: pointer; }
+button.dr-mark--point::after, button.dr-mark__tab::after { content: ""; position: absolute; inset: -6px; }
+button.dr-mark--point:focus-visible, button.dr-mark__tab:focus-visible { outline: none; }
+button.dr-mark--point:focus-visible .dr-pin, button.dr-mark__tab:focus-visible .dr-pin { box-shadow: 0 0 0 1.5px #111, 0 0 0 3.5px #fff; }
+.dr-mark[data-current] .dr-pin, .dr-mark[data-current] .dr-mark__tab .dr-pin { box-shadow: 0 0 0 1.5px #111, 0 0 0 3.5px #fff; }
+.dr-mark--region[data-current] { border-width: 3px; }
+
+/* --- mark mode: a dashed ink edge 4 px outside each frame, and a crosshair -------------- */
+.dr-frame__mount { position: relative; }
+.dr-frame[data-marking] .dr-frame__screen { outline: 2px dashed var(--dr-ink); outline-offset: 4px; }
+.dr-surface { position: absolute; inset: 0; z-index: 1; cursor: crosshair; touch-action: none; }
+.dr-surface__draft { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 1px #111, inset 0 0 0 1px #111; background: rgb(255 255 255 / .12); pointer-events: none; }
+/* The keyboard target: shown while a key control on this frame has focus. */
+.dr-surface__target { position: absolute; pointer-events: none; display: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px #111, inset 0 0 0 1px #111; }
+.dr-surface__target[data-point] { width: 22px; height: 22px; border-radius: 50%; transform: translate(-50%, -50%); }
+.dr-surface__target[data-point]::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #111; }
+.dr-surface:focus-within .dr-surface__target { display: block; }
+/* Key controls sit at the foot of the frame. They show only while one has focus. */
+.dr-surface__keys { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); display: flex; gap: 4px; padding: 3px; border-radius: 7px;
+  background: var(--dr-card); box-shadow: var(--dr-lift); opacity: 0; pointer-events: none; white-space: nowrap; }
+.dr-surface:focus-within .dr-surface__keys { opacity: 1; pointer-events: auto; }
+.dr-surface__keys .dr-btn { height: 1.9rem; }
+.dr-surface__keys .dr-icon { width: 14px; height: 14px; }
+.dr-surface__hint { position: absolute; left: 50%; top: 6px; transform: translateX(-50%); max-width: calc(100% - 12px); padding: .25rem .5rem; border-radius: 5px;
+  background: var(--dr-card); color: var(--dr-ink-2); box-shadow: var(--dr-lift); font-size: 11px; display: none; text-align: center; pointer-events: none; }
+.dr-surface:focus-within .dr-surface__hint { display: block; }
+
+/* --- the canvas line that says mark mode is on ------------------------------------------ */
+.dr-canvas__marking { color: var(--dr-ink); }
+.dr-canvas__marking kbd { font: inherit; font-weight: 600; border: 1px solid var(--dr-edge-2); border-radius: 3px; padding: 0 .3rem; }
+
+/* --- the note editor: a card with the mark's name on a filled tag and one line ---------- */
+.dr-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .35rem .6rem; align-items: center; width: 100%; min-width: 0; box-sizing: border-box;
+  background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: .5rem .55rem .5rem .65rem; font-size: var(--dr-fs-1); }
+.dr-note__name { font-weight: 700; color: var(--dr-accent-ink); background: var(--dr-accent); border-radius: 4px; padding: 2px 5px; line-height: 1.3; }
+.dr-note__field { min-width: 0; border: 0; border-bottom: 1px solid var(--dr-edge-2); border-radius: 0; background: none; color: var(--dr-ink); font-size: var(--dr-fs-2); padding: .3rem 0; outline: 0; }
+/* The underline is the focus mark: ink while you type. */
+.dr-note__field:focus, .dr-note__field:focus-visible { outline: none; border-bottom-color: var(--dr-ink); }
+.dr-note__foot { grid-column: 2; display: flex; gap: .5rem; align-items: center; justify-content: space-between; min-width: 0; }
+.dr-note__hint { color: var(--dr-ink-3); font-size: 11px; min-width: 0; }
+.dr-note__hint kbd { font: inherit; color: var(--dr-ink-2); }
+.dr-note__done { flex: none; }
+.dr-note__field::placeholder { color: var(--dr-ink-3); }
+.dr-note__field[readonly] { border-bottom-color: var(--dr-edge-2); color: var(--dr-ink-2); }

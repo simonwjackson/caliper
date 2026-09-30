@@ -1,7 +1,7 @@
 import { Canvas } from "./Canvas"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
-import { errorView, gridView, noneView, planView, planningView, runningView, takesView } from "../fixtures/views"
+import { errorView, gridView, markView, markedView, noneView, planView, planningView, replacingView, runningView, takesView } from "../fixtures/views"
 import type { ChromeView } from "../contract"
 
 export const name = "Canvas"
@@ -18,3 +18,6 @@ export function Planning() { return <Scene make={planningView} /> }
 export function Running() { return <Scene make={runningView} /> }
 export function Throws() { return <Scene make={errorView} /> }
 export function Nothing() { return <Scene make={noneView} /> }
+export function MarkMode() { return <Scene make={markView} /> }
+export function Marked() { return <Scene make={markedView} /> }
+export function Replacing() { return <Scene make={replacingView} /> }
