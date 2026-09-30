@@ -16,7 +16,7 @@
  * the project's files do not change.
  */
 import assert from "node:assert/strict"
-import { mkdirSync } from "node:fs"
+import { mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { chromium } from "playwright-core"
@@ -33,6 +33,9 @@ const { values: args } = parseArgs({
     takes: { type: "string", default: "2" },
     out: { type: "string", default: "/tmp/caliper-takes" },
     keep: { type: "boolean", default: false },
+    // Accept the first take through the chrome and check that its files replaced the real ones.
+    accept: { type: "boolean", default: false },
+    root: { type: "string" },
   },
 })
 if (!args.url || !args.part || !args.prompt) throw new Error("Pass --url, --part and --prompt.")
@@ -134,6 +137,27 @@ try {
   }
 
   deferLayout(["Zero page/root scroll at 1800×1000, 1200×900 and 600×900", "Prompt/start/take actions fully inside the viewport or one tap away in their own region at those three sizes"])
+  if (args.accept) {
+    assert(args.root, "--accept needs --root, the project folder, to check the real files")
+    const root = /** @type {string} */ (args.root)
+    page.on("dialog", dialog => dialog.accept())
+    await page.setViewportSize({ width:1800,height:1000 })
+    const [chosen, ...rest] = ids
+    /** @type {import('../src/types').TakesSnapshot} */
+    const snapshot = await (await fetch(new URL("takes.json", base))).json()
+    const record = snapshot.takes.find(take => take.take === chosen)
+    assert(record && record.files.length > 0, `take ${chosen} changed at least one file`)
+    const copies = Object.fromEntries(record.files.map(file => [file, readFileSync(join(root, ".caliper/takes", /** @type {string} */ (chosen), file), "utf8")]))
+    await (await reveal(page, page.locator(`${cal.nav} ${cal.navTake}[data-take="${chosen}"]`))).click()
+    await (await reveal(page, page.locator(`${cal.accept}[data-take="${chosen}"]`))).click()
+    await page.locator(`${cal.nav} ${cal.navTake}[data-take="${chosen}"]`).waitFor({ state:"detached", timeout:60_000 })
+    for (const [file, text] of Object.entries(copies)) assert.equal(readFileSync(join(root, file), "utf8"), text, `${file} now holds take ${chosen}'s version`)
+    for (const id of rest) assert.equal(await page.locator(`${cal.nav} ${cal.navTake}[data-take="${id}"]`).count(), 1, `take ${id} stays after another take is accepted`)
+    await waitFrames(page, await page.locator(cal.frame).count(), "settled")
+    await page.screenshot({ path: join(out, "accepted.png") })
+    console.log(`accepted take ${chosen}: ${record.files.join(", ")} replaced the real files; ${rest.length} other takes remain`)
+    ids.splice(0, ids.length, ...rest)
+  }
   if (!args.keep) {
     page.on("dialog", dialog => dialog.accept())
     await page.setViewportSize({ width:1800,height:1000 })
