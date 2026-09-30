@@ -154,7 +154,7 @@ describe("stable app actions", () => {
         app.actions.onCount(3)
         app.actions.onStart()
         expect(app.getSnapshot().plan._tag).toBe("Planning")
-        app.actions.onPlanBack()
+        app.actions.onPlanCancel()
         finish?.({ directions: [{ title: "late", brief: "Never displayed" }] })
         await new Promise(resolve => setTimeout(resolve, 10))
         expect(app.getSnapshot().plan._tag).toBe("None")

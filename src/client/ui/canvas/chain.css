@@ -27,7 +27,7 @@
 .dr-chain__spacer { flex: 1 0 0; margin-left: -.5rem; }
 .dr-chain__label { display: flex; flex-wrap: wrap; gap: .1rem .5rem; align-items: baseline; min-width: 0; font-size: var(--dr-fs-1); font-weight: 400; color: var(--dr-ink-2); }
 .dr-chain__label b { color: var(--dr-ink); font-weight: 600; font-size: var(--dr-fs-2); }
-.dr-chain__gap, .dr-chain__alone { color: var(--dr-ink-3); }
+.dr-chain__gap { color: var(--dr-ink-3); }
 /* Opened, the flag takes its own line under the head, with its reason. */
 .dr-chain__head > .dr-flag[open] { order: 3; flex-basis: 100%; }
 .dr-chain__aside { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; }

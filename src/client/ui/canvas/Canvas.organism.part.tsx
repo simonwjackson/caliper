@@ -2,12 +2,12 @@ import { Canvas } from "./Canvas"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
 import {
-  chainHistoryView, chainsAcceptedView, chainsOdinView, errorView, gridView, markView, markedView, noneView, originalView, planView, planningView, replacingView, runningView, takesView, typeaheadView,
+  chainHistoryView, chainsAcceptedView, chainsOdinView, errorView, gridView, markView, markedView, noneView, originalView, planningView, replacingView, runningView, takesView, typeaheadView,
 } from "../fixtures/views"
 import type { ChromeView } from "../contract"
 
 export const name = "Canvas"
-export const note = "The real files, then each chain of takes as its head and pair, one gap apart; a plan's directions wait in their slots."
+export const note = "The real files, then each chain of takes as its head and pair, one gap apart; takes being planned hold blank slots."
 
 function Scene({ make, width = "75rem" }: { readonly make: () => ChromeView; readonly width?: string }) {
   const { view, actions } = useFixture(make)
@@ -15,7 +15,6 @@ function Scene({ make, width = "75rem" }: { readonly make: () => ChromeView; rea
 }
 export default function Takes() { return <Scene make={takesView} /> }
 export function AllStates() { return <Scene make={gridView} /> }
-export function Plan() { return <Scene make={planView} /> }
 export function Planning() { return <Scene make={planningView} /> }
 export function Running() { return <Scene make={runningView} /> }
 export function Throws() { return <Scene make={errorView} /> }

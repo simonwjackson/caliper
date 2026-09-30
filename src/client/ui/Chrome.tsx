@@ -126,19 +126,9 @@ function DeviceFrame({ frame, view, actions }: { frame: FrameView; view: ChromeV
 function Plan({ view, actions }: ChromeProps) {
   const plan = view.plan
   if (plan._tag === "None") return null
-  return <section data-cal={CAL.plan} aria-label="Take plan"><p>{plan.prompt}</p>
-    {plan._tag === "Planning" ? <p role="status">{plan.message}</p> : <>
-      <p>{plan.note}</p>
-      {plan.directions.map(({ id, direction }) => <fieldset key={id} data-direction={id}>
-        <legend>{direction.strange ? "Strange direction" : "Direction"}</legend>
-        <input data-cal={CAL.directionTitle} data-direction={id} aria-label={`Direction ${id} title`} value={direction.title} onChange={event => actions.onDirection(id, "title", event.currentTarget.value)} />
-        <textarea data-cal={CAL.directionBrief} data-direction={id} aria-label={`Direction ${id} brief`} value={direction.brief} onChange={event => actions.onDirection(id, "brief", event.currentTarget.value)} />
-        {direction.strange && <p>Strange direction: it breaks this part's current pattern on purpose.</p>}
-        <button type="button" data-cal={CAL.directionRemove} data-direction={id} onClick={() => actions.onRemoveDirection(id)}>Remove direction</button>
-      </fieldset>)}
-      <Action hook={CAL.planStart} availability={plan.start} action={actions.onStart}>{plan.startLabel}</Action>
-    </>}
-    <button type="button" data-cal={CAL.planBack} onClick={actions.onPlanBack}>{plan._tag === "Planning" ? "Cancel" : "Back"}</button>
+  return <section data-cal={CAL.plan} aria-label="Take plan">
+    <p role="status">{plan.message}</p>
+    <button type="button" data-cal={CAL.planCancel} onClick={actions.onPlanCancel}>Cancel</button>
   </section>
 }
 function Composer({ view, actions }: ChromeProps) {

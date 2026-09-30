@@ -7,12 +7,11 @@ import "../tokens.css"
 import "./bar.css"
 
 const COUNTS = [1, 2, 3, 4] as const
-const countLabel = (count: 1 | 2 | 3 | 4) => count === 1 ? "1 take" : `${count} takes, planned`
+const countLabel = (count: 1 | 2 | 3 | 4) => count === 1 ? "1 take" : `${count} takes`
 
 function agentLine(composer: ComposerView): string {
   const agent = composer.agent
-  const skills = `${composer.skills.skills.length} ${composer.skills.skills.length === 1 ? "skill" : "skills"}`
-  if (agent._tag === "Ready") return `${agent.model} · reasoning ${agent.reasoning} · ${skills}`
+  if (agent._tag === "Ready") return `${agent.model} · reasoning ${agent.reasoning}`
   if (agent._tag === "Connecting") return "Connecting to the agent…"
   if (agent._tag === "Off") return `No agent. ${agent.hint}`
   return `The agent did not load. ${agent.hint}`
@@ -27,7 +26,7 @@ export type SendChoice = { readonly send: MarkupSend; readonly revision: number;
 
 /**
  * New take is a split button. The main half starts; the menu chooses how many
- * takes (2 to 4 start from a plan), sends the prompt to the focused take, and
+ * takes (2 to 4 start from one plan, all at once), sends the prompt to the focused take, and
  * names the agent and its skills in the dimmest ink.
  *
  * While the draft holds marks, the main half is Send, with its count, as

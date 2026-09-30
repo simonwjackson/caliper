@@ -13,7 +13,7 @@ if (!device) throw new Error("The contract fixture needs one built-in device")
 const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jzQAAAABJRU5ErkJggg=="
 const take: TakeSummary = {
   id: "6", name: "Quiet button", subjectLabel: "Button · Default", deviceLabel: device.name,
-  createdLabel: "Created in Page · Menu open. Shared source edits can affect other states.",
+  createdLabel: "Made in Page · Menu open",
   run: { _tag: "Idle" }, files: ["src/Button.tsx", "src/Button.css"], nameIssue: "", direction: { title: "Quiet button", brief: "Use the shared inputs", strange: true },
   unavailableReason: "", accept: enabled, discard: enabled, stop: blocked, prepareAlternate: enabled, kind: "Experiment",
   lineage: "", flag: { _tag: "Current" },
@@ -80,7 +80,7 @@ export function markupView(state: "empty" | "ready" | "lost" | "blocked" | "send
   const draftMarks = marks.map(mark => sending ? { ...mark, edit: blocked, remove: blocked, replace: blocked } : mark)
   const markup: MarkupView = {
     _tag: "Ready", revision: 4, mode: { _tag: state === "ready" ? "Marking" : "Off" }, draftOpen: true,
-    groups: plan.groups.map(group => ({ source: group.source, label: `Take ${group.source.take}`, marks: draftMarks.filter(mark => group.marks.includes(mark.id)), decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" }, outcome: { _tag: "NewTake" as const, label: `Send makes a new take from take ${group.source.take}.` } })),
+    groups: plan.groups.map(group => ({ source: group.source, label: `Take ${group.source.take}`, marks: draftMarks.filter(mark => group.marks.includes(mark.id)), decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" }, outcome: { _tag: "NewTake" as const, label: "Send makes a new take." } })),
     editor: !marks.length || sending ? { _tag: "Closed" } : { _tag: "Open", id: marks[0]!.id, name: marks[0]!.name, note: marks[0]!.note, edit: enabled, references: [] },
     send: sending ? { _tag: "Sending", label: "Sending 2 new takes…" } : state === "failed" ? { _tag: "Failed", label: plan.label, reason: "Send failed before any take started. Draft retained.", availability } : { _tag: "Idle", label: plan.label, availability },
   }
@@ -110,7 +110,7 @@ export function referencesView(): ChromeView {
   const plan = planSend(rows.map(row => ({ id: row.mark.id, name: row.mark.name, note: row.mark.note, source: row.source, location: row.mark.location })), [six, seven].map(source => ({ ...source, kind: "Experiment" as const, run: { _tag: "Idle" as const } })))
   const labelOf = (source: { take: string }) => source.take === "0" ? "Original · the real files" : `Take ${source.take}`
   const outcome = (group: typeof plan.groups[number]): MarkupOutcome => group.outcome._tag === "PointedTo" ? { _tag: "PointedTo", label: "Pointed to by 6A; makes no take." }
-    : { _tag: "NewTake", label: group.source.take === "0" ? "Send makes a new take from the real files." : `Send makes a new take from take ${group.source.take}.` }
+    : { _tag: "NewTake", label: "Send makes a new take." }
   const crop = (take: string | null, rect: { x: number; y: number }) => ({ src: `/frame${take ? `?take=${take}` : ""}`, viewport: { width: device.cssWidth, height: device.cssHeight }, rect: { ...rect, width: 0, height: 0 } })
   const markup: MarkupView = {
     _tag: "Ready", revision: 9, mode: { _tag: "Off" }, draftOpen: true,
@@ -165,7 +165,6 @@ export function chainsView(history: "folded" | "open" = "folded"): ChromeView {
 
 export function contractViews(): Record<string, ChromeView> {
   const ready = readyView()
-  const plan: ChromeView = { ...ready, plan: { _tag: "Review", prompt: ready.composer.prompt, note: "One direction is strange", directions: [{ id: "a", direction: { title: "Quiet", brief: "Reduce the chrome" } }, { id: "b", direction: { title: "Different structure", brief: "Use a different arrangement", strange: true } }], start: enabled, startLabel: "Start 2 takes" }, composer: { ...ready.composer, edit: blocked, attach: blocked } }
   const runningTake: TakeSummary = { ...take, run: { _tag: "Running" }, accept: blocked, stop: enabled, prepareAlternate: blocked }
   const running: ChromeView = { ...ready, focusedTake: runningTake, record: { _tag: "Open", take: runningTake, log: [], emptyLogMessage: "Working…", integration: { _tag: "None" } }, code: ready.code._tag === "Ready" ? { ...ready.code, mode: { _tag: "Watching", original: null }, stop: enabled } : ready.code }
   const alternate: ChromeView = { ...ready, focusedTake: { ...take, kind: "Alternate", accept: blocked }, record: { _tag: "Open", take: { ...take, kind: "Alternate" }, log: [], emptyLogMessage: "", integration: {
@@ -176,7 +175,7 @@ export function contractViews(): Record<string, ChromeView> {
     rows: [{ index: 0, part: subject.part, state: subject.state, device: device.id, take: null, badge: { status: "Review", label: "Review", detail: "Two matching renders" }, findings: [{ id: "spill", label: "Content outside the screen", status: "Review", detail: "One expected edge" }], authored: [{ id: "click", label: "Click opens menu", status: "Passed", detail: "Browser input succeeded", image: { key: "authored-0", kind: "authored", url: pixel, label: "Interaction evidence", caption: "Not a baseline" } }], provenance: "Checks declared in real files", authoredSummary: "Only this named assertion", images: [{ key: "first", kind: "first", url: pixel, label: "First render", caption: "Saved evidence" }, { key: "repeat", kind: "repeat", url: pixel, label: "Repeat render", caption: "Saved evidence" }], approval: enabled, reviewed: false, approved: false, approvalNote: "Visual intent only" }],
   } } }
   return {
-    ready, plan, running, alternate, checks,
+    ready, running, alternate, checks,
     markEmpty: markupView("empty"), markDraft: markupView("ready"), markLost: markupView("lost"),
     markBlocked: markupView("blocked"), markSending: markupView("sending"), markFailed: markupView("failed"),
     connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
@@ -184,7 +183,7 @@ export function contractViews(): Record<string, ChromeView> {
     references: referencesView(),
     failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", chains: [], frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
-    planning: { ...plan, plan: { _tag: "Planning", prompt: "Make it quiet", count: 3, message: "Planning 3 directions" } },
+    planning: { ...ready, plan: { _tag: "Planning", count: 3, message: "Planning 3 takes…" }, composer: { ...ready.composer, edit: blocked, attach: blocked } },
     loading: { ...ready, code: { _tag: "Loading", message: "Loading editor" }, knobs: { _tag: "Finding", target: "Real files" }, checks: { _tag: "Open", targetLabel: "Button", runSelected: blocked, runAll: blocked, notices: [], run: { _tag: "Loading" } } },
     checksRunning: { ...checks, checks: { _tag: "Open", targetLabel: "Button", runSelected: blocked, runAll: blocked, notices: [], run: { _tag: "Running", id: "run-2", progress: "Rendering 1 of 2", stop: enabled } } },
   }

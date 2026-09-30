@@ -1,4 +1,4 @@
-import type { Part, Project, StateRef, TakesSnapshot, TakeView, Direction } from "../../types"
+import type { Part, Project, StateRef, TakesSnapshot, TakeView } from "../../types"
 import type { ChromeView, Tool } from "../ui/contract"
 import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
@@ -11,7 +11,6 @@ export type Submission = { rawPrompt: string; attachmentIds: readonly string[] }
 export type Plan =
   | { _tag: "None" }
   | { _tag: "Planning"; ask: Ask; submitted: Submission; count: number; id: number }
-  | { _tag: "Review"; ask: Ask; submitted: Submission; directions: { id: string; direction: Direction }[]; note: string }
 export type AppState = {
   connection: ChromeView["connection"]
   project: Project | null

@@ -6,7 +6,7 @@ import { DEVICES } from "../device-frame.js"
 import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js"
 import { MAX_IMAGES } from "../images.js"
 import type { AppState } from "./state"
-import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, askAvailable, takeAvailable, takeName, frameKey } from "./state"
+import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey } from "./state"
 
 /** Marks as the markup controller sees them. `frame` reads its current locations; it does no I/O. */
 export type MarkupRegion = {
@@ -37,7 +37,7 @@ export function takeSummary(state: AppState, take: TakeView): TakeSummary {
   const block = state.connection._tag !== "Ready" ? "Vite is not reachable." : state.operation._tag === "Working" ? "A request is pending." : take.run._tag === "Running" ? "The agent is working." : unavailableReason || (take.files.length === 0 ? "No changed files." : "")
   return {
     id: take.take, name: takeName(take), subjectLabel: refLabel(state, take), deviceLabel: DEVICES.find(device => device.id === take.device)?.name ?? take.device,
-    createdLabel: `${new Date(take.created).toISOString()} · ${take.context ? `Created in ${refLabel(state, take.context)}` : "Created in isolation"}. Shared source edits can affect other states.`,
+    createdLabel: take.context ? `Made in ${refLabel(state, take.context)}` : "",
     run: take.run, files: take.files, nameIssue: take.nameIssue ?? "", direction: take.direction ?? null, unavailableReason,
     kind: take.integration ? "Alternate" : "Experiment",
     accept: block ? disabled(block) : take.integration ? disabled("Review and apply this alternate instead.") : enabled,
@@ -162,14 +162,13 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
   const busy = state.operation._tag === "Working"
   const agentReady = state.takes?.agent._tag === "Ready"
   const startReason = state.connection._tag !== "Ready" ? "Vite is not reachable." : busy ? "A request is pending." : !agentReady ? "The agent is not ready." : !subject || !stateExists(state.project?.parts ?? [], subject) ? "Choose an available editing state." : !state.prompt.trim() ? "Describe a change first." : ""
-  const edit = agentReady && state.plan._tag === "None" ? enabled : disabled("The agent is not ready, or a plan is open.")
+  const edit = agentReady && state.plan._tag === "None" ? enabled : disabled("The agent is not ready, or takes are being planned.")
   const attach = edit._tag === "Enabled" && state.attachments.length < MAX_IMAGES && !busy ? enabled : disabled("The composer cannot attach more images now.")
-  const valid = state.plan._tag === "Review" ? state.plan.directions.filter(item => item.direction.title.trim() && item.direction.brief.trim()).length : 0
   const snapshot: ChromeView = {
     connection: state.connection, selection: subject && preview ? { _tag: "State", subject, preview, label: selectionLabel(state, subject) } : state.part ? { _tag: "All", part: state.part } : { _tag: "None" },
     navigation: navigation(state, regions), devices: DEVICES, device: state.device, pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: canvas(state, regions.markup ?? noMarkup),
-    plan: state.plan._tag === "Planning" ? { _tag: "Planning", prompt: state.plan.ask.prompt, count: state.plan.count, message: `Asking the model for ${state.plan.count} different directions…` } : state.plan._tag === "Review" ? { _tag: "Review", prompt: state.plan.ask.prompt, note: state.plan.note, directions: state.plan.directions, start: !busy && valid && agentReady && state.connection._tag === "Ready" && askAvailable(state, state.plan.ask) ? enabled : disabled("No valid directions, unavailable planned subject/context, disconnected Vite, or pending request."), startLabel: `Start ${valid} ${valid === 1 ? "take" : "takes"}` } : { _tag: "None" },
-    composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
+    plan: state.plan._tag === "Planning" ? { _tag: "Planning", count: state.plan.count, message: `Planning ${state.plan.count} takes…` } : { _tag: "None" },
+    composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `${state.count} new takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
       marks: promptMarks(state.plan._tag === "None" ? (regions.markup ?? noMarkup).withPrompt : []),
       notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },

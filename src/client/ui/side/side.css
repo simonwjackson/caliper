@@ -12,8 +12,10 @@
 .dr-record__failed { color: var(--dr-bad); border-left: 3px solid var(--dr-bad); padding-left: .55rem; line-height: 1.5; }
 .dr-record__warn { color: var(--dr-warn); line-height: 1.5; }
 .dr-record__direction { color: var(--dr-ink-2); line-height: 1.5; }
-.dr-record__direction b { color: var(--dr-ink); font-weight: 600; }
-.dr-record__strange { color: var(--dr-ink-3); }
+.dr-record__direction > summary { list-style: none; cursor: pointer; display: inline-flex; gap: .45rem; align-items: center; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
+.dr-record__direction > summary::-webkit-details-marker { display: none; }
+.dr-record__direction > summary:hover { color: var(--dr-ink); }
+.dr-record__direction > p { margin: .35rem 0 0; }
 .dr-record__context { color: var(--dr-ink-3); line-height: 1.5; }
 .dr-record__files { list-style: none; padding: 0; display: grid; gap: .2rem; }
 .dr-record__file { border: 0; background: none; padding: 0; text-align: left; font: 11px/1.45 var(--dr-mono); color: var(--dr-ink-2); overflow-wrap: anywhere; }

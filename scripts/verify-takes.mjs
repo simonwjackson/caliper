@@ -83,29 +83,26 @@ try {
   await page.locator(cal.start).click()
   let startedTakes = count
   if (count > 1) {
-    // Several takes: the planner proposes one direction per take, and you review them.
-    await page.locator(cal.directionTitle).first().waitFor({ timeout:120_000 })
+    // Several takes: the planner proposes one direction per take, and every direction starts at once.
+    // There is no review step (decision 16, changed 2026-09-30).
+    await page.locator(cal.plan).waitFor({ timeout:10_000 })
+    await page.screenshot({ path: join(out, "plan.png") })
     assert(planning)
     const response = await planning
     assert(response.ok(), await response.text())
     /** @type {{ directions: import('../src/types').Direction[], note?: string }} */
     const planned = await response.json()
-    assert.deepEqual(await page.locator(cal.directionTitle).evaluateAll(nodes => nodes.map(node => /** @type {HTMLInputElement} */ (node).value)), planned.directions.map(direction => direction.title))
-    assert.deepEqual(await page.locator(cal.directionBrief).evaluateAll(nodes => nodes.map(node => /** @type {HTMLTextAreaElement} */ (node).value)), planned.directions.map(direction => direction.brief))
-    if (planned.note) assert((await page.locator(cal.plan).innerText()).includes(planned.note), "the planner's explanation is visible")
-    if (planned.directions.some(direction => direction.strange)) assert.match(await page.locator(cal.plan).innerText(), /Strange: it breaks/)
     console.log(`planned in ${Math.round((Date.now() - started) / 1000)} s: ${JSON.stringify(planned, null, 1)}`)
-    await page.screenshot({ path: join(out, "plan.png") })
     startedTakes = planned.directions.length
     assert(startedTakes >= 1 && startedTakes <= count, "the planner proposes 1 to count directions")
     const strange = planned.directions.filter(direction => direction.strange).length
     if (count >= 3) assert(strange === 1 || (strange === 0 && !!planned.note?.trim()), "a plan of 3 or more takes has one strange direction, or a note that says why not")
     else assert.equal(strange, 0, "a plan of 2 takes has no strange direction")
-    await page.locator(cal.planStart).click()
   }
   await page.waitForFunction(({selector,before,n}) => [...document.querySelectorAll(selector)].filter(node => !before.includes(node.getAttribute("data-take") ?? "")).length === n, { selector:`${cal.nav} ${cal.navTake}`, before:[...before], n:startedTakes }, { timeout:60_000 })
   const ids = await page.locator(`${cal.nav} ${cal.navTake}`).evaluateAll((nodes, before) => nodes.map(node => node.getAttribute("data-take") ?? "").filter(id => !before.includes(id)), [...before])
   assert.equal(new Set(ids).size, startedTakes, "every launch has its own identity")
+  assert.equal(await page.locator(cal.plan).count(), 0, "the plan is gone once its takes start")
   console.log(`${startedTakes} takes started; the stage shows ${await page.locator(cal.frame).count()} frames`)
   await page.screenshot({ path: join(out, "working.png") })
 

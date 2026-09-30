@@ -19,7 +19,7 @@ export function createChromeScenario(initial: ChromeView) {
     onChainHistory: record("onChainHistory"), onChainSolo: record("onChainSolo"),
     onTool: record("onTool"), onNavOpen: record("onNavOpen"), onFilter: record("onFilter"), onPart: record("onPart"), onPartExpanded: record("onPartExpanded"),
     onState: record("onState"), onCompare: record("onCompare"), onTake: record("onTake"), onContext: record("onContext"), onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"), onDevice: record("onDevice"),
-    onPrompt: record("onPrompt"), onCount: record("onCount"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanBack: record("onPlanBack"), onDirection: record("onDirection"), onRemoveDirection: record("onRemoveDirection"),
+    onPrompt: record("onPrompt"), onCount: record("onCount"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanCancel: record("onPlanCancel"),
     onAccept: record("onAccept"), onDiscard: record("onDiscard"), onStop: record("onStop"), onPrepareAlternate: record("onPrepareAlternate"), onRecordClose: record("onRecordClose"), onReview: record("onReview"), onIntegrationCheck: record("onIntegrationCheck"), onBehaviorReviewed: record("onBehaviorReviewed"), onApplyAlternate: record("onApplyAlternate"),
     onOpenFile: record("onOpenFile"), onFileFilter: record("onFileFilter"), onCodeRetry: record("onCodeRetry"), onCodeEdit: record("onCodeEdit"), onCodeSave: record("onCodeSave"), onPreviousChange: record("onPreviousChange"), onNextChange: record("onNextChange"), onCodeShare: record("onCodeShare"),
     onKnobInput: record("onKnobInput"), onKnobCommit: record("onKnobCommit"), onKnobCancel: record("onKnobCancel"), onLiteralsOpen: record("onLiteralsOpen"), onLiteralDraft: record("onLiteralDraft"), onLiteralName: record("onLiteralName"), onLiteralHome: record("onLiteralHome"), onPromote: record("onPromote"),
@@ -105,15 +105,7 @@ export function createChromeScenario(initial: ChromeView) {
     onNavOpen(navOpen) { observed.onNavOpen(navOpen); update({ ...view, tools: { ...view.tools, navOpen } }) },
     onCount(count) { observed.onCount(count); update({ ...view, composer: { ...view.composer, count } }) },
     onRemoveAttachment(id) { observed.onRemoveAttachment(id); update({ ...view, composer: { ...view.composer, attachments: view.composer.attachments.filter(image => image.id !== id) } }) },
-    onDirection(id, field, text) {
-      observed.onDirection(id, field, text)
-      if (view.plan._tag === "Review") update({ ...view, plan: { ...view.plan, directions: view.plan.directions.map(item => item.id === id ? { ...item, direction: { ...item.direction, [field]: text } } : item) } })
-    },
-    onRemoveDirection(id) {
-      observed.onRemoveDirection(id)
-      if (view.plan._tag === "Review") update({ ...view, plan: { ...view.plan, directions: view.plan.directions.filter(item => item.id !== id) } })
-    },
-    onPlanBack() { observed.onPlanBack(); update({ ...view, plan: { _tag: "None" } }) },
+    onPlanCancel() { observed.onPlanCancel(); update({ ...view, plan: { _tag: "None" } }) },
     onKnobInput(id, value) {
       observed.onKnobInput(id, value)
       if (view.knobs._tag === "Ready") update({ ...view, knobs: { ...view.knobs, knobs: view.knobs.knobs.map(knob => knob.id === id ? { ...knob, value } : knob) } })

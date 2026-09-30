@@ -144,7 +144,7 @@ describe("the gallery's phase 6 fixtures follow the shared Send policy", () => {
     const scenario = createScenario(view)
     scenario.actions.onPrompt("")
     expect(scenario.getView().composer.marks._tag).toBe("None")
-    expect(ready(scenario.getView()).groups[0]?.outcome).toEqual({ _tag: "NewTake", label: "Send makes a new take from the real files." })
+    expect(ready(scenario.getView()).groups[0]?.outcome).toEqual({ _tag: "NewTake", label: "Send makes a new take." })
     scenario.actions.onPrompt("Tidy it")
     expect(scenario.getView().composer.marks._tag).toBe("WithPrompt")
     scenario.actions.onStart()

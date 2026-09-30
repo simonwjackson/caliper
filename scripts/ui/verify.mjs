@@ -134,9 +134,9 @@ await gate("actions: prompt, start, count, follow, attach, accept, discard, devi
     await page.locator(cal("prompt")).press("Control+Shift+Enter")
     assert.deepEqual((await called(page, "onFollow")).map(call => call.args[0]), ["6"])
     await page.getByRole("button", { name: "New take options" }).click()
-    await page.getByRole("menuitemradio", { name: "3 takes, planned" }).click()
+    await page.getByRole("menuitemradio", { name: "3 takes" }).click()
     assert.deepEqual((await called(page, "onCount")).map(call => call.args[0]), [3])
-    assert.equal(await page.locator(cal("take-start")).textContent(), "Plan 3 takes")
+    assert.equal(await page.locator(cal("take-start")).textContent(), "3 new takes")
     await page.getByRole("button", { name: "New take options" }).click()
     await page.getByRole("menuitem", { name: /Send to take 6/ }).click()
     assert.deepEqual((await called(page, "onFollow")).map(call => call.args[0]), ["6", "6"])
@@ -173,26 +173,18 @@ await gate("actions: an image is removed by its identity", async () => {
     assert.equal(await page.locator(cal("attachments")).count(), 0)
   } finally { await close() }
 })
-await gate("actions: plan directions edit and remove by id; Start and Back", async () => {
-  const { page, close } = await open(desk, "plan")
+await gate("actions: planning shows blank slots, one status line and Cancel; no review step", async () => {
+  const { page, close } = await open(desk, "planning")
   try {
-    await page.locator(`${cal("direction-title")}[data-direction="d3"]`).fill("Keep the strange")
-    await page.locator(`${cal("direction-remove")}[data-direction="d1"]`).click()
-    assert.equal(await page.locator(`${cal("direction-title")}[data-direction="d3"]`).inputValue(), "Keep the strange")
-    assert.equal(await page.locator(cal("direction-title")).count(), 2)
-    assert.equal(await page.locator(cal("plan-start")).textContent(), "Start 2 takes")
-    assert.equal(await page.locator(cal("take-start")).count(), 0, "No second start while a plan is open")
-    await page.locator(cal("plan-start")).click()
-    assert.equal((await called(page, "onStart")).length, 1)
-    assert(await page.locator(cal("prompt")).evaluate(node => node instanceof HTMLTextAreaElement && node.readOnly), "The plan's prompt is read only")
-    await page.locator(cal("plan-back")).click()
-    assert.equal((await called(page, "onPlanBack")).length, 1)
+    assert.equal(await page.locator(".dr-slot").count(), 3)
+    assert.equal(await page.locator(".dr-slot__plate, .dr-slot__caption").evaluateAll(nodes => nodes.map(node => node.textContent ?? "").join("").trim()), "", "A slot being planned shows no words")
+    assert.equal(await page.locator(".dr-canvas__title q").count(), 0, "The prompt shows once, in the composer")
+    assert.equal(await page.locator(cal("take-start")).count(), 0, "No second start while takes are planned")
+    assert.equal(await page.getByRole("status").filter({ hasText: "Planning 3 takes" }).count(), 1)
+    assert(await page.locator(cal("prompt")).evaluate(node => node instanceof HTMLTextAreaElement && node.readOnly), "The prompt is read only while planning")
+    await page.locator(cal("plan-cancel")).click()
+    assert.equal((await called(page, "onPlanCancel")).length, 1)
   } finally { await close() }
-  const planning = await open(desk, "planning")
-  try {
-    await planning.page.getByRole("button", { name: "Cancel" }).click()
-    assert.equal((await called(planning.page, "onPlanBack")).length, 1)
-  } finally { await planning.close() }
 })
 await gate("actions: a running take stops from the bar and the record; Accept waits", async () => {
   const { page, close } = await open(desk, "running")
@@ -982,7 +974,7 @@ await gate("references: the real files take marks in mark mode, by pointer and b
     const group = page.locator('.dr-dtake[data-take="0"]')
     assert.equal(await group.getAttribute("aria-label"), "Original · the real files")
     assert.equal(await group.locator(".dr-dmark").count(), 4)
-    assert.equal(await group.locator(cal("draft-outcome")).textContent(), "Send makes a new take from the real files.")
+    assert.equal(await group.locator(cal("draft-outcome")).textContent(), "Send makes a new take.")
     assert.equal(await page.locator(cal("marks-send")).textContent(), "Send · 1 new take")
     assert.match(await page.locator(".dr-draft__head").textContent() ?? "", /4 marks\s*on the real files/)
   } finally { await close() }
@@ -1028,7 +1020,7 @@ await gate("keyboard: the New take menu opens, moves, chooses and returns focus"
     await page.keyboard.press("Enter")
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "1 take", "Opening focuses the checked count")
     await page.keyboard.press("ArrowDown")
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "2 takes, planned")
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "2 takes")
     await page.keyboard.press("Enter")
     assert.deepEqual((await called(page, "onCount")).map(call => call.args[0]), [2])
     assert.equal(await page.getByRole("menu").count(), 0)
@@ -1094,15 +1086,6 @@ await gate("focus: typing through stream updates keeps focus and every character
     await page.evaluate(() => window.gallery.tick())
     assert(await page.locator(cal("prompt")).evaluate(node => node === document.activeElement))
   } finally { await close() }
-  const plan = await open(desk, "plan")
-  try {
-    const title = plan.page.locator(`${cal("direction-title")}[data-direction="d2"]`)
-    await title.click()
-    await plan.page.keyboard.press("End")
-    await plan.page.keyboard.type(" first")
-    assert.equal(await title.inputValue(), "Cover at half, title beside it first")
-    assert(await title.evaluate(node => node === document.activeElement))
-  } finally { await plan.close() }
 })
 await gate("keyboard: token lists preview with arrows, write on Enter, restore on Escape", async () => {
   const { page, close } = await open(desk, "knobs")
@@ -1188,7 +1171,7 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
 
 // ---------------------------------------------------------------- 5. reachability
 for (const size of [...LADDER, ...SIZES]) {
-  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin",
+  for (const fixture of ["takes", "log", "knobs", "code", "planning", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin",
     "references", "typeahead", "original", "withPrompt"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)

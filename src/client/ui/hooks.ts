@@ -4,7 +4,7 @@ export const CAL = Object.freeze({
   filter: "parts-filter", part: "part", partExpand: "part-expand", state: "state", compare: "compare-takes", navTake: "nav-take",
   context: "scenario-context", subject: "scenario-subject", whole: "scenario-whole", unavailable: "unavailable-states", setup: "setup",
   canvas: "canvas", frame: "frame", frameSelect: "frame-select", frameProblem: "frame-problem", caption: "caption", device: "device",
-  plan: "plan", directionTitle: "direction-title", directionBrief: "direction-brief", directionRemove: "direction-remove", planBack: "plan-back", planStart: "plan-start",
+  plan: "plan", planCancel: "plan-cancel",
   composer: "composer", prompt: "prompt", attach: "attach", attachments: "attachments", attachmentRemove: "attachment-remove", count: "take-count", start: "take-start", follow: "take-follow", agent: "agent-status", skills: "agent-skills",
   accept: "take-accept", discard: "take-discard", stop: "take-stop", alternate: "take-alternate", record: "take-record", recordClose: "record-close", log: "take-log",
   integration: "integration", review: "integration-review", integrationCheck: "integration-check", behaviorReviewed: "integration-attestation", applyAlternate: "integration-apply", reviewDiff: "review-diff",

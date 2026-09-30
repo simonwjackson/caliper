@@ -14,7 +14,6 @@ function Chrome({ fixture }: { readonly fixture: FixtureName }) {
 }
 export default function Takes() { return <Chrome fixture="takes" /> }
 export function FirstRun() { return <Chrome fixture="empty" /> }
-export function Plan() { return <Chrome fixture="plan" /> }
 export function Planning() { return <Chrome fixture="planning" /> }
 export function Record() { return <Chrome fixture="log" /> }
 export function RunningTake() { return <Chrome fixture="running" /> }

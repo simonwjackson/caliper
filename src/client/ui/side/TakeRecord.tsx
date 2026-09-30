@@ -1,4 +1,4 @@
-import type { ChromeActions, ChromeView } from "../contract"
+import type { ChromeActions, ChromeView, LogEntry } from "../contract"
 import { CAL } from "../hooks"
 import { Button } from "../atoms/Button"
 import { Flag } from "../atoms/Flag"
@@ -16,9 +16,31 @@ function runLabel(run: { readonly _tag: string }): { readonly text: string; read
   return { text: "Ready", tone: "good" }
 }
 
+const READS = new Set(["read_file", "list_files", "read", "list"])
 /**
- * A take's record in the side panel: what it is, its direction, the files it
- * changes, its conversation, and what you can do with it. While the agent
+ * The agent reads before it acts, and one row per file read is noise. A run of
+ * finished reads folds into one row that lists them, cut to its width.
+ * Edits, renders, failures and reads still running keep their own rows.
+ */
+export function foldReads(log: readonly LogEntry[]): LogEntry[] {
+  const out: LogEntry[] = []
+  let run: Extract<LogEntry, { _tag: "Tool" }>[] = []
+  const flush = () => {
+    if (run.length === 1) out.push(run[0]!)
+    else if (run.length > 1) out.push({ _tag: "Tool", name: "read", subject: run.map(entry => entry.subject).join(", "), outcome: "Done", detail: "" })
+    run = []
+  }
+  for (const entry of log) {
+    if (entry._tag === "Tool" && READS.has(entry.name) && entry.outcome === "Done") { run.push(entry); continue }
+    flush(); out.push(entry)
+  }
+  flush()
+  return out
+}
+
+/**
+ * A take's record in the side panel: what it is, the brief the planner gave
+ * its agent (folded; it is written for the agent), the files it changes, its conversation, and what you can do with it. While the agent
  * works, Stop sits in the header, where the eye lands first, and the log
  * grows at the foot. The record also carries Accept and Discard, because on a
  * phone it covers the bar that holds them.
@@ -48,15 +70,15 @@ export function TakeRecord({ view, actions, sheet }: { readonly view: ChromeView
       {take.run._tag === "Failed" && <p className="dr-record__failed" role="alert">{take.run.reason}</p>}
       {take.unavailableReason && <p className="dr-record__warn" role="status">{take.unavailableReason}</p>}
       {take.nameIssue && <p className="dr-record__warn">{take.nameIssue}</p>}
-      {take.direction && <p className="dr-record__direction"><b>Direction.</b> {take.direction.title === take.name ? "" : `${take.direction.title}: `}{take.direction.brief}
-        {take.direction.strange && <span className="dr-record__strange"> The strange direction: it breaks the part's current pattern on purpose.</span>}</p>}
-      <p className="dr-record__context">{take.createdLabel}</p>
+      {take.direction && <details className="dr-record__direction"><summary>Brief{take.direction.strange ? " · strange" : ""}<i className="dr-chev" aria-hidden="true" /></summary>
+        <p>{take.direction.title === take.name ? "" : `${take.direction.title}: `}{take.direction.brief}</p></details>}
+      {take.createdLabel && <p className="dr-record__context">{take.createdLabel}</p>}
       {take.files.length > 0 && <ul className="dr-record__files" aria-label="Changed files">
         {take.files.map(file => <li key={file}><button type="button" className="dr-record__file" data-cal={CAL.file} data-file={file} title="Open in Code" onClick={() => actions.onOpenFile(file)}>{file}</button></li>)}
       </ul>}
       <ol className="dr-log" data-cal={CAL.log} aria-live="polite" aria-label="Conversation">
         {log.length === 0 && <li className="dr-log__empty">{emptyLogMessage}</li>}
-        {log.map((entry, index) => <LogLine key={index} entry={entry} />)}
+        {foldReads(log).map((entry, index) => <LogLine key={index} entry={entry} />)}
       </ol>
       <div className="dr-record__foot">
         <TakeActions take={take} actions={actions} named={false} />

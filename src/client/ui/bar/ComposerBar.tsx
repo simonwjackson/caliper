@@ -26,8 +26,8 @@ const GAP = 10
  * does: the images you attach, the text, the attach button and the primary
  * button. `fitComposer` decides from the bar's own width whether the take's
  * actions sit beside the well or above it, and whether the well is one row or
- * stacks its text over its buttons. During a plan the prompt is read only and
- * the well holds Back and Start. An agent that failed to load shows above,
+ * stacks its text over its buttons. While takes are planned the prompt is read
+ * only and the well holds the status and Cancel. An agent that failed to load shows above,
  * because this is where it is missed.
  *
  * Take markup lives here too (decision 35): the pin button at the left, the
@@ -82,7 +82,7 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
     return () => observer.disconnect()
   }, [focused?.id, plan._tag, marking !== null])
   const canAttach = composer.attach._tag === "Enabled"
-  const startNow = () => { if (plan._tag === "None" && composer.start._tag === "Enabled") actions.onStart(); else if (plan._tag === "Review" && plan.start._tag === "Enabled") actions.onStart() }
+  const startNow = () => { if (plan._tag === "None" && composer.start._tag === "Enabled") actions.onStart() }
   const follow = composer.follow
   const agent = composer.agent
   const pick = () => picker.current?.click()
@@ -142,13 +142,9 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
         <div ref={go} className="dr-well__go">
           {markup && drafted > 0 && <DraftButton marks={drafted} open={markup.draftOpen} blocked={markup.groups.some(group => group.decision._tag === "Blocked")} onDraftOpen={actions.onDraftOpen} />}
           {plan._tag === "None" && <NewTakeMenu composer={composer} actions={actions} send={markup && drafted > 0 ? { send: markup.send, revision: markup.revision, first: !withPrompt } : null} />}
-          {plan._tag === "Review" && <>
-            <Button hook={CAL.planBack} onClick={actions.onPlanBack}>Back</Button>
-            <Button hook={CAL.planStart} tone="primary" availability={plan.start} onClick={actions.onStart}>{plan.startLabel}</Button>
-          </>}
           {plan._tag === "Planning" && <>
             <span className="dr-bar__planning" role="status"><i className="dr-dot dr-dot--running" aria-hidden="true" />{plan.message}</span>
-            <Button hook={CAL.planBack} onClick={actions.onPlanBack}>Cancel</Button>
+            <Button hook={CAL.planCancel} onClick={actions.onPlanCancel}>Cancel</Button>
           </>}
         </div>
         {dropping && <p className="dr-well__drop" aria-hidden="true"><Icon name="image" />Drop to attach</p>}

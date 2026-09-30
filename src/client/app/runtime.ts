@@ -134,22 +134,27 @@ export function createChromeApp(input: RuntimeInput) {
   }
   async function refreshTakes() { receiveTakes(await input.request<unknown>("takes.json")) }
   const takeResponse = Type.Object({ take: Type.String({ pattern: "^[1-9][0-9]*$" }) })
-  async function launch(ask: Ask, directions: readonly (import("../../types").Direction | undefined)[], submitted: Submission) {
-    if (state.connection._tag !== "Ready" || state.takes?.agent._tag !== "Ready" || state.operation._tag !== "Idle" || !askAvailable(state, ask)) return
-    const epoch = generation, review = state.plan._tag === "Review" ? state.plan : null
+  /**
+   * Start one take per direction, at once. A plan has no review step: its
+   * directions start as soon as the planner answers (decision 16, changed
+   * 2026-09-30). `notes` are info notices to show with the result.
+   */
+  async function launch(ask: Ask, directions: readonly (import("../../types").Direction | undefined)[], submitted: Submission, notes: readonly string[] = []) {
+    if (state.connection._tag !== "Ready" || state.takes?.agent._tag !== "Ready" || state.operation._tag !== "Idle" || !askAvailable(state, ask)) {
+      if (state.plan._tag === "Planning") set({ ...state, plan: { _tag: "None" }, notices: [{ kind: "error", text: "The takes could not start: Vite, the agent or the state changed while planning. Press New take again." }] })
+      return
+    }
+    const epoch = generation
     const titles = directions.flatMap(direction => direction ? [direction.title.trim()] : [])
     await takeRequest("Starting takes", async () => {
       const results = await Promise.allSettled(directions.map(async direction => parseWire(takeResponse, await input.request<unknown>("takes", direction ? { ...ask, direction, others: titles.filter(title => title !== direction.title.trim()) } : ask))))
       const ids = results.flatMap(result => result.status === "fulfilled" ? [result.value.take] : [])
       const failures = results.flatMap(result => result.status === "rejected" ? [String(result.reason)] : [])
-      const successful = results.flatMap((result, index) => result.status === "fulfilled" && directions[index] ? [directions[index]] : [])
-      const remaining = review?.directions.filter(row => !successful.includes(row.direction)) ?? []
-      const retry: Plan = review && remaining.length ? { ...review, directions: remaining } : { _tag: "None" }
       // Planner choice 14: marks on the original that went with the prompt leave the draft once a take started.
       if (ids.length && ask.marks?.length) await markup.release(ask.marks).catch(error => failures.push(`Started takes ${ids.join(", ")}, but the marks that went with the prompt are still in the draft: ${error instanceof Error ? error.message : String(error)} Remove them before Send.`))
       if (generation === epoch) {
-        if (ids.length && retry._tag === "None") consumeSubmission(submitted)
-        set({ ...state, plan: retry, notices: [...(ids.length && failures.length ? [{ kind: "info" as const, text: `Started takes ${ids.join(", ")}. Only unsuccessful directions remain.` }] : []), ...failures.map(text => ({ kind: "error" as const, text }))] })
+        if (ids.length) consumeSubmission(submitted)
+        set({ ...state, plan: { _tag: "None" }, notices: [...notes.map(text => ({ kind: "info" as const, text })), ...failures.map(text => ({ kind: "error" as const, text }))] })
       }
       try { await refreshTakes() }
       catch (error) {
@@ -158,16 +163,11 @@ export function createChromeApp(input: RuntimeInput) {
       }
       if (generation !== epoch || !ids.length) return
       const first = state.takes?.takes.find(take => take.take === ids[0])
-      if (first) selected({ ...state, part: ask.part, take: first.take, takeCreated: first.created, shown: { _tag: "Takes", export: ask.state }, context: ask.context ?? null, tools: { ...state.tools, side: "record", active: "takes" } }, retry)
+      if (first) selected({ ...state, part: ask.part, take: first.take, takeCreated: first.created, shown: { _tag: "Takes", export: ask.state }, context: ask.context ?? null, tools: { ...state.tools, side: "record", active: "takes" } })
     })
   }
   async function start() {
     if (state.plan._tag === "Planning" || state.operation._tag !== "Idle") return
-    if (state.plan._tag === "Review") {
-      const plan = snapshot.plan
-      if (plan._tag !== "Review" || !enabled(plan.start)) return
-      return launch(state.plan.ask, state.plan.directions.filter(row => row.direction.title.trim() && row.direction.brief.trim()).map(row => row.direction), state.plan.submitted)
-    }
     if (!enabled(snapshot.composer.start)) return
     const subject = subjectRef(state)
     if (!subject) return
@@ -181,7 +181,9 @@ export function createChromeApp(input: RuntimeInput) {
     try {
       const plan = parseWire(PlanSchema, await input.request<unknown>("takes/plan", { ...ask, count }))
       if (!isPlanning(id)) return
-      set({ ...state, plan: { _tag: "Review", ask, submitted, directions: plan.directions.map((direction, index) => ({ id: `${id}:${index}`, direction })), note: plan.note ?? "" } })
+      const directions = plan.directions.filter(direction => direction.title.trim() && direction.brief.trim())
+      if (!directions.length) { set({ ...state, plan: { _tag: "None" }, notices: [{ kind: "error", text: plan.note || "The planner found no way to answer this prompt." }] }); return }
+      await launch(ask, directions, submitted, directions.length < count && plan.note ? [plan.note] : [])
     } catch (error) {
       if (isPlanning(id)) { set({ ...state, plan: { _tag: "None" } }); notify(error) }
     }
@@ -278,9 +280,7 @@ export function createChromeApp(input: RuntimeInput) {
     onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onAttach: files => immediate(() => attach(files)),
     onRemoveAttachment: id => { if (state.plan._tag !== "None") return; const image = state.attachments.find(image => image.id === id); if (image) input.revokeImage?.(image.url); set({ ...state, attachments: state.attachments.filter(image => image.id !== id), notices: [] }) },
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),
-    onPlanBack: () => { generation++; set({ ...state, plan: { _tag: "None" } }) },
-    onDirection: (id, field, text) => { if (state.plan._tag === "Review" && state.operation._tag === "Idle") set({ ...state, plan: { ...state.plan, directions: state.plan.directions.map(row => row.id === id ? { ...row, direction: { ...row.direction, [field]: text } } : row) } }) },
-    onRemoveDirection: id => { if (state.plan._tag !== "Review" || state.operation._tag !== "Idle") return; const directions = state.plan.directions.filter(row => row.id !== id); set({ ...state, plan: directions.length ? { ...state.plan, directions } : { _tag: "None" } }) },
+    onPlanCancel: () => { if (state.plan._tag !== "Planning") return; generation++; set({ ...state, plan: { _tag: "None" } }) },
     onAccept: id => immediate(() => actOnTake(id, "accept")), onDiscard: id => immediate(() => actOnTake(id, "discard")), onStop: id => immediate(() => actOnTake(id, "stop")), onPrepareAlternate: id => immediate(() => actOnTake(id, "alternate")),
     onRecordClose: () => set({ ...state, tools: { ...state.tools, side: "closed" } }), onReview: integration.review, onIntegrationCheck: integration.check, onBehaviorReviewed: integration.behaviorReviewed,
     onApplyAlternate: (id, revision) => immediate(async () => {

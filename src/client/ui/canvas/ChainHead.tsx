@@ -47,7 +47,6 @@ export function ChainHead({ chain, id, parentTake, solo, onHistory, onSolo }: Ch
         {said.gap && <>{" "}<span className="dr-chain__gap">{said.gap}</span></>}
       </> : chain.label}
     </h2>
-    {said && !said.from && !said.gap && history._tag === "None" && <span className="dr-chain__alone">no follow-up</span>}
     <span className="dr-chain__spacer" aria-hidden="true" />
     <Flag flag={chain.flag} variant="Fold" hook={CAL.chainFlag} />
     {(swap || history._tag !== "None") && <span className="dr-chain__aside">

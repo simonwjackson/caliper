@@ -56,10 +56,11 @@ export function typeProbes(view: ChromeView, actions: ChromeActions): void {
       }
     }
   }
-  actions.onDirection("stable-id", "brief", "Use a quieter button")
   actions.onKnobCommit("gap", "12px")
   actions.onApplyAlternate("6", "reviewed-revision")
-  if (view.plan._tag === "Review") actions.onRemoveDirection(view.plan.directions[0]?.id ?? "missing")
+  if (view.plan._tag === "Planning") actions.onPlanCancel()
+  // @ts-expect-error A plan has no review step; its directions cannot be edited.
+  actions.onDirection("stable-id", "brief", "Use a quieter button")
   // @ts-expect-error Five takes violates the supported count.
   actions.onCount(5)
   // @ts-expect-error Renderers cannot mutate the app-owned snapshot.

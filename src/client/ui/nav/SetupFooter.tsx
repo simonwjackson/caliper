@@ -12,7 +12,7 @@ export function SetupFooter({ rows, problems }: { readonly rows: readonly SetupR
   const bad = failed.length > 0 || problems.length > 0
   const summary = bad
     ? `Setup: ${[...failed.map(row => sentence(row.label)), ...(problems.length ? [`${problems.length} ${problems.length === 1 ? "problem" : "problems"}`] : [])].join(", ")} to fix`
-    : `Setup: ${rows.map(row => sentence(row.label)).join(", ").replace(/, ([^,]*)$/, " and $1")} found`
+    : "Setup"
   return <details className="dr-setup" data-cal={CAL.setup} open={bad || undefined}>
     <summary className="dr-setup__summary"><i className={`dr-dot ${bad ? "dr-dot--bad" : "dr-dot--good"}`} aria-hidden="true" /><span>{summary}</span><i className="dr-chev" aria-hidden="true" /></summary>
     <div className="dr-setup__rows">

@@ -193,13 +193,10 @@ try {
   assert(await liveChainFrame?.evaluate(node => node.isConnected), "Swapping the fallback keeps the frames")
   assert.equal(await page.locator(`${selector("chain")}[data-chain="3@300"] ${selector("chainSolo")}`).count(), 0, "A chain with no parent has nothing to swap")
 
-  await page.goto(`${origin}/?scenario=plan`)
-  await page.locator(`${selector("directionTitle")}[data-direction="b"]`).fill("Keep the strange")
-  await page.locator(`${selector("directionRemove")}[data-direction="a"]`).click()
-  assert.equal(await page.locator(`${selector("directionTitle")}[data-direction="b"]`).inputValue(), "Keep the strange")
-  await page.locator(selector("planStart")).click()
-  assert.equal(await page.locator(selector("start")).count(), 0)
-  assert(await page.evaluate(() => window.chromeContract.calls.some(call => call.name === "onStart")))
+  await page.goto(`${origin}/?scenario=planning`)
+  assert.equal(await page.locator(selector("start")).count(), 0, "No second start while takes are planned")
+  await page.locator(selector("planCancel")).click()
+  assert(await page.evaluate(() => window.chromeContract.calls.some(call => call.name === "onPlanCancel")))
 
   await page.goto(`${origin}/?scenario=alternate`)
   assert(await page.locator(selector("applyAlternate")).isDisabled())

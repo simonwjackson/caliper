@@ -187,15 +187,14 @@ export type CanvasView =
        */
       readonly chains: readonly ChainView[]
     }
+/**
+ * Several takes from one prompt (decision 16). The planner runs, then every
+ * direction starts as a take at once. There is no review step: a direction you
+ * do not want is a take you discard. `message` is the one status line.
+ */
 export type PlanView =
   | { readonly _tag: "None" }
-  | { readonly _tag: "Planning"; readonly prompt: string; readonly count: number; readonly message: string }
-  | {
-      readonly _tag: "Review"; readonly prompt: string; readonly note: string
-      /** Stable ids survive editing/removal. Titles are not identities. */
-      readonly directions: readonly { readonly id: string; readonly direction: Direction }[]
-      readonly start: Availability; readonly startLabel: string
-    }
+  | { readonly _tag: "Planning"; readonly count: number; readonly message: string }
 export type AttachmentView = { readonly id: string; readonly name: string; readonly url: string; readonly remove: Availability }
 export type ComposerView = {
   readonly prompt: string; readonly placeholder: string; readonly edit: Availability; readonly attach: Availability
@@ -384,9 +383,8 @@ export type ChromeActions = {
   readonly onDraftOpen: (open: boolean) => void
   /** A stale revision, lost/unresolved mark or running parent blocks the entire pass. No partial Send. */
   readonly onSend: (revision: number) => void
-  readonly onPlanBack: () => void
-  readonly onDirection: (id: string, field: "title" | "brief", text: string) => void
-  readonly onRemoveDirection: (id: string) => void
+  /** Stops a plan that is still planning. Takes that already started stay. */
+  readonly onPlanCancel: () => void
   /** Fold or unfold a chain's history. Selecting a step uses `onTake`. */
   readonly onChainHistory: (chain: string, open: boolean) => void
   /** Which frame a chain shows when its pair does not fit. Core ignores "Parent" for a chain with no parent. */

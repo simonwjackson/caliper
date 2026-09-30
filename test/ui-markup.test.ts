@@ -64,7 +64,7 @@ describe("the gallery's local markup follows the shared Send policy", () => {
     const original = ready(scenario.getView()).groups.find(group => group.source.take === "0" && group.source.created === 0)
     expect(original?.label).toBe("Original · the real files")
     expect(original?.marks.map(mark => mark.name)).toEqual(["0A"])
-    expect(original?.outcome).toEqual({ _tag: "NewTake", label: "Send makes a new take from the real files." })
+    expect(original?.outcome).toEqual({ _tag: "NewTake", label: "Send makes a new take." })
     const canvas = scenario.getView().canvas
     expect(canvas._tag === "Frames" && canvas.frames.find(frame => frame.key === "real")?.marks.map(mark => mark.letter)).toEqual(["A"])
     scenario.actions.onMarkMode(false)

@@ -256,17 +256,21 @@ or unnamed take keeps its numeric label and shows a naming hint.
 
 When you ask for two or more takes, a planner first turns the prompt into one
 different direction per take, for example "realistic data", "edge cases" and
-"change the cart component". You can edit or remove directions before the
-takes start. Each take's agent follows one direction and knows the titles of
-the others. The planner returns fewer directions when the prompt has only one
-sensible answer, and says why. It costs one model call of about 10 s.
+"change the cart component". Every direction starts as a take as soon as the
+planner answers; there is no step to review them. While the planner works,
+blank slots hold the takes' places and the bar says "Planning 3 takes…" with
+Cancel. Each take's agent follows one direction and knows the titles of the
+others. The take's record keeps the direction as a folded **Brief**. To drop a
+direction you do not want, discard its take. The planner returns fewer
+directions when the prompt has only one sensible answer, and the bar says why.
+It costs one model call of about 10 s.
 
 When you ask for three or more takes, one direction is the **strange
 direction**. It is still a real answer to the prompt, but it breaks the part's
 current pattern on purpose, so the most probable answer is not the only one
-you see. It uses one of the takes, not an extra one. The Review step gives it a
-dashed border, and its take card says "strange". Remove it there if you do not
-want it. For a precise fix, the planner can leave it out and says why.
+you see. It uses one of the takes, not an extra one. Its record's Brief says
+"strange". Discard its take if you do not want it. For a precise fix, the
+planner can leave it out and says why.
 
 A take belongs to the selected **editing state**. Its optional **context** is
 the complete scenario used to preview it. The state list nests takes under their

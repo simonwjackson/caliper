@@ -123,7 +123,7 @@ export function withMarkup(view: ChromeView, marks: readonly LocalMark[], state:
   const outcomeOf = (group: SendPlan["groups"][number]): MarkupOutcome => {
     const withPrompt = going.filter(mark => group.marks.includes(mark.id)).map(nameOf)
     if (withPrompt.length) return { _tag: "WithPrompt", label: `${listed(withPrompt)} ${withPrompt.length === 1 ? "goes" : "go"} with your prompt when you press New take. Send would make a take from the real files instead.` }
-    if (group.outcome._tag === "NewTake") return { _tag: "NewTake", label: isOriginal(group.source) ? "Send makes a new take from the real files." : `Send makes a new take from take ${group.source.take}.` }
+    if (group.outcome._tag === "NewTake") return { _tag: "NewTake", label: "Send makes a new take." }
     const here = marks.filter(mark => group.marks.includes(mark.id)).map(nameOf)
     const pointers = marks.filter(mark => referencesOf(mark).some(name => here.includes(name))).map(nameOf)
     return { _tag: "PointedTo", label: `Pointed to by ${listed(pointers)}; makes no take.` }

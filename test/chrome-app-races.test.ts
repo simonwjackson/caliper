@@ -76,10 +76,11 @@ async function until(check: () => boolean) {
   throw new Error("The deferred app effect did not reach the expected boundary")
 }
 const directions: Direction[] = [{ title: "A", brief: "Keep the compact layout" }, { title: "B", brief: "Try a clearer status label" }]
-async function reviewPlan(app: App) {
+/** Start a plan of two takes and wait until the planner request is in flight. */
+async function startPlan(app: App) {
   app.actions.onPrompt("Explore the busy state")
   app.actions.onCount(2); app.actions.onStart()
-  await until(() => app.getSnapshot().plan._tag === "Review")
+  await until(() => app.getSnapshot().plan._tag === "Planning")
 }
 function frame(app: App, takeId: string | null = null): FrameView {
   const canvas = app.getSnapshot().canvas
@@ -157,37 +158,58 @@ test("an invalid creation timestamp is rejected before replacing the last valid 
 })
 
 describe("captured plan availability", () => {
+  // A plan launches its takes as soon as the planner answers (decision 16, changed 2026-09-30).
+  // Anything that makes the captured ask unavailable while the planner works stops the launch.
   test("a recovered Default selection cannot authorize the plan's removed Busy subject", async () => {
-    const h = harness({ "takes/plan": () => ({ directions }) })
-    await reviewPlan(h.app)
+    const planned = deferred<{ directions: Direction[] }>()
+    const h = harness({ "takes/plan": () => planned.promise })
+    await startPlan(h.app)
     h.project({ ...project(), parts: project().parts.filter(item => item.file !== page).map(item => ({ ...item, states: item.states.filter(state => state.export !== "Busy") })) })
     expect(h.app.getSnapshot().selection).toMatchObject({ _tag: "State", subject: { part, state: "default" } })
-    const plan = h.app.getSnapshot().plan
-    expect(plan._tag === "None" || plan._tag === "Review" && plan.start._tag === "Disabled").toBe(true)
-    h.app.actions.onStart(); await settle()
+    planned.resolve({ directions }); await settle()
     expect(h.posts().filter(call => call.path === "takes")).toHaveLength(0)
+    expect(h.app.getSnapshot().plan._tag).toBe("None")
     expect(h.app.getSnapshot().composer.prompt).toBe("Explore the busy state")
+    expect(h.app.getSnapshot().composer.notices.some(notice => notice.kind === "error")).toBe(true)
   })
   test("removing a captured composition blocks launch even after Preview recovers to isolation", async () => {
-    const h = harness({ "takes/plan": () => ({ directions }) })
+    const planned = deferred<{ directions: Direction[] }>()
+    const h = harness({ "takes/plan": () => planned.promise })
     h.app.actions.onContext(JSON.stringify([page, "default"]))
-    await reviewPlan(h.app)
+    await startPlan(h.app)
     expect(h.posts()[0]?.body).toMatchObject({ context: { part: page, state: "default" } })
     h.project({ ...project(), parts: project().parts.map(item => item.file === page ? { ...item, composition: {} } : item) })
-    const plan = h.app.getSnapshot().plan
-    expect(plan._tag === "None" || plan._tag === "Review" && plan.start._tag === "Disabled").toBe(true)
-    h.app.actions.onStart(); await settle()
+    planned.resolve({ directions }); await settle()
     expect(h.posts().filter(call => call.path === "takes")).toHaveLength(0)
+    expect(h.app.getSnapshot().plan._tag).toBe("None")
   })
-  test("a reviewed plan cannot launch while the connection is Unreachable", async () => {
-    const h = harness({ "takes/plan": () => ({ directions }) })
-    await reviewPlan(h.app); h.app.unreachable()
-    const plan = h.app.getSnapshot().plan
-    expect(plan._tag).toBe("Review")
-    if (plan._tag !== "Review") throw new Error("Expected the reviewed plan")
-    expect(plan.start._tag).toBe("Disabled")
-    h.app.actions.onStart(); await settle()
+  test("a plan cannot launch while the connection is Unreachable", async () => {
+    const planned = deferred<{ directions: Direction[] }>()
+    const h = harness({ "takes/plan": () => planned.promise })
+    await startPlan(h.app); h.app.unreachable()
+    planned.resolve({ directions }); await settle()
     expect(h.posts().filter(call => call.path === "takes")).toHaveLength(0)
+    expect(h.app.getSnapshot().plan._tag).toBe("None")
+    expect(h.app.getSnapshot().composer.prompt).toBe("Explore the busy state")
+  })
+  test("a planned prompt starts every direction at once, with no review step", async () => {
+    const h = harness({ "takes/plan": () => ({ directions }), takes: call => ({ take: (call.body as { direction: Direction }).direction.title === "A" ? "1" : "2" }) })
+    await startPlan(h.app); await settle()
+    const launched = h.posts().filter(call => call.path === "takes").map(call => (call.body as { direction: Direction; others: string[] }))
+    expect(launched.map(body => body.direction.title)).toEqual(["A", "B"])
+    expect(launched.map(body => body.others)).toEqual([["B"], ["A"]])
+    expect(h.app.getSnapshot().plan._tag).toBe("None")
+    expect(h.app.getSnapshot().composer.prompt).toBe("")
+  })
+  test("Cancel while planning starts no take and keeps the prompt", async () => {
+    const planned = deferred<{ directions: Direction[] }>()
+    const h = harness({ "takes/plan": () => planned.promise })
+    await startPlan(h.app)
+    h.app.actions.onPlanCancel()
+    expect(h.app.getSnapshot().plan._tag).toBe("None")
+    planned.resolve({ directions }); await settle()
+    expect(h.posts().filter(call => call.path === "takes")).toHaveLength(0)
+    expect(h.app.getSnapshot().composer.prompt).toBe("Explore the busy state")
   })
 })
 
@@ -258,14 +280,14 @@ describe("outstanding operations and partial launches", () => {
       takes: call => (call.body as { direction: Direction }).direction.title === "A" ? launchA.promise : launchB.promise,
       "takes.json": () => { throw new Error("refresh unavailable") },
     })
-    await reviewPlan(h.app); h.app.actions.onStart()
+    await startPlan(h.app)
     await until(() => h.posts().filter(call => call.path === "takes").length === 2)
     launchA.resolve({ take: "1" }); launchB.reject(new Error("B launch failed")); await settle()
     const completed = h.app.getSnapshot()
     h.app.actions.onStart(); await settle()
     const aRequests = h.posts().filter(call => call.path === "takes" && (call.body as { direction?: Direction }).direction?.title === "A")
     expect(aRequests).toHaveLength(1)
-    if (completed.plan._tag === "Review") expect(completed.plan.directions.map(row => row.direction.title)).not.toContain("A")
+    expect(completed.plan._tag).toBe("None")
     expect(completed.composer.notices.some(notice => notice.text.includes("B launch failed"))).toBe(true)
     expect(completed.composer.notices.some(notice => notice.text.includes("refresh unavailable"))).toBe(true)
   })

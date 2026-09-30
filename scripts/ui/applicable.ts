@@ -82,7 +82,6 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
   }
 
   if (view.plan._tag !== "None") add(CAL.plan)
-  if (view.plan._tag === "Review" && view.plan.directions.length) add(CAL.directionTitle, CAL.directionBrief, CAL.directionRemove)
 
   if (layout.bar) {
     const composer = view.composer
@@ -99,8 +98,7 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
         if (take.run._tag === "Running") add(CAL.stop)
       }
     } else {
-      add(CAL.planBack)
-      if (view.plan._tag === "Review") add(CAL.planStart)
+      add(CAL.planCancel)
     }
     if (composer.attachments.length) add(CAL.attachments, CAL.attachmentRemove)
     if (composer.agent._tag === "Failed" || composer.agent._tag === "Off") add(CAL.agent)

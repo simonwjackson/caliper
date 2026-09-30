@@ -27,8 +27,8 @@ type Room = { readonly width: number; readonly height: number; readonly rem: num
 
 /**
  * The canvas: the real files and each take in one grid, every frame one
- * column and one gap apart (decisions 34 and 35). A plan's directions wait in
- * the slots their takes will fill. Every frame has the same drawn size, true
+ * column and one gap apart (decisions 34 and 35). While takes are planned,
+ * blank slots hold the places their takes will fill. Every frame has the same drawn size, true
  * size when one frame and its words fit the canvas, so a comparison is fair.
  * The canvas scrolls inside itself; the page never scrolls.
  *
@@ -85,7 +85,6 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
           <header className="dr-canvas__title">
             <h1>{canvas.title}</h1>
             {label && <span className="dr-canvas__label">{label}</span>}
-            {plan._tag !== "None" && <q className="dr-canvas__ask">{plan.prompt}</q>}
             {mode._tag === "Marking" && <span className="dr-canvas__marking" role="status">Mark mode. Click or drag on a frame. <kbd>M</kbd> leaves.</span>}
             {mode._tag === "Replacing" && <span className="dr-canvas__marking" role="status">Re-place {replacing?.name ?? "the mark"}: click or drag on {replacingOn}. <kbd>Esc</kbd> cancels.</span>}
           </header>
@@ -97,10 +96,8 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
               return shown ? <Chain key={chain.id} chain={chain} shown={shown} parent={chain.parent ? byKey.get(chain.parent) ?? null : null} pairs={pairs}
                 geometry={geometry} css={css} actions={actions} markup={view.markup} /> : null
             })}
-            {plan._tag === "Review" && plan.directions.map(({ id, direction }, index) => <div key={id} className="dr-band"><PlanSlot _tag="Direction" id={id} index={index} direction={direction} actions={actions} /></div>)}
-            {plan._tag === "Planning" && Array.from({ length: plan.count }, (_, index) => <div key={`planning-${index}`} className="dr-band"><PlanSlot _tag="Planning" index={index} message={plan.message} /></div>)}
+            {plan._tag === "Planning" && Array.from({ length: plan.count }, (_, index) => <div key={`planning-${index}`} className="dr-band"><PlanSlot index={index} /></div>)}
           </div>
-          {plan._tag === "Review" && plan.note && <p className="dr-canvas__note" role="status">{plan.note}</p>}
           <Caption view={view} actions={actions} geometry={geometry} />
           {problems.length > 0 && <div className="dr-canvas__problems">
             {problems.map(({ frame, problem, index }) => <div key={`${frame.key}:${index}`} className={`dr-problem dr-problem--${problem.kind}`} data-cal={CAL.frameProblem}

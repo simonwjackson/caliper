@@ -109,7 +109,7 @@ function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary 
   const known = MOCKUP.takes.find(take => take.take === id)
   return {
     id, name: TAKE_NAMES[id] ?? `Take ${id}`, subjectLabel: "Default", deviceLabel: rg353m.name,
-    createdLabel: "Made in isolation. Shared source edits can affect other states.",
+    createdLabel: "",
     run: { _tag: "Idle" }, files: ["src/pages/PicoGameDetail.css", "src/pages/PicoGameDetail.tsx"], nameIssue: "",
     direction: id === "6" ? { title: "Cover at half, title beside it", brief: "Cover and title share the top half side by side; the actions move to one row under both." } : null,
     unavailableReason: "", accept: enabled, discard: enabled, stop: blocked("The take is not running"), prepareAlternate: enabled, kind: "Experiment",
@@ -272,28 +272,19 @@ export function promptView(): ChromeView {
   }
 }
 
-/** Three directions on the canvas, waiting in the slots their takes will fill. */
-export function planView(): ChromeView {
+/**
+ * Three takes being planned: blank slots where the takes will appear, and one
+ * status line in the bar. The takes start as soon as the planner answers.
+ */
+export function planningView(): ChromeView {
   const view = takesView()
   const prompt = "Give the cover more room and let the title breathe."
   return {
     ...view, focusedTake: null,
     canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [frame(null, { selected: false })], chains: [] },
-    plan: {
-      _tag: "Review", prompt, note: "", start: enabled, startLabel: "Start 3 takes",
-      directions: [
-        { id: "d1", direction: { title: "Cover two thirds wide", brief: "Grow the cover to two thirds of the width and wrap the title under it. Keep the stats and actions as they are." } },
-        { id: "d2", direction: { title: "Cover at half, title beside it", brief: "Cover and title share the top half side by side; the actions move to one row under both." } },
-        { id: "d3", direction: { title: "The cover is the screen", brief: "Full-bleed cover art as the background, title and CONTINUE laid over it, the stats in the corner like a HUD.", strange: true } },
-      ],
-    },
-    composer: { ...view.composer, prompt, count: 3, edit: blocked("Go back to change the prompt"), attach: blocked("Go back to change the prompt"), startLabel: "Plan 3 takes", follow: null },
+    plan: { _tag: "Planning", count: 3, message: "Planning 3 takes…" },
+    composer: { ...view.composer, prompt, count: 3, edit: blocked("Takes are being planned"), attach: blocked("Takes are being planned"), startLabel: "3 new takes", follow: null },
   }
-}
-
-export function planningView(): ChromeView {
-  const view = planView()
-  return { ...view, plan: { _tag: "Planning", prompt: "Give the cover more room and let the title breathe.", count: 3, message: "Planning 3 directions" } }
 }
 
 /** Take 6's record open in the side panel. */
@@ -571,7 +562,7 @@ export function setupProblemsView(): ChromeView {
     navigation: {
       ...view.navigation,
       scenario: { _tag: "Selected", subject: DEFAULT, editingLabel: "Editing Game Detail · Default", choices: view.navigation.scenario._tag === "Selected" ? view.navigation.scenario.choices : [], chosen: "home",
-        note: "Previewing inside Home's shelf. Edits still go to Game Detail.", whole: { ref: home, label: "Home · Default" },
+        note: "", whole: { ref: home, label: "Home · Default" },
         children: [{ ref: DEFAULT, label: "Game Detail · Default", selected: true }, { ref: { part: "src/organisms/PicoShelf.organism.part.tsx", state: "default" }, label: "Shelf · Default", selected: false }] },
       unavailable: [{ subject: { part: "src/pages/PicoOld.page.part.tsx", state: "Gone" }, label: "Old page · Gone (removed)", takes: [{ id: "4", label: "4 · Review or discard", selected: false }] }],
       setup: [
@@ -691,7 +682,7 @@ export function withPromptView(): ChromeView {
 export type FixtureName = keyof typeof FIXTURES
 /** Every fixture by name. The gallery and the gates walk this list. */
 export const FIXTURES = {
-  takes: takesView, empty: emptyView, none: noneView, prompt: promptView, plan: planView, planning: planningView,
+  takes: takesView, empty: emptyView, none: noneView, prompt: promptView, planning: planningView,
   log: logView, running: runningView, failedTake: failedTakeView, agentFailed: agentFailedView, agentOff: agentOffView,
   knobs: knobsView, knobsFinding: knobsFindingView, code: codeView, codeWatching: codeWatchingView, codeLoading: codeLoadingView, codeFailed: codeFailedView,
   grid: gridView, error: errorView, odin: odinView, checks: checksView, checksRunning: checksRunningView, calibrate: calibrateView,

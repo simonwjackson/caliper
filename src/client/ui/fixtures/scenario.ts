@@ -154,7 +154,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       // Marks on the real files go with a typed prompt and not with an empty one (planner choice 14).
       update(next.markup._tag === "Ready" ? withMarkup(next, readMarks(next), markupState(next)) : next)
     }),
-    onCount: record("onCount", count => update({ ...view, composer: { ...view.composer, count, startLabel: count === 1 ? "New take" : `Plan ${count} takes` } })),
+    onCount: record("onCount", count => update({ ...view, composer: { ...view.composer, count, startLabel: count === 1 ? "New take" : `${count} new takes` } })),
     onAttach: record("onAttach", files => update({ ...view, composer: { ...view.composer, attachments: [...view.composer.attachments, ...files.map((file, index) => ({ id: `local-${Date.now()}-${index}`, name: file.name, url: frameSource(), remove: { _tag: "Enabled" } as const }))] } })),
     onRemoveAttachment: record("onRemoveAttachment", id => update({ ...view, composer: { ...view.composer, attachments: view.composer.attachments.filter(image => image.id !== id) } })),
     // New take takes the marks that go with the prompt; they leave the draft (planner choice 14). Starting the take is core's.
@@ -163,15 +163,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       if (going.length) markup(marks => ({ marks: marks.filter(mark => !going.includes(nameOf(mark))) }))
     }),
     onFollow: record("onFollow"),
-    onPlanBack: record("onPlanBack", () => update({ ...view, plan: { _tag: "None" }, composer: { ...view.composer, edit: { _tag: "Enabled" }, attach: { _tag: "Enabled" } } })),
-    onDirection: record("onDirection", (id, field, text) => {
-      if (view.plan._tag === "Review") update({ ...view, plan: { ...view.plan, directions: view.plan.directions.map(item => item.id === id ? { ...item, direction: { ...item.direction, [field]: text } } : item) } })
-    }),
-    onRemoveDirection: record("onRemoveDirection", id => {
-      if (view.plan._tag !== "Review") return
-      const directions = view.plan.directions.filter(item => item.id !== id)
-      update({ ...view, plan: { ...view.plan, directions, startLabel: directions.length === 1 ? "Start 1 take" : `Start ${directions.length} takes` } })
-    }),
+    onPlanCancel: record("onPlanCancel", () => update({ ...view, plan: { _tag: "None" }, composer: { ...view.composer, edit: { _tag: "Enabled" }, attach: { _tag: "Enabled" } } })),
     onAccept: record("onAccept"), onDiscard: record("onDiscard"), onStop: record("onStop"), onPrepareAlternate: record("onPrepareAlternate"),
     onRecordClose: record("onRecordClose", () => update({ ...view, record: { _tag: "Closed" }, tools: { ...view.tools, side: "closed" } })),
     onReview: record("onReview"), onIntegrationCheck: record("onIntegrationCheck"),
