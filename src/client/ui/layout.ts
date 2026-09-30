@@ -116,21 +116,29 @@ export function frontSheet(plan: LayoutPlan, active: string, side: "knobs" | "re
   return null
 }
 
+export type ComposerFit = "Inline" | "TakeAbove" | "Stacked"
 /**
- * How many rows the composer bar needs. Row one holds the field and every
- * group while the field keeps `field` width beside them. Then the field takes
- * its own row and the groups share the next. Then each group takes a row.
- * No group moves into a menu: the bar's controls are the take's primary actions.
+ * How the composer fits its own width. `take` is the focused take's actions,
+ * `field` the narrowest useful prompt, `go` the group with the primary button.
+ *
+ * - Inline: the take's actions, then one well holding the prompt and the go group.
+ * - TakeAbove: the take's actions move to their own row above the well; the
+ *   well keeps one row.
+ * - Stacked: as TakeAbove, and inside the well the prompt takes the full width,
+ *   with the attach button and the go group on a row under it.
+ *
+ * Nothing moves into a menu: these are the take's and the prompt's primary actions.
  *
  * @param width the bar's content width, in any unit the inputs share
- * @param input `field`: the narrowest useful prompt field; `groups`: each group's natural width
  */
-export function fitBar(width: number, input: { readonly field: number; readonly gap: number; readonly groups: readonly number[] }): 1 | 2 | 3 {
-  const groups = input.groups.filter(size => size > 0)
-  const row = (sizes: readonly number[]) => sizes.reduce((sum, size) => sum + size, 0) + input.gap * Math.max(0, sizes.length - 1)
-  if (row([input.field, ...groups]) <= width) return 1
-  if (row(groups) <= width) return 2
-  return 3
+export function fitComposer(width: number, input: { readonly field: number; readonly gap: number; readonly take: number; readonly go: number }): ComposerFit {
+  const row = (sizes: readonly number[]) => {
+    const present = sizes.filter(size => size > 0)
+    return present.reduce((sum, size) => sum + size, 0) + input.gap * Math.max(0, present.length - 1)
+  }
+  if (row([input.take, input.field, input.go]) <= width) return "Inline"
+  if (row([input.field, input.go]) <= width) return "TakeAbove"
+  return "Stacked"
 }
 
 export type ToolFit = { readonly inline: readonly string[]; readonly overflow: readonly string[] }

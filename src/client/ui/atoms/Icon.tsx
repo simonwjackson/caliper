@@ -3,7 +3,7 @@ import "./atoms.css"
 
 export type IconName =
   | "mark" | "parts" | "preview" | "takes" | "code" | "knobs" | "checks" | "calibrate" | "more"
-  | "clip" | "close" | "chevron" | "chevron-down" | "stop" | "up" | "down"
+  | "clip" | "image" | "plus" | "close" | "chevron" | "chevron-down" | "stop" | "up" | "down"
 
 const PATHS: Record<Exclude<IconName, "chevron" | "chevron-down">, string> = {
   mark: "M4 7h18M4 7v13M9 7v4M14 7v6M19 7v4",
@@ -16,6 +16,8 @@ const PATHS: Record<Exclude<IconName, "chevron" | "chevron-down">, string> = {
   calibrate: "M3.5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 2 12V6a1.5 1.5 0 0 1 1.5-1.5zM2 7.5h14",
   more: "M4 9h.01M9 9h.01M14 9h.01",
   clip: "M12.5 7 7.8 11.7a1.7 1.7 0 0 1-2.4-2.4L10.6 4a3 3 0 0 1 4.2 4.2l-5.6 5.6a4.2 4.2 0 0 1-6-6L8 3",
+  image: "M3.5 3.5h11a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM2.5 11.5l3.5-3.5 3 3 2-2 4 4M11.5 6.5h.01",
+  plus: "M9 4v10M4 9h10",
   close: "M5 5l8 8M13 5l-8 8",
   stop: "M5.5 5.5h7v7h-7z",
   up: "M9 14V4M5 8l4-4 4 4",

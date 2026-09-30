@@ -1,45 +1,57 @@
-/* The bar under the canvas: the focused take, the prompt, one primary button.
-   Every control on a row is one height (--dr-control-h), so rows line up whether
-   they sit side by side or stack. The padding is the same on all four sides. */
-.dr-bar { --dr-bar-pad: .6rem; background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: var(--dr-bar-pad); min-width: 0; position: relative; z-index: 3; }
+/* The bar under the canvas: the focused take's actions, and one well for the next prompt.
+   Every control is one height (--dr-control-h), so everything on a row lines up.
+   The bar's padding is the same on all four sides. */
+.dr-bar { --dr-bar-pad: .6rem; --dr-well-pad: 4px; background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: var(--dr-bar-pad); min-width: 0; position: relative; z-index: 3; }
 .dr-root[data-tools="dock"] .dr-bar { --dr-bar-pad: .5rem; }
-/* Rows sit on the prompt's last line: a field that grows with images or text keeps the buttons beside its text. */
-.dr-bar__row { display: grid; gap: var(--dr-bar-pad); align-items: end; min-width: 0; }
 .dr-bar :is(.dr-btn, .dr-split__main, .dr-split__more.dr-btn) { height: var(--dr-control-h); padding-block: 0; }
+
+/* The take beside the well, or above it. */
+.dr-bar__layout { display: grid; gap: var(--dr-bar-pad); min-width: 0; }
+.dr-bar[data-fit="Inline"] .dr-bar__layout:has(> .dr-bar__take) { grid-template-columns: auto minmax(0, 1fr); align-items: end; }
+.dr-bar__take { width: max-content; max-width: 100%; }
+/* Beside the well, the take's actions centre on the well's last row: its padding and border sit around them. */
+.dr-bar[data-fit="Inline"] .dr-bar__take { padding: calc(var(--dr-well-pad) + 1px) var(--dr-bar-pad) calc(var(--dr-well-pad) + 1px) 0; border-right: 1px solid var(--dr-edge); }
 .dr-bar .dr-take-actions__name { height: var(--dr-control-h); }
-.dr-bar[data-rows="1"] .dr-bar__row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lead field go"; }
-.dr-bar[data-rows="1"] .dr-bar__row:not(:has(> .dr-bar__lead)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "field go"; }
-.dr-bar[data-rows="2"] .dr-bar__row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "field field" "lead go"; }
-.dr-bar[data-rows="2"] .dr-bar__row:not(:has(> .dr-bar__lead)) { grid-template-areas: "field field" "go go"; }
-.dr-bar[data-rows="3"] .dr-bar__row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "field" "lead" "go"; }
-.dr-bar__lead { grid-area: lead; width: max-content; max-width: 100%; }
-.dr-bar[data-rows="1"] .dr-bar__lead { padding-right: var(--dr-bar-pad); border-right: 1px solid var(--dr-edge); }
-.dr-bar__field { grid-area: field; min-width: 0; }
-.dr-bar__go { grid-area: go; display: flex; gap: .4rem; align-items: center; width: max-content; max-width: 100%; justify-self: end; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
-/* The field is one well: images on top, then the clip and the text, all inside one edge. */
-.dr-bar__input { display: flex; flex-wrap: wrap; align-items: flex-end; border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: 6px; min-width: 0; }
-.dr-bar__input:focus-within { outline: 2px solid var(--dr-accent); outline-offset: -1px; }
-.dr-bar__input textarea { flex: 1; min-width: 0; border: 0; background: none; outline: 0; resize: none; max-height: 6rem; color: var(--dr-ink); line-height: 1.4; field-sizing: content;
+
+/* The well: images, text, the attach button and the primary button inside one edge. */
+.dr-well { position: relative; display: grid; min-width: 0; padding: var(--dr-well-pad); border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: calc(var(--dr-radius) + 2px);
+  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "images images images" "clip text go"; align-items: end; column-gap: var(--dr-well-pad); }
+.dr-bar[data-fit="Stacked"] .dr-well { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "images images" "text text" "clip go"; row-gap: 2px; }
+.dr-well:focus-within { border-color: var(--dr-ink-3); }
+.dr-well[data-disabled] .dr-well__text { color: var(--dr-ink-3); }
+.dr-well__text { grid-area: text; min-width: 0; border: 0; background: none; outline: 0; resize: none; max-height: 8rem; color: var(--dr-ink); line-height: 1.4; field-sizing: content;
   /* One line of text centres in one control height. */
-  min-height: calc(var(--dr-control-h) - 2px); padding: calc((var(--dr-control-h) - 2px - 1.4em) / 2) .6rem calc((var(--dr-control-h) - 2px - 1.4em) / 2) 0; }
-.dr-bar__input:not(:has(.dr-bar__clip)) textarea { padding-left: .6rem; }
-.dr-bar__input textarea:focus-visible { outline: none; }
-.dr-bar__input textarea::placeholder { color: var(--dr-ink-3); }
-.dr-bar__input[data-disabled] textarea { color: var(--dr-ink-3); }
-.dr-bar__clip { border: 0; background: none; color: var(--dr-ink-3); width: calc(var(--dr-control-h) - 2px); height: calc(var(--dr-control-h) - 2px); display: grid; place-items: center; flex: none; border-radius: 5px; }
-.dr-bar__clip:hover:not(:disabled) { color: var(--dr-ink); }
-.dr-bar__clip .dr-icon { width: 16px; height: 16px; }
-/* Attached images: square crops in a row at the top of the well, each with its own remove. */
-.dr-bar__attachments { flex-basis: 100%; list-style: none; margin: 0; padding: .45rem .45rem 0; display: flex; flex-wrap: wrap; gap: .4rem; }
-.dr-bar__attachments li { position: relative; width: 3.5rem; height: 3.5rem; border-radius: 5px; overflow: hidden; background: var(--dr-card-2); box-shadow: inset 0 0 0 1px var(--dr-edge-2); }
-.dr-bar__attachments img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.dr-bar__unattach { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
-  background: rgb(0 0 0 / .7); color: #fff; opacity: .85; box-shadow: 0 0 0 1px rgb(255 255 255 / .4); }
-.dr-bar__attachments li:hover .dr-bar__unattach, .dr-bar__unattach:focus-visible { opacity: 1; }
-.dr-bar__unattach:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
-.dr-bar__unattach .dr-icon { width: 10px; height: 10px; stroke-width: 2.2; }
-/* A touch target around the drawn circle. */
-.dr-bar__unattach::after { content: ""; position: absolute; inset: -8px; }
+  min-height: var(--dr-control-h); padding: calc((var(--dr-control-h) - 1.4em) / 2) .45rem; }
+.dr-bar[data-fit="Stacked"] .dr-well__text { padding-inline: .5rem; }
+.dr-well__text:focus-visible { outline: none; }
+.dr-well__text::placeholder { color: var(--dr-ink-3); }
+.dr-well__clip { grid-area: clip; border: 0; background: none; color: var(--dr-ink-3); width: var(--dr-control-h); height: var(--dr-control-h); display: grid; place-items: center; border-radius: 6px; }
+.dr-well__clip:hover:not(:disabled) { color: var(--dr-ink); background: var(--dr-card-2); }
+.dr-well__clip .dr-icon { width: 17px; height: 17px; }
+.dr-well:not(:has(.dr-well__clip)) { grid-template-columns: 0 minmax(0, 1fr) auto; }
+.dr-well__go { grid-area: go; display: flex; gap: .4rem; align-items: center; justify-self: end; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+
+/* Attached images: a row of framed tiles at the top of the well, then a tile to add one more. */
+.dr-well__images { grid-area: images; list-style: none; margin: 0; padding: .3rem .3rem .45rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+.dr-well__image { position: relative; width: 4.25rem; height: 4.25rem; border-radius: 6px; overflow: hidden; background: var(--dr-card-2); }
+.dr-well__image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.dr-well__image::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); pointer-events: none; }
+.dr-well__unattach { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
+  background: rgb(10 11 13 / .78); color: #fff; box-shadow: 0 0 0 1px rgb(255 255 255 / .35); }
+.dr-well__unattach:hover { background: #000; }
+.dr-well__unattach:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.dr-well__unattach .dr-icon { width: 10px; height: 10px; stroke-width: 2.2; }
+.dr-well__unattach::after { content: ""; position: absolute; inset: -8px; }
+.dr-well__more { width: 4.25rem; height: 4.25rem; border: 1px dashed var(--dr-edge-2); border-radius: 6px; background: none; color: var(--dr-ink-3); display: grid; place-items: center; }
+.dr-well__more:hover { color: var(--dr-ink); border-color: var(--dr-ink-3); background: var(--dr-card); }
+.dr-well__more .dr-icon { width: 18px; height: 18px; }
+
+/* Dragging files over the bar: the well says what a drop does. */
+.dr-well[data-dropping] { border-style: dashed; border-color: var(--dr-ink-2); }
+.dr-well__drop { position: absolute; inset: 0; margin: 0; display: flex; gap: .5rem; align-items: center; justify-content: center; border-radius: inherit;
+  background: color-mix(in srgb, var(--dr-room) 90%, transparent); color: var(--dr-ink); font-size: var(--dr-fs-2); pointer-events: none; }
+.dr-well__drop .dr-icon { width: 18px; height: 18px; }
+
 .dr-bar__agent { margin-bottom: var(--dr-bar-pad); font-size: var(--dr-fs-1); color: var(--dr-ink-3); }
 .dr-bar__agent--failed { color: var(--dr-bad); border-left: 3px solid var(--dr-bad); padding: .15rem 0 .15rem .55rem; }
 .dr-bar__agent--failed b { font-weight: 600; }

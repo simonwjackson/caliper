@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   BAR_H, BAR_W, CANVAS_W, CODE_H, CODE_SHARE, DOCK_W, GUTTER, PARTS_W, RAIL_W, SIDE_W, STAGE_H, STAGE_SHARE,
-  codeHeight, fitBar, fitTools, frontSheet, planLayout,
+  codeHeight, fitComposer, fitTools, frontSheet, planLayout,
 } from "../src/client/ui/layout"
 
 /** The Darkroom chrome keeps the browser's 16 px rem. */
@@ -113,19 +113,20 @@ describe("frontSheet: a pressed tool names the sheet in front", () => {
   })
 })
 
-describe("fitBar", () => {
-  const input = { field: 256, gap: 10, groups: [290, 120] }
-  const oneRow = 256 + 290 + 120 + 20
-  test("one row while the field keeps its width beside every group", () => {
-    expect(fitBar(oneRow, input)).toBe(1)
-    expect(fitBar(oneRow - 1, input)).toBe(2)
+describe("fitComposer", () => {
+  const input = { field: 256, gap: 10, take: 290, go: 120 }
+  const inline = 290 + 256 + 120 + 20
+  test("one row while the prompt keeps its width beside the take and the go group", () => {
+    expect(fitComposer(inline, input)).toBe("Inline")
+    expect(fitComposer(inline - 1, input)).toBe("TakeAbove")
   })
-  test("the field takes its own row before the groups split", () => {
-    expect(fitBar(290 + 120 + 10, input)).toBe(2)
-    expect(fitBar(290 + 120 + 10 - 1, input)).toBe(3)
+  test("the take moves above before the well stacks", () => {
+    expect(fitComposer(256 + 120 + 10, input)).toBe("TakeAbove")
+    expect(fitComposer(256 + 120 + 10 - 1, input)).toBe("Stacked")
   })
-  test("an empty group takes no room and no gap", () => {
-    expect(fitBar(256 + 120 + 10, { ...input, groups: [0, 120] })).toBe(1)
+  test("no focused take takes no room and no gap", () => {
+    expect(fitComposer(256 + 120 + 10, { ...input, take: 0 })).toBe("Inline")
+    expect(fitComposer(256 + 120 + 9, { ...input, take: 0 })).toBe("Stacked")
   })
 })
 
