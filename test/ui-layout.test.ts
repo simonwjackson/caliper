@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   BAR_H, BAR_W, CANVAS_W, CODE_H, CODE_SHARE, DOCK_W, GUTTER, PARTS_W, RAIL_W, SIDE_W, STAGE_H, STAGE_SHARE,
-  codeHeight, fitComposer, fitTools, frontSheet, planLayout,
+  codeHeight, fitComposer, fitTools, frontSheet, pairFits, planLayout,
 } from "../src/client/ui/layout"
+import { DEVICES } from "../src/client/device-frame.js"
 
 /** The Darkroom chrome keeps the browser's 16 px rem. */
 const px = (value: number) => value / 16
@@ -110,6 +111,28 @@ describe("frontSheet: a pressed tool names the sheet in front", () => {
   test("columns are never in front: only sheets compete", () => {
     const desk = planLayout(px(1600), px(1000), all)
     expect(frontSheet(desk, "takes", "record")).toBe(null)
+  })
+})
+
+describe("pairFits: two frames and a gap at true size, per device (decision 35, choice 19)", () => {
+  const pxPerMm = 3.875
+  const [rg353m, odin] = DEVICES
+  const width = (device: typeof rg353m) => device!.widthMm * pxPerMm
+  test("the RG353M needs 598 px on a desk gap of 40 px", () => {
+    expect(pairFits(width(rg353m), 40, 598)).toBe(true)
+    expect(pairFits(width(rg353m), 40, 597.9)).toBe(false)
+  })
+  test("the ODIN 2 PORTAL needs 1,249 px, so a 1,240 px desk canvas shows one frame", () => {
+    expect(pairFits(width(odin), 40, 1249)).toBe(true)
+    expect(pairFits(width(odin), 40, 1248.9)).toBe(false)
+    expect(pairFits(width(odin), 40, 1240)).toBe(false)
+  })
+  test("the phone's tighter gap counts", () => {
+    expect(pairFits(width(rg353m), 19.2, 577.2)).toBe(true)
+    expect(pairFits(width(rg353m), 19.2, 577.1)).toBe(false)
+  })
+  test("no canvas yet holds nothing", () => {
+    expect(pairFits(width(rg353m), 40, 0)).toBe(false)
   })
 })
 

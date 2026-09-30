@@ -44,6 +44,9 @@ export const SHOTS = [
   { fixture: "sending", mockup: null, note: "Undrawn: Send is running; nothing in the draft can change." },
   { fixture: "sendFailed", mockup: null, note: "Undrawn: the server refused the pass; the reason is an alert in the bar." },
   { fixture: "markRunning", mockup: null, note: "Undrawn: take 5 is still working, so the whole pass waits." },
+  { fixture: "chainHistory", mockup: null, note: "Undrawn: take 1's history unfolded, with 4 struck and 7, a branch beside 6." },
+  { fixture: "chainsAccepted", mockup: null, note: "Undrawn: after take 8 was accepted every chain is flagged; 7 from 3 shows its parent when the pair does not fit." },
+  { fixture: "chainsOdin", mockup: null, note: "Undrawn: the ODIN 2 PORTAL, where a desk canvas holds one frame of each chain." },
 ]
 
 export const FIXTURE_NAMES = [...new Set(SHOTS.map(shot => shot.fixture))]

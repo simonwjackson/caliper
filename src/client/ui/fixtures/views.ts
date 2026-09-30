@@ -8,15 +8,24 @@
  * can be set beside `docs/design/mockups/out/`. Three states the mockup does
  * not draw are here too: a running take with Stop, an agent that failed to
  * load, and an agent that is off.
+ *
+ * Takes on the canvas are chains built by the shared chain policy from take
+ * records with their lineage and an accept log (`./chains`), as core builds
+ * them. Three families of records: the mockup's (6 from 1 across a discarded
+ * 4, 5 from 2, and 3 alone, flagged by an accept of the Button), a branch on
+ * take 1, and a part after an accept, where every chain is flagged.
  */
 import type {
-  Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, NavPart, NavState,
-  TakeSummary, ChainView,
+  Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, NavPart, NavState, TakeSummary,
 } from "../contract"
 import { DEVICES } from "../../device-frame.js"
+import { identityKey } from "../../../takes/chains.js"
+import type { AcceptRecord, ChainTake, TakeIdentity } from "../../../takes/chains.js"
 import { PICO_GAME_DETAIL } from "./pico"
 import { frameIdentity, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
+import { chainFacts, takeKey, withChains } from "./chains"
+import type { ChainChoices, ChainFamily } from "./chains"
 
 export const enabled: Availability = { _tag: "Enabled" }
 const blocked = (reason: string): Availability => ({ _tag: "Disabled", reason })
@@ -38,11 +47,12 @@ export function frameSource(filter = "none", taps = true): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
 const FILTERS: Record<string, string> = {
-  real: "none", "1": "none", "2": "hue-rotate(35deg)", "3": "contrast(1.2) brightness(.75)", "5": "hue-rotate(-30deg) brightness(.9)", "6": "hue-rotate(160deg)",
+  real: "none", "1": "none", "2": "hue-rotate(35deg)", "3": "contrast(1.2) brightness(.75)", "5": "hue-rotate(-30deg) brightness(.9)", "6": "hue-rotate(160deg)", "7": "hue-rotate(250deg) saturate(.85)",
   "no-art": "saturate(.6) brightness(.85)", locations: "hue-rotate(35deg)", choose: "hue-rotate(-30deg) brightness(.9)", removal: "contrast(1.2) brightness(.75)",
 }
 const TAKE_NAMES: Record<string, string> = {
   "1": "Cover art two thirds wide", "2": "Stats in one row", "3": "Actions as chips", "5": "Stats in one row, larger", "6": "Cover at half, title beside it",
+  "7": "Cover two thirds, title below",
 }
 
 function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameView {
@@ -55,17 +65,54 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
   }
 }
 
-/** Phase 5 Step 0: each take is a chain of one until the UI worker draws chains. */
-export const singles = (frames: readonly FrameView[]): ChainView[] => frames.flatMap(item => item.take ? [{ id: item.key, shown: item.key, parent: null, take: item.take, label: item.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const }, solo: "Shown" as const }] : [])
+const GAME_DETAIL_FILES = ["src/pages/PicoGameDetail.css", "src/pages/PicoGameDetail.tsx"]
+/** Take N of a family was made at minute N of the family's hour, on the fixtures' day. */
+const takeAt = (hour: number) => (take: string): TakeIdentity => ({ take, created: Date.UTC(2026, 8, 29, hour, Number(take)) })
+/** A take record of Game Detail. `from` is its lineage, the chain's first take to its parent, as take numbers. */
+const records = (at: (take: string) => TakeIdentity) => (take: string, from: readonly string[] = [], files: readonly string[] = GAME_DETAIL_FILES): ChainTake => ({
+  ...at(take), part: PART, state: "default", files: [...files], ...(from[0] ? { chain: at(from[0]), lineage: from.map(at) } : {}),
+})
+const family = (takes: readonly ChainTake[], accepted: readonly AcceptRecord[]): ChainFamily =>
+  ({ takes, accepted, frame: take => frame(take.take, { key: takeKey(take) }) })
+
+const m = takeAt(13), mockup = records(m)
+/**
+ * The mockup's takes: 6 from 1 across a discarded 4, 5 from 2, and 3 alone.
+ * Take 8 of the Button changed PicoButton.css, which take 3 also changes, and
+ * was accepted after 3 was made, so 3 is flagged; 5 and 6 are newer.
+ */
+export const MOCKUP: ChainFamily = family(
+  [mockup("1"), mockup("2"), mockup("3", [], ["src/pages/PicoGameDetail.tsx", "src/atoms/PicoButton.css"]), mockup("5", ["2"]), mockup("6", ["1", "4"])],
+  [{ ...m("8"), part: "src/atoms/PicoButton.atom.part.tsx", state: "default", files: ["src/atoms/PicoButton.css"], at: Date.UTC(2026, 8, 29, 13, 9) }],
+)
+const b = takeAt(14), branched = records(b)
+/** The mockup's takes an hour later, with a second pass on take 1: take 7 branches the chain beside 6. */
+export const BRANCHED: ChainFamily = family(
+  [branched("1"), branched("2"), branched("3", [], ["src/pages/PicoGameDetail.tsx", "src/atoms/PicoButton.css"]), branched("5", ["2"]), branched("6", ["1", "4"]), branched("7", ["1"])],
+  [{ ...b("8"), part: "src/atoms/PicoButton.atom.part.tsx", state: "default", files: ["src/atoms/PicoButton.css"], at: Date.UTC(2026, 8, 29, 14, 9) }],
+)
+const a = takeAt(15), after = records(a)
+/**
+ * After an accept: take 8's chain of Game Detail was accepted and removed. The
+ * chains left, 1, 2 and 7 from 3 across a discarded 5, were made before it and
+ * share its part, so each is flagged "made before take 8 was accepted".
+ */
+export const ACCEPTED: ChainFamily = family(
+  [after("1"), after("2"), after("3"), after("7", ["3", "5"])],
+  [{ ...a("8"), part: PART, state: "default", files: ["src/pages/PicoGameDetail.css"], at: Date.UTC(2026, 8, 29, 15, 9) }],
+)
+/** Every family, for the scenario to find the one a view shows. */
+export const CHAIN_FAMILIES: readonly ChainFamily[] = [MOCKUP, BRANCHED, ACCEPTED]
 
 function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary {
+  const known = MOCKUP.takes.find(take => take.take === id)
   return {
     id, name: TAKE_NAMES[id] ?? `Take ${id}`, subjectLabel: "Default", deviceLabel: rg353m.name,
     createdLabel: "Made in isolation. Shared source edits can affect other states.",
     run: { _tag: "Idle" }, files: ["src/pages/PicoGameDetail.css", "src/pages/PicoGameDetail.tsx"], nameIssue: "",
     direction: id === "6" ? { title: "Cover at half, title beside it", brief: "Cover and title share the top half side by side; the actions move to one row under both." } : null,
     unavailableReason: "", accept: enabled, discard: enabled, stop: blocked("The take is not running"), prepareAlternate: enabled, kind: "Experiment",
-    lineage: "", flag: { _tag: "Current" },
+    ...(known ? chainFacts(MOCKUP, known) : { lineage: "", flag: { _tag: "Current" } }),
     ...overrides,
   }
 }
@@ -81,9 +128,9 @@ function part(name: string, file: string, layer: NavPart["layer"], count: number
   return { file, name, note: "", layer, layerSite: "filename suffix", selected: false, expanded: false, states: list, ...overrides }
 }
 
-const GAME_DETAIL_STATES: NavState[] = [
+const gameDetailStates = (takes: readonly string[], selected: string): NavState[] => [
   { ref: DEFAULT, label: "Default", site: `${PART}:12`, selected: true, comparing: true, badge: { status: "Passed", label: "Passed", detail: "Render and image checks passed" },
-    takes: ["1", "2", "3", "5", "6"].map(id => ({ id, label: `${id} · ${TAKE_NAMES[id]}`, selected: id === "6" })) },
+    takes: takes.map(id => ({ id, label: `${id} · ${TAKE_NAMES[id]}`, selected: id === selected })) },
   { ref: ref("NoArtOrHistory"), label: "No art or history", site: `${PART}:30`, selected: false, comparing: false, takes: [] },
   { ref: ref("MultipleLocations"), label: "Multiple locations", site: `${PART}:34`, selected: false, comparing: false, takes: [] },
   { ref: ref("ChooseLocation"), label: "Choose location", site: `${PART}:38`, selected: false, comparing: false, takes: [] },
@@ -101,17 +148,20 @@ const LOG: LogEntry[] = [
   { _tag: "Assistant", text: "Done. The title now sits beside the cover at its old size; nothing reaches past the screen." },
 ]
 
-/** The takes state of the mockup: the real files and five takes on the canvas, take 6 focused. */
-export function takesView(): ChromeView {
-  const TAKES_FRAMES = [frame(null), frame("1"), frame("6"), frame("2"), frame("5"), frame("3")]
-  const take = summary("6")
+/** The takes state of the mockup: the real files, then each chain: 6 from 1, 5 from 2, and 3 alone and flagged. Take 6 focused. */
+export function takesView(): ChromeView { return takesWith(MOCKUP, "6") }
+
+/** A Takes canvas of one family's chains, with one take selected and focused. */
+function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<ChainChoices, "selected">> = {}): ChromeView {
+  const picked = family.takes.find(item => item.take === selected) ?? null
+  const take = summary(selected, picked ? chainFacts(family, picked) : {})
   const view: ChromeView = {
     connection: { _tag: "Ready" },
     selection: { _tag: "State", subject: DEFAULT, preview: DEFAULT, label: "Default" },
     navigation: {
       project: "@korri/pico", filter: "", countLabel: "52 parts", emptyMessage: "",
       parts: [
-        part("Game Detail", PART, "page", 5, { selected: true, expanded: true, states: GAME_DETAIL_STATES, note: "The game's page" }),
+        part("Game Detail", PART, "page", 5, { selected: true, expanded: true, states: gameDetailStates(family.takes.map(item => item.take), selected), note: "The game's page" }),
         part("Home", "src/pages/PicoHome.page.part.tsx", "page", 4), part("Find", "src/pages/PicoFind.page.part.tsx", "page", 12),
         part("Gameplay Overlay", "src/pages/PicoGameplayOverlay.page.part.tsx", "page", 3), part("Runner Picker", "src/pages/PicoRunnerPicker.page.part.tsx", "page", 2),
         part("Settings", "src/pages/PicoSettings.page.part.tsx", "page", 6), part("Settings Panel", "src/pages/PicoSettingsPanel.page.part.tsx", "page", 3),
@@ -135,12 +185,12 @@ export function takesView(): ChromeView {
     },
     devices: DEVICES, device: rg353m, pxPerMm: 3.875, calibrated: true,
     tools: { active: "takes", navOpen: true, codeOpen: false, side: "closed", codeShare: 0.46 },
-    canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames: TAKES_FRAMES, chains: singles(TAKES_FRAMES) },
+    canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames: [frame(null, { selected: false })], chains: [] },
     plan: { _tag: "None" },
     composer: {
       prompt: "", placeholder: "Describe a change to Game Detail", edit: enabled, attach: enabled, attachments: [], count: 1,
       start: blocked("Describe a change first"), startLabel: "New take",
-      follow: { take: "6", label: "Send to take 6", availability: blocked("Describe a change first") }, notices: [],
+      follow: { take: selected, label: `Send to take ${selected}`, availability: blocked("Describe a change first") }, notices: [],
       agent: { _tag: "Ready", model: "claude-opus-5-5", baseUrl: "http://127.0.0.1:8317/v1", reasoning: "medium", api: "chat-completions", baseUrlFrom: "~/.pi/agent/cliproxyapi.json", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [
         { name: "pico-design", description: "Pico's palette, pixel grid and type", scope: "project", location: ".agents/skills/pico-design/SKILL.md" },
@@ -152,7 +202,39 @@ export function takesView(): ChromeView {
     focusedTake: take, record: { _tag: "Closed" },
     code: { _tag: "Closed" }, knobs: { _tag: "Closed" }, checks: { _tag: "Closed" }, calibration: { _tag: "Closed" },
   }
-  return structuredClone(withMarkup(view, [], { revision: 1, mode: { _tag: "Off" }, draftOpen: false, editor: null }))
+  const chained = withChains(view, family, { selected: picked, open: choices.open ?? [], solo: choices.solo ?? {} })
+  return structuredClone(withMarkup(chained, [], { revision: 1, mode: { _tag: "Off" }, draftOpen: false, editor: null }))
+}
+
+/** The view's canvas with each frame changed and its chains kept. */
+function mapFrames(view: ChromeView, change: (frame: FrameView) => FrameView): ChromeView["canvas"] {
+  return view.canvas._tag === "Frames" ? { ...view.canvas, frames: view.canvas.frames.map(change) } : view.canvas
+}
+
+/** A branch and an open history: take 7 is a second pass on take 1, beside 6; the strip shows 1, 4 struck, 6 and 7. */
+export function chainHistoryView(): ChromeView {
+  return takesWith(BRANCHED, "6", { open: [identityKey(b("1"))] })
+}
+
+/**
+ * After take 8 was accepted: every chain left is flagged. Take 7 from 3 across
+ * a discarded 5 is focused with its record open, and its pair shows the parent
+ * when it does not fit, a choice core keeps (planner choice 19).
+ */
+export function chainsAcceptedView(): ChromeView {
+  const view = takesWith(ACCEPTED, "7", { solo: { [identityKey(a("3"))]: "Parent" } })
+  const take = view.focusedTake ?? summary("7")
+  const log: LogEntry[] = [
+    { _tag: "User", text: "3A: Keep the chip shape, but put the chips in one row.", images: [] },
+    { _tag: "Tool", name: "edit", subject: "PicoGameDetail.css", outcome: "Done", detail: "+4 −2" },
+    { _tag: "Assistant", text: "The chips keep their shape and sit in one row under the title." },
+  ]
+  return { ...view, tools: { ...view.tools, side: "record" }, record: { _tag: "Open", take, log, emptyLogMessage: "", integration: { _tag: "None" } } }
+}
+
+/** The mockup's chains on the ODIN 2 PORTAL: a pair needs 1,249 px at true size, so a desk shows one frame of each chain. */
+export function chainsOdinView(): ChromeView {
+  return { ...takesView(), device: odin }
 }
 
 /** First run: the real files, the composer and one sentence. */
@@ -216,7 +298,7 @@ export function planningView(): ChromeView {
 /** Take 6's record open in the side panel. */
 export function logView(): ChromeView {
   const view = takesView()
-  const take = summary("6")
+  const take = view.focusedTake ?? summary("6")
   return {
     ...view, tools: { ...view.tools, side: "record" },
     record: { _tag: "Open", take, log: LOG, emptyLogMessage: "No conversation since Vite started.", integration: { _tag: "None" } },
@@ -231,9 +313,8 @@ export function runningView(): ChromeView {
     ...LOG.slice(0, 5),
     { _tag: "Tool", name: "edit", subject: "PicoGameDetail.tsx", outcome: "Running", detail: "" },
   ]
-  const frames = view.canvas._tag === "Frames" ? view.canvas.frames.map(item => item.take === "6" ? { ...item, run: { _tag: "Running" } as const } : item) : []
   return {
-    ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames, chains: singles(frames) }, focusedTake: take,
+    ...view, canvas: mapFrames(view, item => item.take === "6" ? { ...item, run: { _tag: "Running" } as const } : item), focusedTake: take,
     record: { _tag: "Open", take, log, emptyLogMessage: "Working…", integration: { _tag: "None" } },
     composer: { ...view.composer, follow: { take: "6", label: "Send to take 6", availability: blocked("Take 6 is still working") } },
   }
@@ -243,8 +324,7 @@ export function runningView(): ChromeView {
 export function failedTakeView(): ChromeView {
   const view = logView()
   const take = summary("6", { run: { _tag: "Failed", reason: "The model returned 529: overloaded. The take keeps its edits so far." } })
-  const frames = view.canvas._tag === "Frames" ? view.canvas.frames.map(item => item.take === "6" ? { ...item, run: take.run } : item) : []
-  return { ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames, chains: singles(frames) }, focusedTake: take, record: { _tag: "Open", take, log: LOG.slice(0, 4), emptyLogMessage: "", integration: { _tag: "None" } } }
+  return { ...view, canvas: mapFrames(view, item => item.take === "6" ? { ...item, run: take.run } : item), focusedTake: take, record: { _tag: "Open", take, log: LOG.slice(0, 4), emptyLogMessage: "", integration: { _tag: "None" } } }
 }
 
 /** Not drawn in the mockup: the agent failed to load. The failure shows in the bar, where the prompt is. */
@@ -551,7 +631,7 @@ export function sendFailedView(): ChromeView {
 }
 /** Not drawn: take 5 is still working, so the whole pass waits. */
 export function markRunningView(): ChromeView {
-  return marked({ draftOpen: true }, { lost: false, change: view => ({ ...view, canvas: view.canvas._tag === "Frames" ? { ...view.canvas, frames: view.canvas.frames.map(item => item.take === "5" ? { ...item, run: { _tag: "Running" } as const } : item) } : view.canvas }) })
+  return marked({ draftOpen: true }, { lost: false, change: view => ({ ...view, canvas: mapFrames(view, item => item.take === "5" ? { ...item, run: { _tag: "Running" } as const } : item) }) })
 }
 
 export type FixtureName = keyof typeof FIXTURES
@@ -564,4 +644,5 @@ export const FIXTURES = {
   alternate: alternateView, unreachable: unreachableView, setup: setupProblemsView,
   mark: markView, marked: markedView, draft: draftView, draftReady: draftReadyView, replacing: replacingView,
   sending: sendingView, sendFailed: sendFailedView, markRunning: markRunningView,
+  chainHistory: chainHistoryView, chainsAccepted: chainsAcceptedView, chainsOdin: chainsOdinView,
 } satisfies Record<string, () => ChromeView>

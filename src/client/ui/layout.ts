@@ -115,6 +115,22 @@ export function draftHeight(height: number): number {
   return Math.max(DRAFT_MIN, Math.min(DRAFT_MAX, height * DRAFT_SHARE))
 }
 
+/**
+ * Whether a chain's pair fits the canvas: two frames of the current device at
+ * true size and one gap between them (decision 35, planner choice 19). The
+ * rule is per device and reads only the canvas width. When it is false, each
+ * chain draws the one frame core names in `ChainView.solo`, with one control to
+ * swap. Any unit, as long as the three share it.
+ *
+ * @param frame one frame's width at true size
+ * @param gap the gap between two frames
+ * @param canvas the canvas's content width
+ */
+export function pairFits(frame: number, gap: number, canvas: number): boolean {
+  // A hundredth of a pixel absorbs float error in the true-size width.
+  return canvas > 0 && 2 * frame + gap <= canvas + 0.01
+}
+
 export type Sheet = "side" | "code" | null
 /**
  * The sheet in front: the one the active tool names. Code names the code

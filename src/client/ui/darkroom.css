@@ -6,6 +6,8 @@
 /* The chrome's page: the root fills the window, and the page itself never scrolls. */
 html:has(> body > #caliper > .dr-root), body:has(> #caliper > .dr-root), #caliper:has(> .dr-root) { height: 100%; margin: 0; overflow: hidden; }
 body:has(> #caliper > .dr-root) { background: #121316; }
+/* The canvas's gap in use. Registered as a length so the canvas reads it in px when it decides whether a chain's pair fits (decision 35). */
+@property --dr-gap-now { syntax: "<length>"; inherits: true; initial-value: 40px; }
 @media (prefers-color-scheme: light) { body:has(> #caliper > .dr-root:not([data-scheme="dark"])) { background: #DDDEE2; } }
 
 .dr-root {

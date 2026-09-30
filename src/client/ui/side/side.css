@@ -8,6 +8,7 @@
 .dr-record__facts { display: flex; flex-wrap: wrap; gap: .3rem .8rem; color: var(--dr-ink-2); }
 .dr-record__run { display: inline-flex; gap: .35rem; align-items: center; }
 .dr-record__run--bad { color: var(--dr-bad); }
+.dr-record__lineage { color: var(--dr-ink-2); }
 .dr-record__failed { color: var(--dr-bad); border-left: 3px solid var(--dr-bad); padding-left: .55rem; line-height: 1.5; }
 .dr-record__warn { color: var(--dr-warn); line-height: 1.5; }
 .dr-record__direction { color: var(--dr-ink-2); line-height: 1.5; }

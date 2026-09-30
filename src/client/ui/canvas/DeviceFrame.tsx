@@ -17,6 +17,10 @@ export type DeviceFrameProps = {
   readonly actions: ChromeActions
   /** Take markup. Omitted, or Unavailable, the frame shows no marks and takes every click. */
   readonly markup?: MarkupView
+  /** A chain's parent, the before of its pair: the page is drawn at 78 % so the newer take reads first (decision 35). */
+  readonly before?: boolean
+  /** Not drawn, but kept mounted, so the page keeps the state reached in it: the other side of a pair that does not fit. */
+  readonly hidden?: boolean
 }
 
 function runNote(frame: FrameView): { readonly tone: string; readonly text: string; readonly title?: string } | null {
@@ -45,7 +49,7 @@ function refocus(id: string) {
  * dashed edge. The note editor opens under the frame that shows its mark,
  * unless the draft is open, where it opens beside the note.
  */
-export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, actions, markup }: DeviceFrameProps) {
+export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, actions, markup, before, hidden }: DeviceFrameProps) {
   const { onFrameMount, onFrameGeometry, onTake, onState, onMarkPoint, onMarkRegion, onMarkEdit, onMarkNote } = actions
   const mount = useCallback((node: HTMLIFrameElement | null) => onFrameMount(frame.key, node), [onFrameMount, frame.key])
   const { width, height, scale } = geometry
@@ -60,7 +64,7 @@ export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, act
   const editor = ready && !ready.draftOpen && ready.editor._tag === "Open" ? ready.editor : null
   const editing = editor && frame.marks.some(mark => mark.id === editor.id) ? editor : null
   const name = frame.take ? `Take ${frame.take}` : frame.label
-  return <figure className="dr-frame" data-frame-key={frame.key} data-selected={frame.selected || undefined}
+  return <figure className="dr-frame" data-frame-key={frame.key} data-selected={frame.selected || undefined} data-before={before || undefined} hidden={hidden || undefined}
     data-verdict={frame.verdict._tag} data-run={frame.run?._tag} data-take={frame.take ?? undefined} data-marking={marking || undefined}>
     <div className="dr-frame__mount" style={{ width, height }}>
       <div className="dr-frame__screen" style={{ width, height }}>

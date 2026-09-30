@@ -1,0 +1,60 @@
+/*
+ * Takes as chains on the canvas (plan decisions 11 to 13, decision 35).
+ *
+ * In Takes mode the frames grid runs in bands of three rows: the heads, the
+ * unfolded histories and the frames. Every item spans the three rows of its
+ * band with subgrid, so the heads line up, and every frame's top edge lines up
+ * with the real files, which have no head. A chain with a pair spans two
+ * columns with subgrid, so the gap inside a pair is the gap between chains.
+ * A band ends with the gap; the next band's heads follow.
+ */
+.dr-frames[data-bands] { row-gap: 0; }
+.dr-frames[data-bands] > * { margin-bottom: var(--dr-gap-now); }
+/* Outside the bands a loose frame's box is the frame itself, as before chains. */
+.dr-band { display: contents; }
+.dr-frames[data-bands] > .dr-band { display: grid; grid-row: span 3; grid-template-rows: subgrid; min-width: 0; }
+.dr-frames[data-bands] > .dr-band > * { grid-row: 3; }
+
+.dr-chain { display: grid; grid-row: span 3; grid-template-rows: subgrid; grid-column: span 1; grid-template-columns: subgrid; min-width: 0; }
+.dr-chain[data-span="2"] { grid-column: span 2; }
+
+/* The head: "6 ← from 1 (1 discarded)", the flag at the right, then the history toggle. */
+.dr-chain__head { grid-row: 1; grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; padding-bottom: .7rem; min-width: 0;
+  font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+/* It grows to push what follows to the right while the line holds it. What wraps starts the next
+   line at the left, as the mockup's phone head does, with no width threshold. It cancels its own gap. */
+.dr-chain__spacer { flex: 1 0 0; margin-left: -.5rem; }
+.dr-chain__label { display: flex; flex-wrap: wrap; gap: .1rem .5rem; align-items: baseline; min-width: 0; font-size: var(--dr-fs-1); font-weight: 400; color: var(--dr-ink-2); }
+.dr-chain__label b { color: var(--dr-ink); font-weight: 600; font-size: var(--dr-fs-2); }
+.dr-chain__gap, .dr-chain__alone { color: var(--dr-ink-3); }
+/* Opened, the flag takes its own line under the head, with its reason. */
+.dr-chain__head > .dr-flag[open] { order: 3; flex-basis: 100%; }
+.dr-chain__aside { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; }
+.dr-chain__head > .dr-flag:not([open]) + .dr-chain__aside { margin-left: .5rem; }
+.dr-chain__toggle { position: relative; border: 0; background: none; padding: 0; color: var(--dr-ink-3); font-size: 11px; line-height: 1.45;
+  display: inline-flex; gap: .3rem; align-items: center; white-space: nowrap; }
+.dr-chain__toggle:hover, .dr-chain__toggle[aria-expanded="true"] { color: var(--dr-ink-2); }
+/* The drawn words are small; the press area is not. Neighbours stay a third of a rem apart. */
+.dr-chain__toggle::after { content: ""; position: absolute; inset: -.5rem -.3rem; }
+/* The swap is the only way to the hidden frame, so it reads as a link. */
+.dr-chain__swap { color: var(--dr-ink-2); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+.dr-chain__swap:hover { color: var(--dr-ink); text-decoration-color: currentColor; }
+
+/* The history, unfolded: every take the chain has had, oldest first. */
+.dr-chain__history { grid-row: 2; grid-column: 1 / -1; list-style: none; margin: 0; padding: 0 0 .8rem; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .45rem; font-size: 11px; color: var(--dr-ink-3); }
+.dr-chain__history > li { display: inline-flex; align-items: baseline; gap: .45rem; }
+.dr-chain__history > li + li::before { content: "→" / ""; color: var(--dr-ink-3); }
+.dr-chain__step { position: relative; border: 0; background: none; padding: 0; font-size: 11px; line-height: 1.45; color: var(--dr-ink-2);
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+button.dr-chain__step:hover { color: var(--dr-ink); text-decoration-color: currentColor; }
+button.dr-chain__step::after { content: ""; position: absolute; inset: -.45rem -.2rem; }
+.dr-chain__step[aria-current="true"] { color: var(--dr-ink); font-weight: 600; }
+.dr-chain__step--gone { color: var(--dr-ink-3); opacity: .75; cursor: default; }
+
+/* The pair: the parent, then the shown take, one gap apart. */
+.dr-chain__pair { grid-row: 3; grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: start; min-width: 0; }
+.dr-frame[data-before] .dr-frame__screen { opacity: .78; }
+/* A chain made before a later accept is dimmer still, beside its flag. */
+.dr-chain[data-flagged] .dr-frame__screen { opacity: .6; }

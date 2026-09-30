@@ -35,3 +35,6 @@ export function MarkMode() { return <Chrome fixture="mark" /> }
 export function DraftOpen() { return <Chrome fixture="draft" /> }
 export function Sending() { return <Chrome fixture="sending" /> }
 export function SendFailed() { return <Chrome fixture="sendFailed" /> }
+export function ChainHistory() { return <Chrome fixture="chainHistory" /> }
+export function AfterAccept() { return <Chrome fixture="chainsAccepted" /> }
+export function OdinChains() { return <Chrome fixture="chainsOdin" /> }

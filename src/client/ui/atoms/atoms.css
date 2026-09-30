@@ -39,6 +39,20 @@
 .dr-notice--warning { color: var(--dr-warn); }
 .dr-notice--error { color: var(--dr-bad); }
 
+/* --- the accept flag: warn ink, never a block -------------------------------- */
+.dr-flag { color: var(--dr-warn); font-size: 11px; line-height: 1.45; min-width: 0; }
+.dr-flag__label { font-weight: 400; }
+.dr-flag--fold > summary { list-style: none; cursor: pointer; position: relative;
+  text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, currentColor 55%, transparent); }
+.dr-flag--fold > summary:hover, .dr-flag--fold[open] > summary { text-decoration-color: currentColor; }
+.dr-flag--fold > summary::-webkit-details-marker { display: none; }
+/* The drawn line is small; the press area is not. */
+.dr-flag--fold > summary::after { content: ""; position: absolute; inset: -.5rem -.3rem; }
+.dr-flag--fold > .dr-flag__detail { margin-top: .3rem; color: var(--dr-ink-2); max-width: 38rem; }
+.dr-flag--full { display: grid; gap: .2rem; border-left: 3px solid var(--dr-warn); padding-left: .55rem; }
+.dr-flag--full .dr-flag__label { font-size: var(--dr-fs-1); }
+.dr-flag--full .dr-flag__detail { color: var(--dr-ink-2); }
+
 /* --- the card ------------------------------------------------------------ */
 .dr-panel { background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; overflow: hidden; }
 .dr-panel__handle { display: none; }

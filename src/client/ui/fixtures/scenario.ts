@@ -5,11 +5,13 @@
  * server call, and it is not core's app state. A no-op would not show that
  * the chrome's controls reach their actions, so the common ones change the view.
  */
-import type { ChromeActions, ChromeView, KnobView, Tool } from "../contract"
+import type { ChainView, ChromeActions, ChromeView, KnobView, Tool } from "../contract"
 import { DEFAULT_PX_PER_MM } from "../../device-frame.js"
-import { frameSource } from "./views"
+import { CHAIN_FAMILIES, frameSource } from "./views"
 import { frameIdentity, markupState, nextLetter, readMarks, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
+import { chainFacts, familyOf, readChoices, takeKey, withChains } from "./chains"
+import type { ChainChoices } from "./chains"
 import type { MarkRect } from "../contract"
 
 export type Call = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
@@ -73,6 +75,34 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     return { marks: [...marks, { id, source, frame: frameKey, letter, kind, rect, location: { _tag: "Located" }, note: "", previewLabel, deviceLabel: view.device.name }], state: { editor: id } }
   })
 
+  // Chains: a change of choice rebuilds the chains through the shared policy, from the family of take records the view shows.
+  const chains = (change: (choices: ChainChoices) => ChainChoices): boolean => {
+    const family = familyOf(view, CHAIN_FAMILIES)
+    if (!family) return false
+    update(withChains(view, family, change(readChoices(view))))
+    return true
+  }
+  /** A view with no family: the swap and a fold still change the chain in place. */
+  const chainInPlace = (id: string, change: (chain: ChainView) => ChainView) => {
+    if (view.canvas._tag === "Frames") update({ ...view, canvas: { ...view.canvas, chains: view.canvas.chains.map(chain => chain.id === id ? change(chain) : chain) } })
+  }
+  /** Selecting a take of a chain opens it in the pair beside its nearest ancestor (planner choice 16), and focuses it. */
+  const pickTake = (take: string): boolean => {
+    const family = familyOf(view, CHAIN_FAMILIES)
+    const picked = family?.takes.find(item => item.take === take)
+    if (!family || !picked) return false
+    const next = withChains(view, family, { ...readChoices(view), selected: picked })
+    const name = next.canvas._tag === "Frames" ? next.canvas.frames.find(frame => frame.key === takeKey(picked))?.label ?? `Take ${take}` : `Take ${take}`
+    const facts = { id: take, name, ...chainFacts(family, picked) }
+    update({
+      ...next,
+      focusedTake: next.focusedTake ? { ...next.focusedTake, ...facts } : null,
+      record: next.record._tag === "Open" ? { ...next.record, take: { ...next.record.take, ...facts } } : next.record,
+      composer: { ...next.composer, follow: next.composer.follow ? { ...next.composer.follow, take, label: `Send to take ${take}` } : null },
+    })
+    return true
+  }
+
   const record = <K extends keyof ChromeActions>(name: K, effect?: (...args: Parameters<ChromeActions[K]>) => void) =>
     ((...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args }); effect?.(...args) }) as ChromeActions[K]
 
@@ -88,9 +118,15 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     } : null)),
     onMarkReplace: record("onMarkReplace", id => markup(marks => editable(marks, id) ? { state: { mode: { _tag: "Replacing", id } } } : null)),
     onDraftOpen: record("onDraftOpen", draftOpen => markup(() => ({ state: { draftOpen } }))),
-    // Phase 5 Step 0: the gallery has no chain history yet; the UI worker adds chain fixtures.
-    onChainHistory: record("onChainHistory"),
-    onChainSolo: record("onChainSolo"),
+    onChainHistory: record("onChainHistory", (id, open) => {
+      if (!chains(choices => ({ ...choices, open: open ? [...new Set([...choices.open, id])] : choices.open.filter(item => item !== id) })) && !open) {
+        chainInPlace(id, chain => chain.history._tag === "Open" ? { ...chain, history: { _tag: "Folded", label: chain.history.label } } : chain)
+      }
+    }),
+    // Core ignores "Parent" for a chain with no parent; so does the rebuild.
+    onChainSolo: record("onChainSolo", (id, solo) => {
+      if (!chains(choices => ({ ...choices, solo: { ...choices.solo, [id]: solo } }))) chainInPlace(id, chain => chain.parent ? { ...chain, solo } : chain)
+    }),
     onSend: record("onSend", revision => {
       const ready = view.markup._tag === "Ready" && view.markup.revision === revision && view.markup.send._tag !== "Sending" && view.markup.send.availability._tag === "Enabled"
       if (ready) markup(marks => ({ state: { editor: null, send: { _tag: "Sending", label: `Sending ${marks.length} ${marks.length === 1 ? "mark" : "marks"}` } } }))
@@ -102,6 +138,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onPartExpanded: record("onPartExpanded", (file, open) => update({ ...view, navigation: { ...view.navigation, parts: view.navigation.parts.map(part => part.file === file ? { ...part, expanded: open } : part) } })),
     onState: record("onState"), onCompare: record("onCompare"),
     onTake: record("onTake", take => {
+      if (pickTake(take)) return
       const frames = view.canvas._tag === "Frames" ? view.canvas.frames.map(frame => ({ ...frame, selected: frame.take === take })) : null
       update({ ...view, canvas: view.canvas._tag === "Frames" && frames ? { ...view.canvas, frames } : view.canvas })
     }),

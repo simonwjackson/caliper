@@ -4,16 +4,17 @@
  * code. The browser gate compares it with the hooks the chrome renders after
  * opening each UI-owned disclosure (the New take menu, the parts drawer).
  *
- * Two facts come from the rendered layout because they are layout choices:
+ * Three facts come from the rendered layout because they are layout choices:
  * whether the bar is shown (decision 34: with Takes, Preview or a plan in
- * front) and whether the code pane is under the canvas, where its divider
- * applies, or a sheet.
+ * front), whether the code pane is under the canvas, where its divider
+ * applies, or a sheet, and whether a chain's pair fits the canvas, where the
+ * swap does not apply (decision 35, planner choice 19).
  */
 import type { ChromeView } from "../../src/client/ui/contract"
 import { CAL } from "../../src/client/ui/hooks"
 import type { CalHook } from "../../src/client/ui/hooks"
 
-export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string }): CalHook[] {
+export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string; readonly pairs?: string }): CalHook[] {
   const hooks = new Set<CalHook>([CAL.root, CAL.connection, CAL.tool, CAL.navToggle, CAL.canvas])
   const add = (...list: CalHook[]) => { for (const hook of list) hooks.add(hook) }
 
@@ -38,6 +39,13 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
     add(CAL.caption, CAL.device)
     if (view.canvas.frames.length) add(CAL.frame, CAL.frameSelect)
     if (view.canvas.frames.some(frame => frame.problems.length)) add(CAL.frameProblem)
+    // Chains (plan decisions 11 to 13): only the Takes canvas has them. The swap exists only while a pair does not fit.
+    const chains = view.canvas.mode === "Takes" ? view.canvas.chains : []
+    if (chains.length) add(CAL.chain)
+    if (chains.some(chain => chain.history._tag !== "None")) add(CAL.chainHistory)
+    if (chains.some(chain => chain.history._tag === "Open" && chain.history.steps.length)) add(CAL.chainStep)
+    if (chains.some(chain => chain.flag._tag === "Before")) add(CAL.chainFlag)
+    if (layout.pairs === "solo" && chains.some(chain => chain.parent !== null)) add(CAL.chainSolo)
   }
   // Take markup (decision 35). Pins show on every frame that has marks; the surface and its key
   // controls only in mark mode, on frames that can take a mark.

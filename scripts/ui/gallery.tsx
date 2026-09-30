@@ -44,7 +44,8 @@ const control = {
   /** The hooks that apply to the current view, given the rendered layout. */
   applicable() {
     const root = document.querySelector<HTMLElement>("[data-cal=chrome]")
-    return applicableHooks(scenario.getView(), { bar: root?.dataset.bar === "on", code: root?.dataset.code ?? "closed" })
+    const canvas = document.querySelector<HTMLElement>("[data-cal=canvas]")
+    return applicableHooks(scenario.getView(), { bar: root?.dataset.bar === "on", code: root?.dataset.code ?? "closed", pairs: canvas?.dataset.pairs })
   },
   unmount() { root.unmount() },
 }

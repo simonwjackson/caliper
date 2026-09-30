@@ -1,6 +1,7 @@
 import type { ChromeActions, ChromeView } from "../contract"
 import { CAL } from "../hooks"
 import { Button } from "../atoms/Button"
+import { Flag } from "../atoms/Flag"
 import { Icon } from "../atoms/Icon"
 import { Panel } from "../atoms/Panel"
 import { TakeActions } from "../bar/TakeActions"
@@ -21,6 +22,10 @@ function runLabel(run: { readonly _tag: string }): { readonly text: string; read
  * works, Stop sits in the header, where the eye lands first, and the log
  * grows at the foot. The record also carries Accept and Discard, because on a
  * phone it covers the bar that holds them.
+ *
+ * Under the facts: where the take came from, as the chain's head says it, and
+ * the accept flag with its reason written out, since the canvas folds it.
+ * What Accept also removes is said only in core's confirmation (choice 20).
  */
 export function TakeRecord({ view, actions, sheet }: { readonly view: ChromeView; readonly actions: ChromeActions; readonly sheet: boolean }) {
   if (view.record._tag === "Closed") return null
@@ -37,6 +42,8 @@ export function TakeRecord({ view, actions, sheet }: { readonly view: ChromeView
         <span>{take.subjectLabel}</span><span>{take.deviceLabel}</span>
         {take.kind === "Alternate" && <span>Alternate</span>}
       </p>
+      {take.lineage && <p className="dr-record__lineage"><span className="dr-sr">Chain: </span>{take.lineage}</p>}
+      <Flag flag={take.flag} variant="Full" />
       {running && <div className="dr-working" role="progressbar" aria-label={`Take ${take.id} is working`} />}
       {take.run._tag === "Failed" && <p className="dr-record__failed" role="alert">{take.run.reason}</p>}
       {take.unavailableReason && <p className="dr-record__warn" role="status">{take.unavailableReason}</p>}

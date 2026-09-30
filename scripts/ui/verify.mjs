@@ -145,8 +145,9 @@ await gate("actions: prompt, start, count, follow, attach, accept, discard, devi
     assert.deepEqual((await called(page, "onDiscard")).map(call => call.args[0]), ["6"])
     await page.locator(`${cal("device")}[data-device="odin2portal"]`).click()
     assert.deepEqual((await called(page, "onDevice")).map(call => call.args[0]), ["odin2portal"])
-    await page.locator(`${cal("frame-select")}[data-take="2"]`).click()
-    assert.deepEqual((await called(page, "onTake")).map(call => call.args[0]), ["2"])
+    // On the ODIN 2 PORTAL a desk shows one frame per chain; take 3 is a chain of one, so its name shows.
+    await page.locator(`${cal("frame-select")}[data-take="3"]`).click()
+    assert.deepEqual((await called(page, "onTake")).map(call => call.args[0]), ["3"])
     await page.locator(`${cal("state")}[data-state="ConfirmRemoval"]`).click()
     assert.equal((await called(page, "onState")).length, 1)
     await page.locator(`${cal("compare-takes")}`).click()
@@ -441,7 +442,8 @@ await gate("markup: marking keeps the frame's reached state; the press never rea
 await gate("markup: a phone-sized frame converts a press to device px", async () => {
   const { page, close } = await open(phone, "mark")
   try {
-    await gesture(page, "1", [0.5, 0.5])
+    // Take 3 is a chain of one, so it shows at phone width; a parent such as take 1 is behind its chain's swap there.
+    await gesture(page, "3", [0.5, 0.5])
     const point = parsed((await called(page, "onMarkPoint")).at(-1)?.args[1])
     near(point.x, 320, "x at 416 px"); near(point.y, 240, "y at 416 px")
   } finally { await close() }
@@ -482,7 +484,8 @@ await gate("markup: a lost mark blocks Send, says why, and Re-place moves it", a
     assert.deepEqual((await called(page, "onMarkReplace")).at(-1)?.args, ["m-3a"])
     assert.match(await page.locator(".dr-canvas__marking").textContent() ?? "", /Re-place 3A/)
     assert.equal(await page.locator(cal("mark-surface")).count() > 0, true)
-    await gesture(page, "3", [0.3, 0.5])
+    // The open draft covers the lower part of the second band of frames; press where take 3 shows above it.
+    await gesture(page, "3", [0.3, 0.2])
     assert.equal((await called(page, "onMarkPoint")).at(-1)?.args[0], "3@2026-09-29T13:03")
     assert.equal(await send.isDisabled(), false, "With every mark found, Send is ready")
     await page.locator(`${cal("mark-edit")}[data-mark-id="m-5a"]`).click()
@@ -514,6 +517,274 @@ await gate("markup: while Send runs nothing in the draft changes; a refused Send
     assert.match(await running.page.locator('.dr-dtake[data-take="5"]').textContent() ?? "", /still running/)
   } finally { await running.close() }
 })
+
+// ---------------------------------------------------------------- 2c. chains
+/**
+ * The chains as drawn: each group's heading, its frames in DOM order, the
+ * frames that show, and its swap. Hidden frames stay mounted, so `frames`
+ * lists both sides of a pair that does not fit.
+ * @param {import("playwright-core").Page} page
+ */
+const drawnChains = page => page.evaluate(() => [...document.querySelectorAll('[data-cal="chain"]')].map(node => ({
+  id: node.getAttribute("data-chain") ?? "",
+  heading: node.querySelector("h2")?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+  frames: [...node.querySelectorAll('[data-cal="frame"]')].map(frame => frame.getAttribute("data-frame-key")),
+  showing: [...node.querySelectorAll(".dr-frame")].filter(frame => frame.checkVisibility()).map(frame => frame.getAttribute("data-frame-key")),
+  solo: node.querySelector('[data-cal="chain-solo"]')?.getAttribute("data-solo") ?? null,
+})))
+/** @param {import("playwright-core").Page} page */
+const viewChains = page => page.evaluate(() => { const canvas = window.gallery.view().canvas; return canvas._tag === "Frames" ? canvas.chains : [] })
+/**
+ * The fit rule, from what the canvas measures: two frames at true size and a gap
+ * against the canvas's content width (decision 35).
+ * @param {import("playwright-core").Page} page
+ */
+const pairRule = page => page.evaluate(() => {
+  const canvas = /** @type {HTMLElement} */ (document.querySelector('[data-cal="canvas"]'))
+  const scroll = /** @type {HTMLElement} */ (canvas.querySelector(".dr-canvas__scroll"))
+  const style = getComputedStyle(scroll)
+  const width = scroll.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  const gap = parseFloat(style.getPropertyValue("--dr-gap-now"))
+  const view = window.gallery.view()
+  const frame = view.device.widthMm * view.pxPerMm
+  return { pairs: canvas.dataset.pairs ?? "", width, gap, frame, need: 2 * frame + gap, device: view.device.id }
+})
+/** Mount calls with a node, per frame key. @param {import("playwright-core").Page} page */
+const mounts = async page => {
+  /** @type {Record<string, number>} */
+  const count = {}
+  for (const call of await called(page, "onFrameMount")) if (call.args[1] !== null) count[String(call.args[0])] = (count[String(call.args[0])] ?? 0) + 1
+  return count
+}
+
+await gate("chains: each chain is its heading, then the parent at 78 % and the shown take; every frame key once", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    const rule = await pairRule(page)
+    assert.equal(rule.pairs, "fit", `A desk canvas holds an RG353M pair: ${JSON.stringify(rule)}`)
+    const chains = await viewChains(page)
+    const drawn = await drawnChains(page)
+    assert.deepEqual(drawn.map(chain => chain.id), chains.map(chain => chain.id), "One group per chain, in the view's order")
+    for (const chain of chains) {
+      const group = drawn.find(item => item.id === chain.id)
+      assert.equal(group?.heading, chain.label)
+      const pair = [chain.parent, chain.shown].filter(Boolean)
+      assert.deepEqual(group?.frames, pair, `Chain ${chain.label}: the parent, then the shown take`)
+      assert.deepEqual(group?.showing, pair, `Chain ${chain.label}: both frames show when the pair fits`)
+      assert.equal(group?.solo, null, "No swap while the pair fits")
+    }
+    assert.deepEqual(chains.map(chain => chain.label), ["6 ← from 1 (1 discarded)", "5 ← from 2", "3"])
+    const keys = await page.evaluate(() => { const canvas = window.gallery.view().canvas; return canvas._tag === "Frames" ? canvas.frames.map(frame => frame.key) : [] })
+    for (const key of keys) assert.equal(await page.locator(`${cal("frame")}[data-frame-key="${key}"]`).count(), 1, `Frame ${key} is drawn once`)
+    assert.equal(await page.locator(cal("frame")).count(), keys.length, "No frame is drawn that the view does not have")
+    assert.equal(await page.locator(`${cal("chain")} [data-frame-key="real"]`).count(), 0, "The real files are in no chain")
+    const look = await page.evaluate(() => {
+      const screen = (/** @type {string} */ key) => /** @type {HTMLElement} */ (document.querySelector(`.dr-frame[data-frame-key="${key}"] .dr-frame__screen`))
+      const top = (/** @type {string} */ key) => screen(key).getBoundingClientRect().top
+      const heads = [...document.querySelectorAll(".dr-chain__head")].map(node => Math.round(node.getBoundingClientRect().top))
+      const real = document.querySelector('[data-frame-key="real"]')
+      const first = document.querySelector('[data-cal="chain"]')
+      return {
+        parent: getComputedStyle(screen("1@2026-09-29T13:01")).opacity, shown: getComputedStyle(screen("6@2026-09-29T13:06")).opacity,
+        flagged: getComputedStyle(screen("3@2026-09-29T13:03")).opacity,
+        tops: [top("real"), top("1@2026-09-29T13:01"), top("6@2026-09-29T13:06")], heads,
+        realFirst: !!real && !!first && Boolean(real.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING),
+      }
+    })
+    assert.equal(look.parent, "0.78", "The parent's page is drawn at 78 %")
+    assert.equal(look.shown, "1")
+    assert.equal(look.flagged, "0.6", "A flagged chain is dimmer still")
+    assert(Math.max(...look.tops) - Math.min(...look.tops) < 1, `The real files and the first pair start on one line: ${look.tops}`)
+    assert.equal(look.heads[1], look.heads[2], "Heads of one band line up")
+    assert(look.realFirst, "The real files come before the chains")
+  } finally { await close() }
+})
+await gate("chains: the history opens and folds with its frames kept; a discarded step is inert; a present step opens its take", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    const [first] = await viewChains(page)
+    assert(first)
+    const frame = page.frameLocator(`${cal("frame")}[data-take="6"]`)
+    await frame.locator("body").click()
+    const taps = () => frame.locator("body").getAttribute("data-taps")
+    const parent = await page.locator(`${cal("frame")}[data-take="1"]`).elementHandle()
+    const toggle = page.locator(`${cal("chain-history")}[data-chain="${first.id}"]`)
+    assert.equal(await toggle.getAttribute("aria-expanded"), "false")
+    assert.equal(await toggle.textContent(), "3 in chain")
+    await toggle.click()
+    assert.deepEqual((await called(page, "onChainHistory")).at(-1)?.args, [first.id, true])
+    assert.equal(await toggle.getAttribute("aria-expanded"), "true")
+    const steps = page.locator(`${cal("chain-step")}[data-chain="${first.id}"]`)
+    assert.deepEqual(await steps.allTextContents(), ["Take 1", "Take 4, discarded", "Take 6"])
+    assert(await parent?.evaluate(node => node.isConnected), "Opening the history keeps the pair's frames")
+    assert.equal(await taps(), "1", "Opening the history keeps the state reached in a frame")
+    const gone = page.locator(`${cal("chain-step")}[data-take="4"]`)
+    assert.equal(await gone.getAttribute("aria-disabled"), "true")
+    assert.equal(await gone.evaluate(node => node.tagName), "SPAN", "A discarded step is not a control")
+    assert.equal(await gone.locator("s").count(), 1, "A discarded step is struck through")
+    const before = (await called(page, "onTake")).length
+    await gone.click({ force: true })
+    assert.equal((await called(page, "onTake")).length, before, "A discarded step selects nothing")
+    await toggle.click()
+    assert.deepEqual((await called(page, "onChainHistory")).at(-1)?.args, [first.id, false])
+    assert.equal(await steps.count(), 0)
+    assert(await parent?.evaluate(node => node.isConnected), "Folding keeps the frames")
+    assert.equal(await taps(), "1")
+    assert.equal((await mounts(page))["6@2026-09-29T13:06"], 1, "The shown take mounted once")
+  } finally { await close() }
+  const branch = await open(desk, "chainHistory")
+  try {
+    const [first] = await viewChains(branch.page)
+    assert(first)
+    const steps = branch.page.locator(`${cal("chain-step")}[data-chain="${first.id}"]`)
+    assert.deepEqual(await steps.allTextContents(), ["Take 1", "Take 4, discarded", "Take 6", "Take 7"], "A branch stays in the history")
+    assert.equal(await branch.page.locator(`${cal("chain-step")}[aria-current="true"]`).textContent(), "Take 6")
+    await branch.page.locator(`${cal("chain-step")}[data-chain="${first.id}"][data-take="7"]`).click()
+    assert.deepEqual((await called(branch.page, "onTake")).at(-1)?.args, ["7"])
+    const [after] = await drawnChains(branch.page)
+    assert.equal(after?.heading, "7 ← from 1", "The picked take opens in the pair beside its own parent (choice 16)")
+    assert.deepEqual(after?.frames, ["1@2026-09-29T14:01", "7@2026-09-29T14:07"])
+    assert.match(await branch.page.locator(".dr-bar").textContent() ?? "", /Take 7/, "The bar follows the picked take")
+  } finally { await branch.close() }
+})
+await gate("chains: the flag shows with its reason; the record writes it out; the bar has no accept note", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    const flag = page.locator(cal("chain-flag"))
+    assert.equal(await flag.count(), 1, "Only take 3 was made before an accept that touched its files")
+    assert(await flag.isVisible())
+    const summary = flag.locator("summary")
+    assert.equal(await summary.textContent(), "made before take 8 was accepted")
+    assert.match(await summary.getAttribute("title") ?? "", /Take 8 changed src\/atoms\/PicoButton\.css/)
+    assert.equal(await page.locator(`${cal("chain")}[data-chain="${(await viewChains(page))[2]?.id}"] ${cal("chain-flag")}`).count(), 1, "The flag is in its chain's head")
+    assert.equal(await flag.locator(".dr-flag__detail").isVisible(), false)
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    assert(await flag.locator(".dr-flag__detail").isVisible(), "The reason opens from the keyboard")
+    assert.match(await flag.locator(".dr-flag__detail").textContent() ?? "", /Accepting this take can undo that/)
+    const colours = await page.evaluate(() => ({
+      flag: getComputedStyle(/** @type {Element} */ (document.querySelector('[data-cal="chain-flag"] summary'))).color,
+      warn: getComputedStyle(/** @type {Element} */ (document.querySelector('[data-cal="chrome"]'))).getPropertyValue("--dr-warn").trim(),
+    }))
+    assert.equal(colours.flag, colours.warn, "The flag is in the warn colour")
+  } finally { await close() }
+  const record = await open(desk, "chainsAccepted")
+  try {
+    assert.equal(await record.page.locator(cal("chain-flag")).count(), 3, "After an accept of this part every chain is flagged")
+    assert.equal(await record.page.locator(`${cal("take-record")} .dr-record__lineage`).textContent(), "Chain: 7 ← from 3 (1 discarded)")
+    const full = record.page.locator(`${cal("take-record")} .dr-flag--full`)
+    assert.match(await full.textContent() ?? "", /made before take 8 was accepted.*Take 8 changed src\/pages\/PicoGameDetail\.css in this part/)
+    assert(await full.isVisible(), "The record writes the reason out")
+    assert.doesNotMatch(await record.page.locator(".dr-bar").textContent() ?? "", /also removes|made before/, "No accept note and no flag in the bar (choice 20)")
+  } finally { await record.close() }
+})
+await gate("chains: at RG353M widths a pair that does not fit shows one frame and swaps through core", async () => {
+  const fold = await open({ width: 1000, height: 680 }, "takes")
+  try {
+    const rule = await pairRule(fold.page)
+    assert.equal(rule.pairs, "fit", `The unfolded Fold holds an RG353M pair: ${JSON.stringify(rule)}`)
+    assert.equal(await fold.page.locator(cal("chain-solo")).count(), 0)
+  } finally { await fold.close() }
+  const { page, close } = await open(phone, "takes")
+  try {
+    const rule = await pairRule(page)
+    assert.equal(rule.pairs, "solo", `A phone does not hold an RG353M pair: ${JSON.stringify(rule)}`)
+    const [first] = await viewChains(page)
+    assert(first?.parent)
+    let [drawn] = await drawnChains(page)
+    assert.deepEqual(drawn?.showing, [first.shown], "The shown take, named by core's `solo`")
+    assert.deepEqual(drawn?.frames, [first.parent, first.shown], "The parent stays mounted, hidden")
+    const swap = page.locator(`${cal("chain-solo")}[data-chain="${first.id}"]`)
+    assert.equal(await swap.getAttribute("data-solo"), "Shown")
+    assert.equal(await swap.textContent(), "Show take 1")
+    assert.equal(await page.locator(`${cal("chain")}[data-chain="${(await viewChains(page))[2]?.id}"] ${cal("chain-solo")}`).count(), 0, "A chain of one has nothing to swap")
+    const shown = await page.locator(`${cal("frame")}[data-frame-key="${first.shown}"]`).elementHandle()
+    await swap.click()
+    assert.deepEqual((await called(page, "onChainSolo")).at(-1)?.args, [first.id, "Parent"], "The swap goes through core (choice 19)")
+    ;[drawn] = await drawnChains(page)
+    assert.deepEqual(drawn?.showing, [first.parent])
+    assert.equal(await swap.getAttribute("data-solo"), "Parent")
+    assert.equal(await swap.textContent(), "Show take 6")
+    assert(await shown?.evaluate(node => node.isConnected), "Swapping keeps the other frame mounted")
+    await swap.click()
+    assert.deepEqual((await called(page, "onChainSolo")).at(-1)?.args, [first.id, "Shown"])
+    const count = await mounts(page)
+    assert.deepEqual([count[first.parent], count[first.shown]], [1, 1], "No frame remounted")
+  } finally { await close() }
+  const parent = await open(phone, "chainsAccepted")
+  try {
+    const chains = await viewChains(parent.page)
+    const gap = chains.find(chain => chain.parent)
+    assert.equal(gap?.label, "7 ← from 3 (1 discarded)")
+    const drawn = (await drawnChains(parent.page)).find(chain => chain.id === gap?.id)
+    assert.deepEqual(drawn?.showing, [gap?.parent], "Core's remembered side: the parent")
+    assert.equal(drawn?.solo, "Parent")
+  } finally { await parent.close() }
+})
+await gate("chains: at ODIN 2 PORTAL widths a desk shows one frame of each chain, a wider screen the pair", async () => {
+  const { page, close } = await open(desk, "takes")
+  try {
+    assert.equal((await pairRule(page)).pairs, "fit")
+    await page.locator(`${cal("device")}[data-device="odin2portal"]`).click()
+    await page.waitForFunction(() => document.querySelector('[data-cal="canvas"]')?.getAttribute("data-pairs") === "solo")
+    const rule = await pairRule(page)
+    assert(rule.need > rule.width, `The rule is per device: ${JSON.stringify(rule)}`)
+    assert.equal(await page.locator(cal("chain-solo")).count(), 2, "Both chains with a parent get the swap")
+  } finally { await close() }
+  const wide = await open({ width: 1920, height: 1200 }, "chainsOdin")
+  try {
+    const rule = await pairRule(wide.page)
+    assert.equal(rule.pairs, "fit", `A 1920 px chrome holds an ODIN pair: ${JSON.stringify(rule)}`)
+    const [drawn] = await drawnChains(wide.page)
+    assert.equal(drawn?.showing.length, 2)
+  } finally { await wide.close() }
+})
+for (const fixture of ["takes", "chainHistory", "chainsAccepted", "chainsOdin"]) {
+  await gate(`chains: every take reachable in ${fixture} at every size`, async () => {
+    for (const size of [...LADDER, ...SIZES]) {
+      const { page, close } = await open(size, fixture)
+      const where = `${fixture} ${size.width}x${size.height}`
+      try {
+        const rule = await pairRule(page)
+        assert.equal(rule.pairs, rule.need <= rule.width + 0.01 ? "fit" : "solo", `${where}: the fit follows two frames and a gap: ${JSON.stringify(rule)}`)
+        /** Visible, with a box, and on screen or inside a region that scrolls. @param {import("playwright-core").Locator} node */
+        const reachable = node => node.evaluate(element => {
+          if (!(element instanceof HTMLElement) || !element.checkVisibility({ visibilityProperty: true })) return false
+          const rect = element.getBoundingClientRect()
+          if (rect.width < 1 || rect.height < 1) return false
+          if (rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1) return true
+          for (let at = element.parentElement; at; at = at.parentElement) {
+            const style = getComputedStyle(at)
+            if (/(auto|scroll)/.test(style.overflowY + style.overflowX) && (at.scrollHeight > at.clientHeight + 1 || at.scrollWidth > at.clientWidth + 1)) return true
+          }
+          return false
+        })
+        for (const chain of await viewChains(page)) {
+          // Unfold every history, so every take the chain has is a step.
+          const toggle = page.locator(`${cal("chain-history")}[data-chain="${chain.id}"]`)
+          if (chain.history._tag !== "None") {
+            assert(await reachable(toggle), `${where}: chain ${chain.label}'s history is in reach`)
+            if (chain.history._tag === "Folded") await toggle.evaluate(node => /** @type {HTMLElement} */ (node).click())
+          }
+          for (const key of [chain.parent, chain.shown]) {
+            if (!key) continue
+            const name = page.locator(`${cal("frame-select")}[data-frame-key="${key}"]`)
+            if (await reachable(name)) continue
+            const swap = page.locator(`${cal("chain-solo")}[data-chain="${chain.id}"]`)
+            assert(await swap.count() && await reachable(swap), `${where}: frame ${key} is neither drawn nor one swap away`)
+            await swap.evaluate(node => /** @type {HTMLElement} */ (node).click())
+            assert(await reachable(name), `${where}: after the swap frame ${key} shows`)
+          }
+        }
+        const steps = await page.evaluate(() => { const canvas = window.gallery.view().canvas; return canvas._tag === "Frames" ? canvas.chains.flatMap(chain => chain.history._tag === "Open" ? chain.history.steps.filter(step => step._tag === "Present").map(step => ({ chain: chain.id, take: step.take })) : []) : [] })
+        for (const step of steps) assert(await reachable(page.locator(`${cal("chain-step")}[data-chain="${step.chain}"][data-take="${step.take}"]`)), `${where}: take ${step.take} is in reach in its history`)
+        const takes = await page.evaluate(() => window.gallery.view().navigation.parts.flatMap(part => part.states.flatMap(state => state.takes.map(take => take.id))))
+        const onCanvas = new Set([...steps.map(step => step.take), ...(await viewChains(page)).map(chain => chain.take)])
+        assert.deepEqual(takes.filter(take => !onCanvas.has(take)), [], `${where}: every take of the state is on the canvas or a step of its chain`)
+      } finally { await close() }
+    }
+  })
+}
 
 // ---------------------------------------------------------------- 3. keyboard and focus
 await gate("keyboard: the New take menu opens, moves, chooses and returns focus", async () => {
@@ -607,7 +878,9 @@ await gate("keyboard: token lists preview with arrows, write on Enter, restore o
     await trigger.focus()
     await page.keyboard.press("ArrowDown")
     await page.locator(`${cal("knob-token")}[data-knob="accent"][aria-selected="true"]`).waitFor({ state: "visible" })
-    assert(await page.evaluate(() => document.activeElement?.getAttribute("data-token") === "--pico-pink"), "The list opens on the chosen token")
+    // The list moves focus in the next animation frame; under load that frame can come after the list shows.
+    await page.waitForFunction(() => document.activeElement?.getAttribute("data-token") === "--pico-pink", undefined, { timeout: 2000 })
+      .catch(() => assert.fail("The list opens on the chosen token"))
     await page.keyboard.press("ArrowDown")
     assert.deepEqual((await called(page, "onKnobInput")).at(-1)?.args, ["accent", "var(--pico-peach)"], "An arrow previews the next token")
     assert.equal((await called(page, "onKnobCommit")).filter(call => call.args[0] === "accent").length, 0, "An arrow writes nothing")
@@ -682,7 +955,7 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
 
 // ---------------------------------------------------------------- 5. reachability
 for (const size of [...LADDER, ...SIZES]) {
-  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed"]) {
+  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)
       try {

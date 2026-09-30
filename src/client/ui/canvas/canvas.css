@@ -1,6 +1,8 @@
 /* The canvas: the lit subject in the dark room. */
 .dr-canvas { position: relative; min-height: 0; min-width: 0; }
-.dr-canvas__scroll { height: 100%; overflow: auto; overscroll-behavior: contain; padding: var(--dr-gutter) var(--dr-pad); display: grid; align-content: safe center; justify-items: center; }
+/* The gutter is stable on both edges, so a scroll bar that comes and goes never changes the width
+   the canvas decides a pair's fit from, and the frames stay centred under the title. */
+.dr-canvas__scroll { height: 100%; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; padding: var(--dr-gutter) var(--dr-pad); display: grid; align-content: safe center; justify-items: center; }
 .dr-root[data-tools="dock"] .dr-canvas__scroll { padding-top: .75rem; }
 .dr-canvas[data-calibrating] .dr-canvas__scroll { visibility: hidden; }
 .dr-canvas__empty { max-width: 28rem; text-align: center; color: var(--dr-ink-2); font-size: var(--dr-fs-2); align-self: center; }
