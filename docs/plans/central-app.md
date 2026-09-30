@@ -1,31 +1,34 @@
 # Central app and headless plugin
 
-Status: planned on 2026-09-30. Nothing is built. Decision 37 in
-`docs/decisions.md` records the choice and its costs. This file holds the
-phases, the wire, and the gates.
+Status: planned on 2026-09-30. Nothing is built. The routing spike in
+`spikes/central-routing/` passed 15 of 15 checks in Chromium 149, over HTTP and
+over HTTPS through `caliper-tsnet` (`2f330a0`, results in `2122c55`). Decision 37
+in `docs/decisions.md` records the choice and its costs. This file holds the
+split of work, the wire, the phases and the gates.
 
 ## Split of work
 
 | Piece | Today | After |
 |---|---|---|
-| Chrome page, assets, install files | Plugin, at `/__caliper/` | Central app |
+| Chrome page, assets, install files | Plugin, at `/__caliper/` | Central app, at `/__caliper/` |
 | Project switcher | None | Central app |
+| Routing to projects | None | Central app: `/__caliper/p/<id>/`, `/__caliper/hmr/<id>`, a service worker |
 | AI settings | `caliper({ agent })` in `vite.config` | `$XDG_CONFIG_HOME/caliper/config.json` |
 | API key | Env of the shell that starts Vite | Env of the shell that starts the central app |
 | Planner, take agents, Send (`src/agent/`) | Plugin | Central app |
-| Agent renders (headless Chromium) | Plugin | Central app, against the project URL |
+| Agent renders (headless Chromium) | Plugin | Central app, against the project's Vite URL |
 | Take store, overlay, Accept, Discard | Plugin | Plugin |
 | Agent file access | In process, through `TakeStore` | Plugin endpoints that mirror `TakeStore` |
 | Project skills (`.agents/skills/` up to the Git root) | Plugin reads disk | Plugin endpoints |
 | User skills (`~/.agents/skills/`, `agent.skills`) | Plugin reads disk | Central app reads disk |
 | Checks | Plugin | Plugin |
 | Knobs writes, code pane files | Plugin | Plugin |
-| Knobs CSSOM reads, markup, runtime | Chrome reads `contentDocument` | Chrome asks the frame bridge |
+| Knobs CSSOM reads, markup, runtime | Chrome reads `contentDocument` | No change: frames share the chrome's origin |
 | `caliper-render` CLI | Reads the dev server | No change |
 
 ## Wire
 
-All of this is frozen in phase 0 and changes only with a protocol raise.
+Phase 0 freezes all of this. It changes only with a protocol raise.
 
 **Registry file.** `$XDG_STATE_HOME/caliper/servers/<pid>.json`, with
 `~/.local/state` when `XDG_STATE_HOME` is not set:
@@ -33,6 +36,7 @@ All of this is frozen in phase 0 and changes only with a protocol raise.
 ```json
 {
   "protocol": 1,
+  "id": "2e5778d2b4c4",
   "pid": 41234,
   "root": "/home/me/code/pico",
   "name": "pico",
@@ -43,58 +47,74 @@ All of this is frozen in phase 0 and changes only with a protocol raise.
 }
 ```
 
-The plugin writes the file to a temporary name and renames it. It removes the
-file on Vite `close`, `SIGINT` and `SIGTERM`. A crash leaves the file. The
-central app checks each pid with `process.kill(pid, 0)` and deletes files whose
-process is gone. A reused pid can make a dead entry look alive until a request
-fails. The central app then marks the project unreachable.
+`id` is the first 12 hex digits of the SHA-256 of the root's real path. The
+plugin writes the file to a temporary name and renames it. It removes the file
+on Vite `close`, `SIGINT` and `SIGTERM`. A crash leaves the file. The central
+app checks each pid with `process.kill(pid, 0)` and deletes files whose process
+is gone. A reused pid can make a dead entry look alive until a request fails.
+The central app then shows the project as unreachable. Two live entries with
+the same id (the same root served twice) are a problem that the switcher shows. The
+central app routes to neither.
+
+**Routing paths.**
+
+| Path | Owner | Behaviour |
+|---|---|---|
+| `/__caliper/` | Central app | The chrome. |
+| `/__caliper/sw.js` | Central app | The service worker, sent with `Service-Worker-Allowed: /`. |
+| `/__caliper/api/...` | Central app | Projects, takes, agent, settings. |
+| `/__caliper/p/<id>/<path>` | Central app | Forwards `<path>` to the project's Vite URL, adds the token, sets `Host` to the upstream host. Rewrites a root-relative `Location` header into the prefix. |
+| `<base>__caliper/hmr/<id>` upgrade | Central app | Forwards the WebSocket upgrade to the project. |
+| Any other path | Central app | 404 that names the path. With the service worker in control, only a hard reload reaches this. |
+
+**Service worker.** Scope `/`. It carries the spike's `sw.js` logic:
+
+- A navigation inside a frame is redirected to its prefix by the referrer.
+- A request from a client whose URL is under `/__caliper/p/<id>/` is fetched
+  from the prefixed path and returned under the original URL.
+- A web worker started from such a client gets a record in Cache storage,
+  `caliper-clients`, keyed by its client id. Records of gone clients are
+  deleted on activate.
+- Every other request passes through.
 
 **Token.** Requests send `Authorization: Bearer <token>`. The plugin compares
-tokens in constant time. `/__caliper/frame` and Vite's own module URLs need no
-token. `refuse()` in `src/http.js` drops its same-origin rule and checks the
-token instead. The plugin answers `OPTIONS` with `Access-Control-Allow-Origin`
-set to the request's origin and allows the `authorization` and `content-type`
-headers.
+tokens in constant time. `/__caliper/frame`, Vite's module URLs and the HMR
+socket need no token. `refuse()` in `src/http.js` checks the token for writes.
+The central app refuses a request other than GET or HEAD when its `Origin` is
+not its own.
 
 **Protocol.** `PROTOCOL` is one exported integer. The registry file and a new
-`GET /__caliper/hello` carry it. `hello` also returns the project name and
-root, so the central app can confirm that the token reached the right server.
+`GET /__caliper/hello` carry it. `hello` also returns the project id, name and
+root, so the central app can confirm that it reached the right server, and any
+setup problem, such as a refused `server.hmr` setting.
 
 **Remote take store.** The agent code takes a `TakeStore`. The central app gets
 `createRemoteTakeStore({ url, token })` with the same interface, so
 `src/agent/tools.js` and `src/agent/take-agents.js` change little. Each method
 becomes one endpoint under `/__caliper/store/`. The plugin runs the same fence
-checks it runs today, and adds a test for `..`, absolute paths and symlinks
-that leave the root.
+checks it runs today, and adds tests for `..`, absolute paths and symlinks that
+leave the root.
 
 **Skills.** `GET /__caliper/skills` lists the project's skill folders and their
 `SKILL.md` front matter. `GET /__caliper/skills/file?skill=<name>&path=<path>`
 returns one file inside one listed skill folder. The central app merges these
 with user skills, and the first name wins, as in decision 25.
 
-**Frame bridge.** The central app loads
-`/__caliper/frame?...&parent=<central origin>`. The bridge accepts messages
-only from `parent` and posts only to it. Each message has `{ id, type, ...}`
-and each reply echoes `id`. The phase 0 contract lists every type that knobs,
-markup and the runtime need. The contract derives the list from today's
-`contentDocument` and `contentWindow` uses in `src/client/app/knobs.ts`,
-`markup.ts` and `runtime.ts`.
-
-**Events.** The central app reads `/__caliper/events` with `fetch` and the
-token header, and parses the stream itself. Take progress no longer comes from
-the plugin. The central app sends it to its own chrome.
+**Events.** The chrome reads a project's `/__caliper/events` through
+`/__caliper/p/<id>/`. The central app adds the token. Take progress comes from
+the central app's own event stream, because the agent runs there.
 
 ## Phases
 
 | Phase | Result | Gate |
 |---|---|---|
-| 0 | Freeze the wire above as schemas and types: registry file, `hello`, remote take store, skills, bridge messages, `PROTOCOL`. No behaviour changes. | Strict types pass. Schema tests pass with one valid and one refused example for each message. Existing tests pass. |
-| 1 | The plugin writes and removes its registry file, requires the token, answers CORS and serves `hello`. The plugin puts the token in the chrome page it serves, so the chrome at `/__caliper/` keeps working. Until phase 5, anyone who can load that page can read the token. | A test starts two Vite servers and sees two registry files with modes `0600` and `0700`. Requests without the token get 401. A killed server leaves a file that the reader drops. |
-| 2 | Add the frame bridge. Move knobs, markup and the runtime from `contentDocument` to messages. The chrome still runs at `/__caliper/`. | `scripts/verify-knobs.mjs`, `scripts/verify-knobs-product.mjs` and the markup checks pass on the bridge. A grep finds no `contentDocument` or `contentWindow` in `src/client/app/`. A message from another origin gets no reply. |
-| 3 | Add the central app: a `caliper` bin that serves the chrome on one port, reads the registry, shows the switcher and connects to one project. The switcher's look is drawn before build under decision 34. It is not drawn here. | The central app shows Pico and a second project from two Vite servers, and switches between them without reload errors. A plugin with another protocol number shows in the switcher and does not connect. |
+| 0 | Freeze the wire above as schemas and types: registry file, routing paths, `hello`, remote take store, skills, `PROTOCOL`. No behaviour changes. | Strict types pass. Schema tests pass with one valid and one refused example for each message. Existing tests pass. |
+| 1 | The plugin writes and removes its registry file, serves `hello`, sets `server.hmr.path`, and refuses a project with its own `server.hmr` path, port, client port or server. It requires the token, and until phase 5 also accepts today's same-origin rule, so the chrome at `/__caliper/` keeps working without the token in its page. | A test starts two Vite servers and sees two registry files with modes `0600` and `0700`. A request without the token or a same origin gets 401. A killed server leaves a file that the reader drops. The existing chrome and HMR still work on a project's own port. |
+| 2 | Add the central app's routing: a `caliper` bin on one port that reads the registry, forwards `/__caliper/p/<id>/` and `/__caliper/hmr/<id>`, serves the service worker, and serves the existing Darkroom chrome with its project API base set to `/__caliper/p/<id>/__caliper/`. The project comes from the URL, for example `/__caliper/#project=<id>`. Move the spike's verifier to `scripts/verify-central.mjs` and delete `spikes/central-routing/`. | The spike's 15 checks pass against the real chrome, over HTTP and through `caliper-tsnet`. Two tabs show Pico and a second project. `scripts/verify-knobs-product.mjs` and the markup checks pass through the central app. |
+| 3 | Add the project switcher. Its look is drawn before the build, under decision 34. It is not drawn here. | The switcher lists live projects and updates when a server starts or stops. A plugin with another protocol number, a dead project and a duplicate id each show with the reason and do not connect. Switching in one tab leaves another tab on its own project. |
 | 4 | Move `src/agent/` into the central app. Add `createRemoteTakeStore`, the store and skills endpoints, and the config file. Remove the `agent` option from the plugin. | The central app makes three takes on Pico and accepts one. The fence tests refuse `..`, absolute and symlink escapes through the endpoints. A project `vite.config` with `agent` fails with a message that names the config file. |
-| 5 | Remove the chrome, assets and install files from the plugin. Move the install to the central app. Update the README, `vite.config.js` for self-hosting, the pinned tool and `caliper-render` docs. | `/__caliper/` on a project answers 404 with a message that names the central app. The install checks in `scripts/verify-pwa.mjs` pass against the central app. |
-| 6 | Deploy. Replace the installed legacy app (see below) with the checkout central app at `https://caliper.hummingbird-lake.ts.net`. Run the pinned central app on Caliper itself on another port. | `caliper.service` runs the central app, not `bin/caliper.mjs`. `caliper-proxy.service` serves it on the tailnet name `caliper`. The Fold opens the name, switches between Pico and a second project and makes a take in each. Both units are enabled and start after a reboot. Record the timing of 100 agent file reads through the plugin. |
+| 5 | Remove the chrome, assets, install files and the same-origin rule from the plugin. Move the install to the central app. Update the README, `vite.config.js` for self-hosting, the pinned tool and the `caliper-render` docs. | `/__caliper/` on a project's own port answers 404 with a message that names the central app. `scripts/verify-pwa.mjs` passes against the central app. |
+| 6 | Deploy. Replace the installed legacy app (see below) with the checkout central app at `https://caliper.hummingbird-lake.ts.net`. Run the pinned central app on Caliper itself on another port. | `caliper.service` runs the central app on port 3132, not `bin/caliper.mjs`. `caliper-proxy.service` serves it on the tailnet name `caliper`. On the Fold, two tabs show Pico and a second project, and each makes a take. Both units are enabled and start after a reboot. One Firefox run is recorded, pass or fail. Record the timing of 100 agent file reads through the plugin. |
 
 ## Replace the installed legacy app
 
@@ -105,36 +125,36 @@ Checked on 2026-09-30 on `zao`:
 | `~/.config/systemd/user/caliper.service` | Disabled, inactive. Runs `nix develop --command bun ./bin/caliper.mjs --port 3132 --browse-root /home/simonwjackson/code` in the main checkout. Drop-in `caliper.service.d/nofile.conf` sets `LimitNOFILE=65536`. |
 | `bin/caliper.mjs` | Gone from `main`. It was the legacy multi-project launcher, last seen in `feat-zero-touch-onboarding`. The unit cannot start today. |
 | `~/.config/systemd/user/caliper-proxy.service` | Disabled, inactive. Runs `~/.local/bin/caliper-tsnet --name caliper --state ~/.config/caliper-tsnet --upstream http://127.0.0.1:3132`. |
-| Tailnet node `caliper` (`100.76.133.33`) | Offline, last seen 23 days ago. The name `caliper.hummingbird-lake.ts.net` still resolves. |
-| `caliper-tsnet` source | Not found in this repository. The binary takes one `--upstream`. |
+| Tailnet node `caliper` (`100.76.133.33`) | Was offline for 23 days. The spike ran it by hand with `--upstream http://127.0.0.1:3140`, and it served the spike over HTTPS. |
+| `caliper-tsnet` | Source not found in this repository. It takes one `--upstream`, which is all the central app needs. |
 
-The replacement keeps the tailnet name, the tsnet state and `caliper-proxy.service`.
-It rewrites `caliper.service` to start the central app from the main checkout on
-port 3132, with no `--browse-root`. The central app starts no projects, so the
-launcher behaviour of the legacy app goes away. The deploy step writes both unit
-files from this repository, so the installed units stop drifting from the code.
-
-The central app must also work from another device, such as the Fold. A browser
-there cannot open a frame at `http://127.0.0.1:5173`, and an HTTPS page cannot
-embed an HTTP frame. Phase 3 must settle how a remote browser reaches frames and
-HMR before it builds the switcher. See the first open question.
+The replacement keeps the tailnet name, the tsnet state, the binary and
+`caliper-proxy.service`. It rewrites `caliper.service` to start the central app
+from the main checkout on port 3132, with no `--browse-root`. The central app
+starts no projects, so the launcher behaviour of the legacy app goes away. The
+deploy step writes both unit files from a `deploy/` directory in this
+repository, outside `src/` and the package, so the installed units stop
+drifting from the code.
 
 ## Not in scope
 
 - Starting, stopping or configuring a project from the central app.
-- Dev servers on another machine. Option B makes this possible later, but the
-  registry is a local file.
+- Dev servers on another machine. The agent's file access goes through plugin
+  endpoints, so this is possible later, but the registry is a local file.
 - Support for older protocol numbers.
+- Routing a product's own WebSockets.
+- Separate storage for each product.
 - Porting code from the `legacy` branch or `feat-zero-touch-onboarding`. Read
   them only for ideas.
 
 ## Open questions
 
-- How a browser on another device reaches a project's frames, modules and HMR
-  socket. This blocks phase 3. The candidates are a proxy in the central app with
-  one port for each project, or each dev server exposed on the tailnet itself.
-- Which fixed port the central app uses. Phase 3 picks it.
 - Whether checks move to the central app later, so only one shell needs
   `CHROMIUM`.
 - Whether take progress needs to survive a central app restart. Today it does
   not survive a Vite restart either.
+- How Firefox and Safari handle web worker requests and hard reloads through
+  the service worker. Phase 6 records one Firefox run.
+- Whether shared `localStorage` between products causes trouble in practice.
+  A fix would need a separate origin for each project, which decision 37 rules
+  out for now.
