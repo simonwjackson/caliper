@@ -56,7 +56,7 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
 }
 
 /** Phase 5 Step 0: each take is a chain of one until the UI worker draws chains. */
-export const singles = (frames: readonly FrameView[]): ChainView[] => frames.flatMap(item => item.take ? [{ id: item.key, shown: item.key, parent: null, take: item.take, label: item.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const } }] : [])
+export const singles = (frames: readonly FrameView[]): ChainView[] => frames.flatMap(item => item.take ? [{ id: item.key, shown: item.key, parent: null, take: item.take, label: item.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const }, solo: "Shown" as const }] : [])
 
 function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary {
   return {
@@ -65,7 +65,7 @@ function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary 
     run: { _tag: "Idle" }, files: ["src/pages/PicoGameDetail.css", "src/pages/PicoGameDetail.tsx"], nameIssue: "",
     direction: id === "6" ? { title: "Cover at half, title beside it", brief: "Cover and title share the top half side by side; the actions move to one row under both." } : null,
     unavailableReason: "", accept: enabled, discard: enabled, stop: blocked("The take is not running"), prepareAlternate: enabled, kind: "Experiment",
-    lineage: "", acceptNote: "", flag: { _tag: "Current" },
+    lineage: "", flag: { _tag: "Current" },
     ...overrides,
   }
 }

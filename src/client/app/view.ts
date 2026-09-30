@@ -43,13 +43,18 @@ export function takeSummary(state: AppState, take: TakeView): TakeSummary {
     ...chainFacts(state, take),
   }
 }
-function chainFacts(state: AppState, take: TakeView): Pick<TakeSummary, "lineage" | "acceptNote" | "flag"> {
-  const chain = planChains((state.takes?.takes ?? []).map(chainTake), take).find(item => item.shown.take === take.take && item.shown.created === take.created)
+const chainWith = (state: AppState, take: TakeView) => planChains((state.takes?.takes ?? []).map(chainTake), take).find(item => item.shown.take === take.take && item.shown.created === take.created)
+function chainFacts(state: AppState, take: TakeView): Pick<TakeSummary, "lineage" | "flag"> {
+  const chain = chainWith(state, take)
   return {
     lineage: chain && (chain.parent || chain.discarded) ? lineageLabel(chain) : "",
-    acceptNote: chain ? acceptNote(chain, take) : "",
     flag: flagView(acceptFlag(chainTake(take), accepted)),
   }
+}
+/** Planner choice 20 (answered B): what Accept also removes, said only in its confirmation. */
+export function acceptConfirmNote(state: AppState, take: TakeView): string {
+  const chain = chainWith(state, take)
+  return chain ? acceptNote(chain, take) : ""
 }
 function setupRow<T>(label: string, value: Derivation<T>, show: (value: T) => string[]): SetupRow {
   return value._tag === "Failed" ? { label, status: "Failed", values: [], provenance: value.hint, problems: [value.reason] }
@@ -129,6 +134,8 @@ function canvas(state: AppState, markup: MarkupRegion): CanvasView {
         id: chain.id, shown: addTake(shown), parent: parentKey, take: shown.take, label: lineageLabel(chain),
         history: chain.steps.length > 1 ? { _tag: "Folded", label: historyLabel(chain.steps.length) } : { _tag: "None" },
         flag: flagView(acceptFlag(chainTake(shown), accepted)),
+        // Phase 5 core keeps the swap per chain (choice 19); until then a pair that does not fit shows its newest take.
+        solo: "Shown",
       })
     }
     return { _tag: "Frames", mode: "Takes", title: part.name, frames, chains }

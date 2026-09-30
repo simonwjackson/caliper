@@ -124,8 +124,10 @@ export type ChainStepView =
  * `parent` are keys of frames in the same canvas. `parent` is null for a chain
  * of one, or when every ancestor is discarded. The shown take is the selected
  * take when it is in this chain, otherwise the chain's newest take. The UI
- * decides, per device and from the canvas size, whether the pair fits or falls
- * back to the shown take with the parent one tap away (decision 35).
+ * decides, per device and from the canvas size, whether the pair fits (decision
+ * 35). When it does not, the UI draws only the frame that `solo` names, and one
+ * control calls `onChainSolo` to swap (planner choice 19, answered B: core owns
+ * the swap, so it survives a reload).
  */
 export type ChainView = {
   /** Opaque. Stable while the chain exists, including after its first take is discarded. */
@@ -140,6 +142,8 @@ export type ChainView = {
     | { readonly _tag: "Open"; readonly label: string; readonly steps: readonly ChainStepView[] }
   /** The shown take's flag. */
   readonly flag: AcceptFlag
+  /** Which frame a pair that does not fit shows. Always "Shown" when `parent` is null. */
+  readonly solo: "Shown" | "Parent"
 }
 export type CanvasView =
   | { readonly _tag: "Empty"; readonly message: string }
@@ -184,8 +188,6 @@ export type TakeSummary = {
   readonly kind: "Experiment" | "Alternate"
   /** Phase 5. The chain heading for this take, "" for a take with no ancestors. */
   readonly lineage: string
-  /** Phase 5. What Accept also removes, for example "Accept also removes takes 1 and 4 of this chain.", or "". */
-  readonly acceptNote: string
   readonly flag: AcceptFlag
 }
 export type IntegrationView =
@@ -351,9 +353,12 @@ export type ChromeActions = {
   readonly onRemoveDirection: (id: string) => void
   /** Fold or unfold a chain's history. Selecting a step uses `onTake`. */
   readonly onChainHistory: (chain: string, open: boolean) => void
+  /** Which frame a chain shows when its pair does not fit. Core ignores "Parent" for a chain with no parent. */
+  readonly onChainSolo: (chain: string, solo: "Shown" | "Parent") => void
   /**
    * Accept/follow flush the editor first. Core owns confirmation and exact-take revalidation.
    * Phase 5: accept removes every take in the accepted take's chain; discard removes one take.
+   * Core's confirmation names the other takes it removes (planner choice 20, answered B).
    */
   readonly onAccept: (take: string) => void
   readonly onDiscard: (take: string) => void

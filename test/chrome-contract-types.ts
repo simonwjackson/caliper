@@ -34,6 +34,9 @@ export function typeProbes(view: ChromeView, actions: ChromeActions): void {
   const sending: import("../src/client/ui/contract").MarkupSend = { _tag: "Sending", label: "Sending…", availability: { _tag: "Enabled" } }
   void sending
   actions.onChainHistory("1@100", true)
+  actions.onChainSolo("1@100", "Parent")
+  // @ts-expect-error The fallback names a side; it is not a toggle.
+  actions.onChainSolo("1@100")
   // @ts-expect-error Opening or folding is explicit; there is no toggle.
   actions.onChainHistory("1@100")
   if (view.canvas._tag === "Frames") {

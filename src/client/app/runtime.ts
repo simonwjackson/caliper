@@ -5,7 +5,7 @@ import { Type } from "typebox"
 import { ChecksViewSchema, CodeChangeSchema, FrameReportSchema, PlanSchema, parseProject, parseTakes, parseWire } from "./wire"
 import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable } from "./state"
 import type { AppState, Ask, Plan, Preferences, Submission } from "./state"
-import { toChromeView, takeSummary, disabled } from "./view"
+import { toChromeView, takeSummary, disabled, acceptConfirmNote } from "./view"
 import { sameState, subjectsOf, stateExists } from "../scenarios.js"
 import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
 import { imageName, imageProblem, MAX_IMAGES } from "../images.js"
@@ -203,7 +203,7 @@ export function createChromeApp(input: RuntimeInput) {
     const summary = takeSummary(state, take)
     const availability = operation === "alternate" ? summary.prepareAlternate : summary[operation]
     if (!enabled(availability)) return
-    if (operation === "accept" && !input.confirm?.(`Replace the real files with ${takeName(take)} (take ${take.take})?\n\n${take.files.join("\n")}`)) return
+    if (operation === "accept" && !input.confirm?.(`Replace the real files with ${takeName(take)} (take ${take.take})?\n\n${take.files.join("\n")}${acceptConfirmNote(state, take) ? `\n\n${acceptConfirmNote(state, take)}` : ""}`)) return
     if (operation === "discard" && take.files.length && !input.confirm?.(`Throw away take ${take.take} and its changes to ${take.files.length} files?`)) return
     await takeRequest(operation, async () => {
       const response = await input.request<unknown>(`takes/${id}/${operation}`, {})
@@ -239,6 +239,7 @@ export function createChromeApp(input: RuntimeInput) {
     ...markup.actions,
     // Phase 5 Step 0: every chain has one step until the wire carries lineage, so there is no history to open.
     onChainHistory: () => notify(new Error("Chain history is not connected yet.")),
+    onChainSolo: () => notify(new Error("Chain history is not connected yet.")),
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
       // An open pane that another pane covers comes to the front; only a pane already in front closes.

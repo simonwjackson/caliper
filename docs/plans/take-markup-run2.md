@@ -159,7 +159,9 @@ The user did not make these. Each one is reversible before its phase starts.
     take's current files, so a flag can appear or go away as the take is
     edited.
 
-Phase 5 Step 0 added these. They are not user-confirmed.
+Phase 5 Step 0 added these. The user answered them on 2026-09-30: "your
+call" for 16 to 18, so they stay as proposed; B for 19 and B for 20, which
+changed them from the proposal.
 
 16. **Which take a chain shows.** The pair shows the selected take when it is
     in the chain, otherwise the chain's newest take. Selecting an older take
@@ -171,13 +173,17 @@ Phase 5 Step 0 added these. They are not user-confirmed.
 18. **History steps.** Every take the chain has had, oldest first: present
     takes, and discarded ancestors known from any member's `lineage`. A
     discarded take that no present take descends from is not listed.
-19. **The small-screen fallback is UI layout.** When the canvas cannot hold
-    two frames and a gap at true size for the current device, the UI shows the
-    shown take and one control to show its parent instead. That toggle is UI
-    state, like the draft's disclosure; it does not reach core.
-20. **Accept says what it removes.** `TakeSummary.acceptNote` names the other
-    takes of the chain ("Accept also removes takes 1 and 4 of this chain."),
-    and core's accept confirmation repeats it.
+19. **The small-screen fallback swap goes through core (answered B).** When
+    the canvas cannot hold two frames and a gap at true size for the current
+    device, the UI shows only the frame that `ChainView.solo` names, and one
+    control calls `onChainSolo(chain, "Shown" | "Parent")`. Core keeps the
+    choice per chain, so it survives a reload. Whether it fits stays a UI
+    layout decision. Rejected: a UI-only toggle, forgotten on reload.
+20. **Accept names what it removes, in its confirmation only (answered
+    B).** Core's accept confirmation adds "Accept also removes takes 1 and 4
+    of this chain." The bar shows no extra line. Rejected: a note next to
+    Accept (one more line in the bar) and no warning. Cost: you learn it only
+    after you press Accept.
 
 ## Phases
 
@@ -385,12 +391,16 @@ Contract (`src/client/ui/contract.ts`): `CanvasView.Frames.chains`, a list of
 heading, history `None | Folded | Open` with `ChainStepView` steps, and an
 `AcceptFlag`). In Takes mode every take frame belongs to exactly one chain,
 as its `shown` or its `parent`; other modes have no chains. `TakeSummary` adds
-`lineage`, `acceptNote` and `flag`. One action, `onChainHistory(chain,
-open)`. A present step selects its take with the existing `onTake`. Four
-hooks: `chain`, `chain-history`, `chain-step`, `chain-flag`.
+`lineage` and `flag`. Two actions, `onChainHistory(chain, open)` and
+`onChainSolo(chain, solo)`; `ChainView.solo` names the frame a pair that does
+not fit shows. A present step selects its take with the existing `onTake`.
+Five hooks: `chain`, `chain-history`, `chain-step`, `chain-flag`,
+`chain-solo`. Core's accept confirmation already names the other takes of the
+chain (choice 20).
 
 Policy (`src/takes/chains.js`): `planChains`, `lineageLabel`, `acceptFlag`
-(choice 15, answer C), `acceptNote`, `historyLabel` and `flagWords`. Pure and
+(choice 15, answer C), `acceptNote` (for the confirmation), `historyLabel`
+and `flagWords`. Pure and
 browser-safe. Take identity is number plus creation time. The chrome's view,
 the fixtures and the server use the same module.
 
@@ -412,6 +422,9 @@ Core (`src/client/app/**`, server, agent):
   confirmation names what else it removes (choice 20). Discard stays one take.
 - History open state per chain in `AppState`; `onChainHistory` sets it;
   `view.ts` emits `Open` with steps.
+- The fallback side per chain (choice 19): `onChainSolo` sets it, it is kept
+  across a reload (for example with the other remembered preferences), and
+  `view.ts` emits it as `ChainView.solo`.
 - Selecting an older take keeps the Takes canvas and moves it into the pair
   (choice 16).
 
@@ -424,7 +437,8 @@ UI (`src/client/ui/**`, `scripts/ui/**`):
   the flag, as drawn in the `takes` mockup state.
 - The per-device fallback (choice 19), with every take reachable at the size
   ladder.
-- `acceptNote` next to Accept, and `lineage` and `flag` in the take record.
+- `lineage` and `flag` in the take record. No accept note in the bar
+  (choice 20).
 
 ### Freeze
 
@@ -438,7 +452,8 @@ reference `src/client/ui/Chrome.tsx`. Requests go to the coordinator.
 
 Typecheck passes. `test/chains.test.ts` 14 pass (every rule above, including
 reused take numbers, a discarded root and branches). Contract tests and Send
-policy: 33 pass. `verify:chrome-contract`: 19 scenarios, 110 hooks, including
+policy: 33 pass. `verify:chrome-contract`: 19 scenarios, 111 hooks, including
+the fallback swap through core, no accept note in the bar,
 the pair order, no frame for a discarded take, one frame per take, the flag,
 history open and fold with the frames kept, a discarded step that cannot be
 selected, and the accept note. `verify-markup.mjs --darkroom` 7 of 7.

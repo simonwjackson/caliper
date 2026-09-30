@@ -16,7 +16,7 @@ export function createChromeScenario(initial: ChromeView) {
     onMarkMode: record("onMarkMode"), onMarkPoint: record("onMarkPoint"), onMarkRegion: record("onMarkRegion"),
     onMarkEdit: record("onMarkEdit"), onMarkNote: record("onMarkNote"), onMarkRemove: record("onMarkRemove"),
     onMarkReplace: record("onMarkReplace"), onDraftOpen: record("onDraftOpen"), onSend: record("onSend"),
-    onChainHistory: record("onChainHistory"),
+    onChainHistory: record("onChainHistory"), onChainSolo: record("onChainSolo"),
     onTool: record("onTool"), onNavOpen: record("onNavOpen"), onFilter: record("onFilter"), onPart: record("onPart"), onPartExpanded: record("onPartExpanded"),
     onState: record("onState"), onCompare: record("onCompare"), onTake: record("onTake"), onContext: record("onContext"), onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"), onDevice: record("onDevice"),
     onPrompt: record("onPrompt"), onCount: record("onCount"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanBack: record("onPlanBack"), onDirection: record("onDirection"), onRemoveDirection: record("onRemoveDirection"),
@@ -28,6 +28,11 @@ export function createChromeScenario(initial: ChromeView) {
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,
+    onChainSolo(chain, solo) {
+      observed.onChainSolo(chain, solo)
+      if (view.canvas._tag !== "Frames") return
+      update({ ...view, canvas: { ...view.canvas, chains: view.canvas.chains.map(item => item.id === chain && (solo === "Shown" || item.parent) ? { ...item, solo } : item) } })
+    },
     onChainHistory(chain, open) {
       observed.onChainHistory(chain, open)
       if (view.canvas._tag !== "Frames") return

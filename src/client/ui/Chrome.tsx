@@ -187,12 +187,13 @@ function Chain({ chain, view, actions }: { chain: ChainView } & ChromeProps) {
     {chain.history._tag === "Open" && <ol>{chain.history.steps.map(step => <li key={`${step.take}-${step._tag}`}>{step._tag === "Present"
       ? <button type="button" data-cal={CAL.chainStep} data-take={step.take} aria-current={step.selected} onClick={() => actions.onTake(step.take)}>{step.label}</button>
       : <span data-cal={CAL.chainStep} data-take={step.take} aria-disabled="true">{step.label}</span>}</li>)}</ol>}
+    {chain.parent && <button type="button" data-cal={CAL.chainSolo} data-chain={chain.id} data-solo={chain.solo}
+      onClick={() => actions.onChainSolo(chain.id, chain.solo === "Shown" ? "Parent" : "Shown")}>{chain.solo === "Shown" ? "Show the parent when the pair does not fit" : "Show the newest take when the pair does not fit"}</button>}
     {pair.map(frame => <DeviceFrame key={frame.key} frame={frame} view={view} actions={actions} />)}
   </section>
 }
 function TakeActions({ take, actions }: { take: NonNullable<ChromeView["focusedTake"]>; actions: ChromeActions }) {
   return <div data-take={take.id}>
-    {take.acceptNote && <p>{take.acceptNote}</p>}
     {take.kind === "Experiment" && <Action hook={CAL.accept} take={take.id} availability={take.accept} action={() => actions.onAccept(take.id)}>Accept</Action>}
     <Action hook={CAL.discard} take={take.id} availability={take.discard} action={() => actions.onDiscard(take.id)}>Discard</Action>
   </div>

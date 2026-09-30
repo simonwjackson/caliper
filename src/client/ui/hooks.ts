@@ -13,7 +13,7 @@ export const CAL = Object.freeze({
   literals: "literals", literal: "literal", literalOpen: "literal-open", literalName: "literal-name", literalHome: "literal-home", literalCancel: "literal-cancel", promote: "literal-promote",
   checks: "checks", checksClose: "checks-close", checkRun: "check-run", checkStop: "check-stop", checkRow: "check-row", finding: "check-finding", evidence: "check-evidence", imageReviewed: "check-image-reviewed", approveImage: "check-image-approve", report: "check-report",
   markup: "markup", markMode: "mark-mode", markSurface: "mark-surface", markPoint: "mark-point", markRegion: "mark-region", markPin: "mark-pin", markEdit: "mark-edit", markNote: "mark-note", markRemove: "mark-remove", markReplace: "mark-replace", markEditorClose: "mark-editor-close", draftOpen: "draft-open", draft: "mark-draft", send: "marks-send",
-  chain: "chain", chainHistory: "chain-history", chainStep: "chain-step", chainFlag: "chain-flag",
+  chain: "chain", chainHistory: "chain-history", chainStep: "chain-step", chainFlag: "chain-flag", chainSolo: "chain-solo",
   calibration: "calibration", calibrationScale: "calibration-scale", calibrationReset: "calibration-reset", calibrationClose: "calibration-close",
 } as const)
 export type CalHook = typeof CAL[keyof typeof CAL]
