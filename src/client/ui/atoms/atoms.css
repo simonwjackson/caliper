@@ -1,0 +1,68 @@
+/* Atoms: the button, the chevron, icons, notices and the card. Tokens come from ../tokens.css. */
+
+:is(.dr-root, .dr-scope), :is(.dr-root, .dr-scope) * { box-sizing: border-box; }
+:is(.dr-root, .dr-scope) {
+  font: 400 var(--dr-fs-2)/1.4 var(--dr-sans); font-feature-settings: "tnum";
+  color: var(--dr-ink); background: var(--dr-room);
+  -webkit-font-smoothing: antialiased;
+}
+:is(.dr-root, .dr-scope) :where(button, input, select, textarea) { font: inherit; color: inherit; }
+:is(.dr-root, .dr-scope) :where(button) { cursor: pointer; }
+:is(.dr-root, .dr-scope) :where(button:disabled) { cursor: not-allowed; }
+:is(.dr-root, .dr-scope) :where(h1, h2, h3, h4, p, ul, ol, figure, pre) { margin: 0; }
+:is(.dr-root, .dr-scope) :where(code, pre, kbd) { font-family: var(--dr-mono); font-size: .92em; }
+/* Focus is ink, like selection. It shows only for keyboard focus. */
+:is(.dr-root, .dr-scope) :focus-visible { outline: 2px solid var(--dr-accent); outline-offset: 2px; }
+.dr-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.dr-icon { width: 18px; height: 18px; flex: none; }
+.dr-icon--mark { width: 26px; height: 26px; }
+.dr-chev { display: inline-block; width: 5px; height: 5px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); flex: none; }
+.dr-chev--down { transform: rotate(135deg); margin-top: -3px; }
+[aria-expanded="true"] > .dr-chev:not(.dr-chev--down), [open] > summary .dr-chev { transform: rotate(135deg); }
+
+/* --- the button ----------------------------------------------------------- */
+.dr-btn { border: 1px solid var(--dr-edge-2); background: transparent; border-radius: 5px; padding: .3rem .6rem; font-size: var(--dr-fs-1); line-height: 1.35; white-space: nowrap; display: inline-flex; gap: .35rem; align-items: center; }
+.dr-btn:hover:not(:disabled) { border-color: var(--dr-ink-3); }
+.dr-btn--primary { background: var(--dr-accent); color: var(--dr-accent-ink); border-color: var(--dr-accent); font-weight: 600; }
+.dr-btn--primary:hover:not(:disabled) { border-color: var(--dr-accent); }
+.dr-btn--quiet { border-color: transparent; color: var(--dr-ink-2); }
+.dr-btn--link { border: 0; padding: 0; color: var(--dr-ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.dr-btn--danger { color: var(--dr-bad); border-color: color-mix(in srgb, var(--dr-bad) 45%, transparent); }
+.dr-btn--small { padding: .12rem .45rem; font-size: 11px; }
+.dr-btn:disabled { color: var(--dr-ink-3); border-color: var(--dr-edge); background: transparent; font-weight: 400; }
+.dr-btn[aria-pressed="true"] { background: var(--dr-card-2); border-color: var(--dr-ink-3); }
+
+/* --- notices ------------------------------------------------------------- */
+.dr-notices { list-style: none; padding: 0; display: grid; gap: .2rem; }
+.dr-notice { font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.dr-notice--warning { color: var(--dr-warn); }
+.dr-notice--error { color: var(--dr-bad); }
+
+/* --- the card ------------------------------------------------------------ */
+.dr-panel { background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.dr-panel__handle { display: none; }
+.dr-panel__head { display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem; border-bottom: 1px solid var(--dr-edge); min-width: 0; }
+.dr-panel__title { font-weight: 600; font-size: var(--dr-fs-2); white-space: nowrap; }
+.dr-panel__sub { color: var(--dr-ink-3); font-size: var(--dr-fs-1); margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-panel__close { margin-left: .4rem; border: 0; background: none; color: var(--dr-ink-2); padding: .2rem; border-radius: 4px; display: grid; place-items: center; flex: none; }
+.dr-panel__close:hover { color: var(--dr-ink); background: var(--dr-card-2); }
+.dr-panel__close .dr-icon { width: 14px; height: 14px; }
+.dr-panel__head > .dr-panel__sub + .dr-panel__close { margin-left: .4rem; }
+.dr-panel__head > .dr-panel__title + .dr-panel__close,
+.dr-panel__head > .dr-panel__title + .dr-btn { margin-left: auto; }
+.dr-panel__body { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+/* A sheet: over the lower half, a handle, rounded top corners. */
+
+/* A thin line that moves while something runs. Still when the reader asks for less motion. */
+.dr-working { position: relative; height: 2px; overflow: hidden; background: var(--dr-edge); border-radius: 1px; }
+.dr-working::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 30%; background: var(--dr-ink-2); animation: dr-working 1.4s ease-in-out infinite; }
+@keyframes dr-working { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .dr-working::after { animation: none; width: 100%; opacity: .5; } }
+.dr-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--dr-ink-3); flex: none; }
+.dr-dot--good { background: var(--dr-good); }
+.dr-dot--bad { background: var(--dr-bad); }
+.dr-dot--warn { background: var(--dr-warn); }
+.dr-dot--running { background: var(--dr-ink-2); animation: dr-pulse 1.2s ease-in-out infinite; }
+@keyframes dr-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .dr-dot--running { animation: none; } }

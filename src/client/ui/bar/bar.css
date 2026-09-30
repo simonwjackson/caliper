@@ -1,0 +1,63 @@
+/* The bar under the canvas: the focused take, the prompt, one primary button. */
+.dr-bar { background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: .55rem .7rem; min-width: 0; position: relative; z-index: 3; }
+.dr-root[data-tools="dock"] .dr-bar { padding: .45rem .5rem; }
+.dr-bar__row { display: grid; gap: .6rem 10px; align-items: center; min-width: 0; }
+.dr-bar[data-rows="1"] .dr-bar__row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lead field go"; }
+.dr-bar[data-rows="1"] .dr-bar__row:not(:has(> .dr-bar__lead)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "field go"; }
+.dr-bar[data-rows="2"] .dr-bar__row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "field field" "lead go"; }
+.dr-bar[data-rows="2"] .dr-bar__row:not(:has(> .dr-bar__lead)) { grid-template-areas: "field field" "go go"; }
+.dr-bar[data-rows="3"] .dr-bar__row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "field" "lead" "go"; }
+.dr-bar__lead { grid-area: lead; width: max-content; max-width: 100%; }
+.dr-bar[data-rows="1"] .dr-bar__lead { padding-right: .6rem; border-right: 1px solid var(--dr-edge); }
+.dr-bar__field { grid-area: field; display: grid; gap: .4rem; min-width: 0; }
+.dr-bar__go { grid-area: go; display: flex; gap: .4rem; align-items: center; width: max-content; max-width: 100%; justify-self: end; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.dr-bar__input { display: flex; gap: .3rem; align-items: stretch; border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: 6px; min-width: 0; }
+.dr-bar__input:focus-within { outline: 2px solid var(--dr-accent); outline-offset: -1px; }
+.dr-bar__input textarea { flex: 1; min-width: 0; border: 0; background: none; outline: 0; resize: none; min-height: 2.3rem; max-height: 6rem; padding: .45rem .6rem; color: var(--dr-ink); line-height: 1.4; field-sizing: content; }
+.dr-bar__input textarea:focus-visible { outline: none; }
+.dr-bar__input textarea::placeholder { color: var(--dr-ink-3); }
+.dr-bar__input[data-disabled] textarea { color: var(--dr-ink-3); }
+.dr-bar__clip { border: 0; background: none; color: var(--dr-ink-3); width: 2rem; display: grid; place-items: center; flex: none; border-radius: 5px 0 0 5px; }
+.dr-bar__clip:hover:not(:disabled) { color: var(--dr-ink); }
+.dr-bar__clip .dr-icon { width: 16px; height: 16px; }
+.dr-bar__attachments { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+.dr-bar__attachments li { position: relative; }
+.dr-bar__attachments img { display: block; height: 2.2rem; border-radius: 3px; box-shadow: 0 0 0 1px var(--dr-edge-2); image-rendering: pixelated; }
+.dr-bar__unattach { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: var(--dr-ink); color: var(--dr-card); padding: 0; display: grid; place-items: center; }
+.dr-bar__unattach .dr-icon { width: 10px; height: 10px; stroke-width: 2.2; }
+.dr-bar__agent { margin-bottom: .45rem; font-size: var(--dr-fs-1); color: var(--dr-ink-3); }
+.dr-bar__agent--failed { color: var(--dr-bad); border-left: 3px solid var(--dr-bad); padding: .15rem 0 .15rem .55rem; }
+.dr-bar__agent--failed b { font-weight: 600; }
+.dr-bar__hint { color: var(--dr-ink-2); }
+.dr-bar .dr-notices { margin-bottom: .4rem; }
+.dr-bar__planning { display: inline-flex; gap: .45rem; align-items: center; margin-right: .3rem; }
+.dr-bar .dr-btn--primary { padding: .42rem .8rem; }
+.dr-bar .dr-btn { padding-block: .42rem; }
+
+/* What you can do with one take. */
+.dr-take-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.dr-take-actions__name { display: inline-flex; gap: .5rem; align-items: center; margin-right: .3rem; white-space: nowrap; }
+.dr-take-actions__name b { color: var(--dr-ink); font-weight: 600; }
+.dr-take-actions__run { display: inline-flex; gap: .35rem; align-items: center; color: var(--dr-ink-2); }
+.dr-take-actions .dr-icon--stop { width: 12px; height: 12px; }
+
+/* New take: one primary button and its menu. */
+.dr-split { display: inline-flex; }
+.dr-split__main { border-radius: 5px 0 0 5px; }
+.dr-split__more.dr-btn { border-radius: 0 5px 5px 0; border-left: 1px solid color-mix(in srgb, var(--dr-accent-ink) 25%, transparent); padding: .42rem .55rem; display: grid; place-items: center; height: 100%; }
+.dr-split__menu { min-width: min(18rem, calc(100vw - 1rem)); }
+.dr-split__item { border: 0; background: none; text-align: left; padding: .45rem .6rem; border-radius: 5px; color: var(--dr-ink-2); display: flex; gap: .5rem; align-items: center; width: 100%; }
+.dr-split__item:hover:not(:disabled), .dr-split__item:focus-visible { background: var(--dr-card-2); color: var(--dr-ink); outline: none; }
+.dr-split__item[aria-checked="true"] { color: var(--dr-ink); background: var(--dr-card-2); }
+.dr-split__item[aria-checked="true"]::after { content: ""; margin-left: auto; width: 8px; height: 4px; border: solid currentColor; border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg) translateY(-2px); }
+.dr-split__item:disabled { color: var(--dr-ink-3); }
+.dr-split__item kbd { margin-left: auto; padding-left: 1rem; font: inherit; color: var(--dr-ink-3); white-space: nowrap; }
+.dr-split__item--quiet { font-size: 11px; color: var(--dr-ink-3); }
+.dr-split__rule { border: 0; border-top: 1px solid var(--dr-edge); margin: .3rem .2rem; }
+.dr-split__agent { padding: .45rem .6rem .1rem; color: var(--dr-ink-3); font-size: 11px; }
+.dr-split__skills ul { list-style: none; padding: 0 .6rem .4rem; display: grid; gap: .3rem; font-size: 11px; color: var(--dr-ink-3); }
+.dr-split__skills b { color: var(--dr-ink-2); font-weight: 600; }
+.dr-split__where { display: block; }
+.dr-split__problem { color: var(--dr-warn); }
+/* While New take cannot start, its menu half is not lit either; the menu still opens. */
+.dr-split:has(> .dr-split__main:disabled) .dr-split__more.dr-btn { background: transparent; color: var(--dr-ink-2); border-color: var(--dr-edge); }

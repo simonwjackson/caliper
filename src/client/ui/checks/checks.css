@@ -1,0 +1,69 @@
+/* The Checks window: one total line, failures first, passes folded. */
+.dr-checks { border: 0; padding: 0; background: var(--dr-card); color: var(--dr-ink); border-radius: var(--dr-radius); box-shadow: var(--dr-lift);
+  width: min(40rem, calc(100% - 2rem)); max-width: none; max-height: calc(100% - 2rem); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; font-size: var(--dr-fs-2); }
+.dr-checks[open] { display: grid; }
+.dr-checks::backdrop { background: rgb(0 0 0 / .45); }
+.dr-root[data-tools="dock"] .dr-checks { width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
+.dr-checks__head { display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem; border-bottom: 1px solid var(--dr-edge); min-width: 0; }
+.dr-checks__head h2 { font-size: var(--dr-fs-2); font-weight: 600; }
+.dr-checks__target { color: var(--dr-ink-3); font-size: var(--dr-fs-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-checks__close { margin-left: auto; border: 0; background: none; color: var(--dr-ink-2); font-weight: 500; font-size: var(--dr-fs-1); padding: .2rem .3rem; border-radius: 4px; }
+.dr-checks__close:hover { color: var(--dr-ink); }
+.dr-checks__body { overflow: auto; overscroll-behavior: contain; min-height: 0; padding: .6rem 0 .8rem; display: grid; align-content: start; }
+.dr-checks__sum { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: baseline; padding: .5rem 1.1rem 1rem; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.dr-checks__sum b { color: var(--dr-ink); font-size: var(--dr-fs-3); font-weight: 600; }
+.dr-checks__run { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: .4rem; align-self: center; }
+.dr-checks__run .dr-icon--stop { width: 12px; height: 12px; }
+.dr-checks__bad { color: var(--dr-bad); }
+.dr-checks__working { margin: -.4rem 1.1rem .8rem; }
+.dr-checks .dr-notices { padding: 0 1.1rem .6rem; }
+.dr-checks__stale { margin: 0 1.1rem .6rem; color: var(--dr-warn); font-size: var(--dr-fs-1); }
+
+.dr-check { font-size: var(--dr-fs-1); }
+.dr-check--no { background: color-mix(in srgb, var(--dr-bad) 7%, transparent); border-radius: 6px; margin: 0 .5rem .3rem; }
+.dr-check--warn { background: color-mix(in srgb, var(--dr-warn) 6%, transparent); border-radius: 6px; margin: 0 .5rem .3rem; }
+.dr-check__summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .3rem .4rem; align-items: baseline; padding: .7rem 1.1rem .8rem; }
+.dr-check--no > .dr-check__summary, .dr-check--warn > .dr-check__summary { padding-inline: .6rem; }
+.dr-check__summary::-webkit-details-marker { display: none; }
+.dr-check__glyph { font-weight: 700; text-align: center; font-size: var(--dr-fs-2); }
+.dr-check__glyph--ok { color: var(--dr-good); }
+.dr-check__glyph--no { color: var(--dr-bad); }
+.dr-check__glyph--na { color: var(--dr-ink-3); font-weight: 400; }
+.dr-check__glyph--warn { color: var(--dr-warn); }
+.dr-check__name { font-size: var(--dr-fs-2); color: var(--dr-ink); }
+.dr-check__name b { font-weight: 600; }
+.dr-check__device, .dr-check__take { color: var(--dr-ink-3); }
+.dr-check__reason { grid-column: 2; color: var(--dr-ink-2); }
+.dr-check--no .dr-check__reason { color: var(--dr-bad); }
+.dr-check__body { display: grid; gap: .5rem; padding: 0 1.1rem .8rem calc(1.1rem + 1.8rem); }
+.dr-check--no .dr-check__body, .dr-check--warn .dr-check__body { padding-left: calc(.6rem + 1.8rem); padding-right: .6rem; }
+.dr-check__findings { list-style: none; padding: 0; display: grid; gap: .35rem; }
+.dr-finding { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .4rem; align-items: baseline; margin-left: -1.8rem; }
+.dr-finding__label { color: var(--dr-ink-2); }
+.dr-finding__word { color: var(--dr-ink-3); }
+.dr-finding__detail { display: block; color: var(--dr-ink-3); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dr-check__note { color: var(--dr-ink-3); }
+.dr-check__provenance { color: var(--dr-ink-3); font-size: 11px; }
+.dr-check__images { display: flex; flex-wrap: wrap; gap: .8rem; }
+.dr-check__images figure { display: grid; gap: .25rem; }
+.dr-check__images img, .dr-check__shot img { display: block; max-width: 12rem; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / .7); image-rendering: pixelated; }
+.dr-check__images figcaption { font-size: 11px; color: var(--dr-ink-3); }
+.dr-check__images figcaption b { color: var(--dr-ink-2); font-weight: 500; }
+.dr-check__shot { display: grid; gap: .2rem; margin-top: .3rem; color: var(--dr-ink-3); font-size: 11px; text-decoration: none; }
+.dr-check__approve { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; }
+.dr-check__approve .dr-check__note { flex-basis: 100%; }
+.dr-check__reviewed { display: inline-flex; gap: .4rem; align-items: center; color: var(--dr-ink-2); }
+.dr-check__reviewed input { accent-color: var(--dr-ink); }
+.dr-checks__passed { margin-top: .6rem; }
+.dr-checks__passed > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1.4rem auto auto; justify-content: start; gap: .3rem .4rem; align-items: center; padding: .6rem 1.1rem; color: var(--dr-ink-2); font-size: var(--dr-fs-1); }
+.dr-checks__passed > summary::-webkit-details-marker { display: none; }
+.dr-checks__passed > summary .dr-chev { color: var(--dr-ink-3); }
+.dr-checks__passed .dr-check__summary { padding: .35rem 1.1rem; }
+.dr-checks__passed .dr-check__name { color: var(--dr-ink-2); }
+.dr-checks__passed .dr-check__reason { color: var(--dr-ink-3); }
+.dr-checks__coverage { margin: .8rem 1.1rem 0; font-size: var(--dr-fs-1); color: var(--dr-ink-3); }
+.dr-checks__coverage > summary { list-style: none; cursor: pointer; display: inline-flex; gap: .4rem; align-items: center; }
+.dr-checks__coverage > summary::-webkit-details-marker { display: none; }
+.dr-checks__coverage p { margin-top: .4rem; color: var(--dr-ink-2); }
+.dr-checks__detail { font: 11px var(--dr-mono); }
+.dr-checks__report { margin: .6rem 1.1rem 0; font-size: var(--dr-fs-1); color: var(--dr-ink-2); text-underline-offset: 2px; justify-self: start; }

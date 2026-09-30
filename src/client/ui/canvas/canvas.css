@@ -1,0 +1,84 @@
+/* The canvas: the lit subject in the dark room. */
+.dr-canvas { position: relative; min-height: 0; min-width: 0; }
+.dr-canvas__scroll { height: 100%; overflow: auto; overscroll-behavior: contain; padding: var(--dr-gutter) var(--dr-pad); display: grid; align-content: safe center; justify-items: center; }
+.dr-root[data-tools="dock"] .dr-canvas__scroll { padding-top: .75rem; }
+.dr-canvas[data-calibrating] .dr-canvas__scroll { visibility: hidden; }
+.dr-canvas__empty { max-width: 28rem; text-align: center; color: var(--dr-ink-2); font-size: var(--dr-fs-2); align-self: center; }
+.dr-canvas__subject { display: grid; gap: 1.1rem; justify-items: center; width: 100%; min-width: 0; }
+.dr-canvas__title { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: .15rem .6rem; font-size: var(--dr-fs-2); color: var(--dr-ink-3); text-align: center; max-width: 100%; }
+.dr-canvas__title h1 { color: var(--dr-ink); font-weight: 600; font-size: var(--dr-fs-3); }
+.dr-canvas__ask { color: var(--dr-ink-2); font-style: italic; }
+.dr-root[data-tools="dock"] .dr-canvas__ask { flex-basis: 100%; }
+.dr-canvas__note { color: var(--dr-ink-2); font-size: var(--dr-fs-1); text-align: center; }
+
+/* Every frame is one column of the same width, one gap apart. */
+.dr-frames { display: grid; grid-template-columns: repeat(auto-fit, var(--dr-col, 17.5rem)); justify-content: center; gap: var(--dr-gap-now); width: 100%; border: 0; margin: 0; padding: 0; min-width: 0; }
+.dr-frame { display: grid; gap: .7rem; align-content: start; justify-items: start; width: var(--dr-col); min-width: 0; margin: 0; position: relative; }
+.dr-root[data-tools="dock"] .dr-frame { gap: .45rem; }
+.dr-frame__screen { position: relative; overflow: hidden; border-radius: 2px; background: #000; box-shadow: 0 0 0 1px rgb(0 0 0 / .8); }
+.dr-frame:not([data-take]) .dr-frame__screen { box-shadow: var(--dr-glow); }
+.dr-frame[data-selected] .dr-frame__screen { box-shadow: 0 0 0 1px rgb(0 0 0 / .8), 0 0 0 3px var(--dr-accent); }
+.dr-frame[data-verdict="Failed"] .dr-frame__screen { box-shadow: 0 0 0 1px var(--dr-bad), 0 0 0 1px rgb(0 0 0 / .8); }
+.dr-frame__page { position: absolute; top: 0; left: 0; border: 0; display: block; transform-origin: 0 0; background: transparent; }
+.dr-frame__working { width: 100%; margin-top: -.35rem; }
+.dr-frame__caption { display: flex; gap: .45rem; align-items: center; width: 100%; min-width: 0; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.dr-frame__name { display: inline-flex; gap: .45rem; align-items: baseline; min-width: 0; border: 0; background: none; padding: 0; color: inherit; text-align: left; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.dr-frame__name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-frame__name:hover, .dr-frame__name[aria-current="true"] { color: var(--dr-ink); text-decoration-color: currentColor; }
+.dr-frame:not([data-take]) .dr-frame__name[aria-current="true"] { text-decoration-color: transparent; }
+.dr-frame__take { color: var(--dr-ink); font-weight: 600; }
+.dr-frame__real { color: var(--dr-ink); font-weight: 600; }
+.dr-frame__note { display: inline-flex; gap: .35rem; align-items: center; flex: none; color: var(--dr-ink-2); }
+.dr-frame__note--bad { color: var(--dr-bad); }
+.dr-frame__note--warn { color: var(--dr-warn); }
+.dr-frame__note--quiet { color: var(--dr-ink-3); }
+
+/* A direction waiting in the slot its take will fill. */
+.dr-slot { position: relative; width: var(--dr-col); min-height: var(--dr-row); margin: 0; min-width: 0; border-radius: 4px; border: 1px solid var(--dr-edge-2); background: var(--dr-card); padding: .8rem .9rem; display: grid; grid-template-rows: auto 1fr auto; gap: .5rem; align-self: start; }
+.dr-slot--strange { border-style: dashed; border-color: var(--dr-ink-2); }
+.dr-slot__title { border: 0; border-bottom: 1px solid var(--dr-edge-2); background: none; padding: 0 1.6rem .35rem 0; min-width: 0; text-overflow: ellipsis; color: var(--dr-ink); font-size: var(--dr-fs-2); font-weight: 600; }
+.dr-slot__title:focus-visible, .dr-slot__brief:focus-visible { outline: none; border-bottom-color: var(--dr-ink); }
+.dr-slot__brief { border: 0; background: none; resize: none; color: var(--dr-ink-2); font-size: var(--dr-fs-1); line-height: 1.5; padding: 0; min-height: 4.5em; field-sizing: content; }
+.dr-slot__brief:focus-visible { box-shadow: inset 0 -1px 0 var(--dr-ink); }
+.dr-slot__why { font-size: 11px; color: var(--dr-ink-3); }
+.dr-slot__remove { position: absolute; top: .55rem; right: .6rem; border: 0; background: none; color: var(--dr-ink-3); padding: .1rem; border-radius: 4px; display: grid; place-items: center; }
+.dr-slot__remove:hover { color: var(--dr-ink); background: var(--dr-card-2); }
+.dr-slot__remove .dr-icon { width: 12px; height: 12px; }
+.dr-slot--planning { grid-template-rows: 1fr auto; align-content: center; place-items: center; border-style: dashed; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
+.dr-slot--planning .dr-working { width: 60%; }
+.dr-root[data-tools="dock"] .dr-slot { padding: .55rem .6rem; }
+.dr-root[data-tools="dock"] .dr-slot__title { font-size: var(--dr-fs-1); }
+.dr-root[data-tools="dock"] .dr-slot__brief { font-size: 11px; }
+
+/* One line in the dimmest ink: the devices as the switch, the width, true size. */
+.dr-caption { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .25rem .5rem; font-size: var(--dr-fs-1); color: var(--dr-ink-3); max-width: 100%; }
+.dr-caption__devices { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: .1rem .6rem; }
+.dr-caption__device { border: 0; background: none; padding: .15rem 0; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
+.dr-caption__device:hover { color: var(--dr-ink-2); }
+.dr-caption__device[aria-pressed="true"] { color: var(--dr-ink); font-weight: 600; }
+.dr-caption__sep { color: var(--dr-edge-2); }
+.dr-caption__fit--scaled { color: var(--dr-warn); }
+.dr-caption__calibrate { border: 0; background: none; padding: 0; color: var(--dr-ink-2); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; }
+.dr-root[data-tools="dock"] .dr-caption__devices { flex-basis: 100%; }
+.dr-root[data-tools="dock"] .dr-caption__sep:first-of-type { display: none; }
+.dr-root[data-tools="dock"] .dr-caption__fit--scaled { flex-basis: 100%; text-align: center; }
+
+/* A frame's failure, in readable copy under the frames (decision 8). */
+.dr-canvas__problems { display: grid; gap: .6rem; width: min(44rem, 100%); }
+.dr-problem { background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: .7rem .9rem; font-size: var(--dr-fs-1); border-left: 3px solid var(--dr-bad); min-width: 0; }
+.dr-problem--warning { border-left-color: var(--dr-warn); }
+.dr-problem b { color: var(--dr-bad); font-size: var(--dr-fs-2); font-weight: 600; }
+.dr-problem--warning b { color: var(--dr-warn); }
+.dr-problem pre { margin-top: .3rem; color: var(--dr-ink-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.45; }
+
+/* Calibrate: the credit-card outline over the canvas. */
+.dr-calibrate { position: absolute; inset: 0; overflow: auto; display: grid; align-content: safe center; justify-items: center; gap: 1rem; padding: var(--dr-gutter) .75rem; }
+.dr-calibrate__card { flex: none; border: 2px dashed var(--dr-ink); display: grid; grid-template-rows: 1fr 1fr; place-items: center; color: var(--dr-ink); font-size: var(--dr-fs-2); box-shadow: var(--dr-glow); padding: .5rem; }
+.dr-calibrate__card b { font-weight: 600; align-self: end; }
+.dr-calibrate__card span { color: var(--dr-ink-2); font-size: var(--dr-fs-1); align-self: end; }
+.dr-calibrate__panel { background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: .8rem 1rem; width: min(30rem, 100%); display: grid; gap: .6rem; }
+.dr-calibrate__panel p { color: var(--dr-ink-2); font-size: var(--dr-fs-1); }
+.dr-calibrate__scale { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: center; font-size: var(--dr-fs-1); }
+.dr-calibrate__scale output { color: var(--dr-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dr-calibrate .dr-calibrate__state { color: var(--dr-ink-3); }
+.dr-calibrate__actions { display: flex; gap: .4rem; justify-content: flex-end; }

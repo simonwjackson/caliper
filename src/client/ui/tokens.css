@@ -1,0 +1,111 @@
+/*
+ * Darkroom design tokens (decision 34). The room is dark, or a pale lightbox
+ * in light mode, and the part is the only colour on screen. There is no
+ * accent hue: selection, focus and the live knob use ink.
+ *
+ * Each tunable token is registered with @property, so the browser types it
+ * and Caliper's knobs (decisions 23 and 26) can tune the chrome when it opens
+ * its own source. A doc comment above a declaration is a knob hint. The
+ * registered initial-value is the dark room's value in px; the rule below
+ * sets the value the chrome uses, so the rule's declaration is the knob.
+ *
+ * Public Sans is OFL-licensed and served with the chrome, never from a CDN.
+ */
+@font-face { font-family: "Public Sans"; src: url("./assets/PublicSans.ttf") format("truetype"); font-weight: 100 900; font-display: block; }
+
+@property --dr-gutter { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --dr-gap { syntax: "<length>"; inherits: true; initial-value: 40px; }
+@property --dr-parts-w { syntax: "<length>"; inherits: true; initial-value: 264px; }
+@property --dr-side-w { syntax: "<length>"; inherits: true; initial-value: 336px; }
+@property --dr-radius { syntax: "<length>"; inherits: true; initial-value: 8px; }
+@property --dr-fs-1 { syntax: "<length>"; inherits: true; initial-value: 12px; }
+@property --dr-fs-2 { syntax: "<length>"; inherits: true; initial-value: 13px; }
+@property --dr-fs-3 { syntax: "<length>"; inherits: true; initial-value: 15px; }
+@property --dr-room { syntax: "<color>"; inherits: true; initial-value: #121316; }
+@property --dr-card { syntax: "<color>"; inherits: true; initial-value: #1C1D21; }
+@property --dr-card-2 { syntax: "<color>"; inherits: true; initial-value: #24262B; }
+@property --dr-edge { syntax: "<color>"; inherits: true; initial-value: #303237; }
+@property --dr-edge-2 { syntax: "<color>"; inherits: true; initial-value: #3E4148; }
+@property --dr-ink { syntax: "<color>"; inherits: true; initial-value: #ECECEE; }
+@property --dr-ink-2 { syntax: "<color>"; inherits: true; initial-value: #A3A6AE; }
+@property --dr-ink-3 { syntax: "<color>"; inherits: true; initial-value: #6E717A; }
+@property --dr-good { syntax: "<color>"; inherits: true; initial-value: #7FD39A; }
+@property --dr-warn { syntax: "<color>"; inherits: true; initial-value: #E9B565; }
+@property --dr-bad { syntax: "<color>"; inherits: true; initial-value: #FF7B72; }
+@property --dr-bad-bg { syntax: "<color>"; inherits: true; initial-value: #2A1715; }
+
+:is(.dr-root, .dr-scope) {
+  /** The one gutter: from the room's edge to a panel, and between panels. @label Gutter @min 0.5 @max 2 @step 0.125 */
+  --dr-gutter: 1rem;
+  /** The one gap between frames on the canvas. @label Canvas gap @min 1 @max 4 @step 0.25 */
+  --dr-gap: 2.5rem;
+  /** Width of the parts panel beside the canvas. Layout thresholds assume 16.5. @label Parts width @min 14 @max 22 @step 0.5 */
+  --dr-parts-w: 16.5rem;
+  /** Width of the side panel: Knobs or a take's record. Layout thresholds assume 21. @label Side width @min 18 @max 28 @step 0.5 */
+  --dr-side-w: 21rem;
+  /** Corner radius of every card. @label Card radius @min 0 @max 16 @step 1 */
+  --dr-radius: 8px;
+  /** Small type: captions, meta lines and buttons. @label Small type @min 10 @max 14 @step 0.5 */
+  --dr-fs-1: 12px;
+  /** Body type. @label Body type @min 11 @max 16 @step 0.5 */
+  --dr-fs-2: 13px;
+  /** The canvas title. @label Title type @min 13 @max 20 @step 0.5 */
+  --dr-fs-3: 15px;
+  /** The room behind every card. @label Room */
+  --dr-room: #121316;
+  /** An opaque card with one edge. @label Card */
+  --dr-card: #1C1D21;
+  /** A raised row inside a card, and selection. @label Card raised */
+  --dr-card-2: #24262B;
+  /** @label Edge */
+  --dr-edge: #303237;
+  /** @label Edge strong */
+  --dr-edge-2: #3E4148;
+  /** Text and the one mark colour: selection, focus and the live knob. @label Ink */
+  --dr-ink: #ECECEE;
+  /** @label Ink quiet */
+  --dr-ink-2: #A3A6AE;
+  /** The dimmest ink: the line under a frame. @label Ink dim */
+  --dr-ink-3: #6E717A;
+  /** @label Good */
+  --dr-good: #7FD39A;
+  /** @label Warn */
+  --dr-warn: #E9B565;
+  /** @label Bad */
+  --dr-bad: #FF7B72;
+  /** @label Bad ground */
+  --dr-bad-bg: #2A1715;
+
+  --dr-accent: var(--dr-ink);
+  --dr-accent-ink: var(--dr-room);
+  --dr-lift: 0 0 0 1px var(--dr-edge), 0 12px 32px -14px rgb(0 0 0 / .9);
+  --dr-glow: 0 0 0 1px rgb(0 0 0 / .8), 0 0 70px -10px rgb(255 255 255 / .10);
+  --dr-scrim: rgb(0 0 0 / .5);
+  --dr-sans: "Public Sans", system-ui, sans-serif;
+  --dr-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+
+/* The pale lightbox: the same tokens, lit. The OS choice applies unless the chrome is told a scheme. */
+@media (prefers-color-scheme: light) {
+  :is(.dr-root, .dr-scope):not([data-scheme="dark"]) {
+    --dr-room: #DDDEE2; --dr-card: #F7F7F9; --dr-card-2: #ECEDF0; --dr-edge: #C9CBD2; --dr-edge-2: #B3B6BF;
+    --dr-ink: #17181C; --dr-ink-2: #5C5F68; --dr-ink-3: #8B8E97;
+    --dr-good: #1F7A45; --dr-warn: #9B5E00; --dr-bad: #B3261E; --dr-bad-bg: #F6E3E1;
+    --dr-accent-ink: var(--dr-card);
+    --dr-lift: 0 0 0 1px var(--dr-edge), 0 10px 28px -14px rgb(23 24 28 / .35);
+    --dr-glow: 0 0 0 1px rgb(0 0 0 / .5), 0 20px 50px -20px rgb(23 24 28 / .5);
+    --dr-scrim: rgb(23 24 28 / .35);
+    color-scheme: light;
+  }
+}
+:is(.dr-root, .dr-scope)[data-scheme="light"] {
+  --dr-room: #DDDEE2; --dr-card: #F7F7F9; --dr-card-2: #ECEDF0; --dr-edge: #C9CBD2; --dr-edge-2: #B3B6BF;
+  --dr-ink: #17181C; --dr-ink-2: #5C5F68; --dr-ink-3: #8B8E97;
+  --dr-good: #1F7A45; --dr-warn: #9B5E00; --dr-bad: #B3261E; --dr-bad-bg: #F6E3E1;
+  --dr-accent-ink: var(--dr-card);
+  --dr-lift: 0 0 0 1px var(--dr-edge), 0 10px 28px -14px rgb(23 24 28 / .35);
+  --dr-glow: 0 0 0 1px rgb(0 0 0 / .5), 0 20px 50px -20px rgb(23 24 28 / .5);
+  --dr-scrim: rgb(23 24 28 / .35);
+  color-scheme: light;
+}

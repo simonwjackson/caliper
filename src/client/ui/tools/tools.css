@@ -1,0 +1,32 @@
+/* The tools: a rail at the left on a desk, a dock at the bottom on a phone. */
+.dr-tools { grid-area: tools; background: var(--dr-card); position: relative; z-index: 10; }
+.dr-tools[data-place="rail"] { display: flex; flex-direction: column; align-items: center; gap: .25rem; padding: .6rem 0; border-right: 1px solid var(--dr-edge); min-height: 0; }
+.dr-tools__mark { width: 26px; height: 26px; margin-bottom: .75rem; color: var(--dr-ink); display: grid; place-items: center; flex: none; }
+.dr-tool { width: 2.25rem; height: 2.25rem; flex: none; border: 0; border-radius: 6px; background: none; color: var(--dr-ink-3); display: grid; place-items: center; position: relative; padding: 0; }
+.dr-tool:hover { color: var(--dr-ink-2); }
+.dr-tools[data-place="rail"] .dr-tool[aria-pressed="true"] { background: var(--dr-card-2); color: var(--dr-ink); box-shadow: inset 3px 0 0 var(--dr-accent); border-radius: 0 6px 6px 0; }
+.dr-tools[data-place="rail"] .dr-tool[aria-expanded="true"]:not([aria-haspopup]) { color: var(--dr-ink-2); }
+.dr-tools[data-place="rail"] > [data-tool="calibrate"], .dr-tools[data-place="rail"] > .dr-menu-button { margin-top: auto; }
+.dr-tools[data-place="rail"] > [data-tool="calibrate"] ~ .dr-menu-button { margin-top: 0; }
+.dr-tool__pip { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--dr-ink-2); border: 2px solid var(--dr-card); }
+.dr-tool__pip--good { background: var(--dr-good); }
+.dr-tool__pip--bad { background: var(--dr-bad); }
+.dr-tool__pip--warn { background: var(--dr-warn); }
+.dr-tool__pip--running { background: var(--dr-ink-2); animation: dr-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .dr-tool__pip--running { animation: none; } }
+
+.dr-tools[data-place="dock"] { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--dr-edge); padding-bottom: env(safe-area-inset-bottom); }
+.dr-tools[data-place="dock"] .dr-tool, .dr-tools[data-place="dock"] .dr-menu-button > .dr-tool { width: 100%; height: auto; border-radius: 0; padding: .5rem 0 .45rem; display: grid; justify-items: center; gap: .15rem; font-size: 11px; }
+.dr-tools[data-place="dock"] .dr-menu-button { display: grid; }
+.dr-tools[data-place="dock"] .dr-tool .dr-icon { width: 19px; height: 19px; }
+.dr-tool__label { white-space: nowrap; }
+/* On the dock one thing is marked: what is in front. The open drawer, or the active tool. */
+.dr-tools[data-place="dock"] .dr-tool:is([aria-pressed="true"], [aria-expanded="true"]:not([aria-haspopup])) { color: var(--dr-ink); }
+.dr-tools[data-place="dock"] .dr-tool:is([aria-pressed="true"], [aria-expanded="true"]:not([aria-haspopup]))::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--dr-accent); }
+.dr-tools[data-place="dock"] .dr-tool__pip { top: 6px; right: calc(50% - 14px); }
+
+.dr-tools__menu { min-width: 11rem; }
+.dr-tools__item { border: 0; background: none; text-align: left; padding: .45rem .6rem; border-radius: 5px; color: var(--dr-ink-2); display: flex; gap: .6rem; align-items: center; position: relative; }
+.dr-tools__item:hover, .dr-tools__item:focus-visible { background: var(--dr-card-2); color: var(--dr-ink); }
+.dr-tools__item[aria-current="true"] { color: var(--dr-ink); font-weight: 600; }
+.dr-tools__item .dr-tool__pip { position: static; margin-left: auto; }
