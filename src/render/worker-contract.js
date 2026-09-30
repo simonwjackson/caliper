@@ -3,9 +3,17 @@ import { Type } from "typebox"
 import { AuthoredResultSchema, CheckRunSchema } from "../authored/contract.js"
 import { StateExpectationsSchema } from "../expectation-contract.js"
 import { CheckReportSchema, CheckSchema } from "./check-contract.js"
+import { MarkAnchorSchema } from "../takes/marks-contract.js"
 
 const Text = Type.String()
-const Job = Type.Object({ part: Text, state: Text, device: Text, take: Type.Optional(Text) })
+const Job = Type.Object({
+  part: Text, state: Text, device: Text, take: Type.Optional(Text),
+  annotations: Type.Optional(Type.Array(Type.Object({ letter: Text, anchor: MarkAnchorSchema }))),
+})
+const Annotated = Type.Object({
+  png: Text,
+  marks: Type.Array(Type.Object({ letter: Text, found: Type.Boolean(), visible: Type.Boolean() })),
+})
 const fields = { url: Text, jobs: Type.Array(Job), out: Text, executablePath: Text }
 export const WorkerRequestSchema = Type.Union([
   Type.Object({
@@ -65,6 +73,7 @@ export const RenderTransportSchema = Type.Object({
   checkRun: Type.Optional(CheckRunSchema),
   expectations: Type.Optional(StateExpectationsSchema),
   expectationProblems: Type.Optional(Type.Array(Text)),
+  annotated: Type.Optional(Annotated),
 })
 export const WorkerReplySchema = Type.Union([
   Type.Object({ type: Type.Literal("render"), results: Type.Array(RenderTransportSchema) }),

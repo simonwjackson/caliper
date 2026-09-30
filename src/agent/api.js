@@ -18,6 +18,8 @@ import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { skillsStatus } from "./skills.js"
 import { MAX_IMAGES_BODY, readImages } from "./images.js"
+import { createMarkupApi } from "./markup.js"
+import { createMarkStore } from "../takes/marks.js"
 import { Type } from "typebox"
 
 /**
@@ -49,11 +51,13 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  *   serverUrl: () => string | null,
  *   chromium: string | undefined,
  *   onChange: () => void,
+ *   onMarks?: (draft: import("../takes/marks-contract.js").Draft) => void,
  *   skills?: () => SkillCatalog,
  * }} input
  *   `skills` finds the skills each new agent, the planner and the chrome see.
+ *   `onMarks` hears every new draft of marks.
  */
-export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, skills = () => ({ skills: [], problems: [] }) }) {
+export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, onMarks = () => {}, skills = () => ({ skills: [], problems: [] }) }) {
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
   const shutdown = new AbortController()
   /** @type {Set<Promise<unknown>>} */
@@ -131,6 +135,21 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     skills,
   })
 
+  const markup = createMarkupApi({
+    store,
+    marks: createMarkStore(store.root),
+    agents,
+    project,
+    validateTake: validateTakeContext,
+    render: async jobs => {
+      if (!chromium) throw new Error("Caliper cannot draw marks on a render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+      const url = serverUrl()
+      if (url === null) throw new Error("The dev server is not listening yet.")
+      return trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `marks-${Date.now()}`), executablePath: chromium, signal: shutdown.signal }))
+    },
+    onDraft: onMarks,
+  })
+
   /** Checks hold a take still until they finish, including follow-up and discard. */
   const checking = new Set()
 
@@ -199,6 +218,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
    * @returns {Promise<boolean>} false when the path is not the API's
    */
   const handle = async (path, request, response) => {
+    if (await markup.handle(path, request, response)) return true
     if (path === "/takes.json") {
       json(response, 200, snapshot())
       return true
@@ -342,7 +362,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     agents.editByHand(take, file, content)
   }
 
-  return { handle, snapshot, close, editByHand }
+  return { handle, snapshot, marks: markup.draft, close, editByHand }
 }
 
 /**

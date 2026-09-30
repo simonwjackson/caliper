@@ -60,13 +60,18 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   let closed = false
   const assertOpen = () => { if (closed) throw new Error("The takes API is closed.") }
 
-  /** @param {string} take @param {string} prompt @param {readonly AttachedImage[]} [images] */
-  const launch = (take, prompt, images = []) => {
+  /**
+   * @param {string} take
+   * @param {string} prompt
+   * @param {readonly AttachedImage[]} [images]
+   * @param {boolean} [brief] the prompt is a markup brief: it replaces the first message, and the images are its pictures
+   */
+  const launch = (take, prompt, images = [], brief = false) => {
     // Keep the images before the run starts, so the take shows them even if the model fails.
     const attached = store.addImages(take, images).map((kept, index) => ({ ...kept, bytes: /** @type {AttachedImage} */ (images[index]).bytes }))
     const controller = new AbortController()
     controllers.set(take, controller)
-    const task = send(take, prompt, attached, controller.signal)
+    const task = send(take, prompt, attached, controller.signal, brief)
     pending.set(take, task)
     void task.finally(() => {
       if (pending.get(take) === task) {
@@ -84,9 +89,34 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    */
   const start = ({ prompt, images = [], ...ask }) => {
     assertOpen()
-    const take = store.create({ ...ask, ...(ask.direction ? { name: ask.direction.title } : {}) })
+    const take = store.create({ ...ask, prompt, ...(ask.direction ? { name: ask.direction.title } : {}) })
     launch(take, prompt, images)
     return take
+  }
+
+  /**
+   * Start a take made from marks: a copy of its parent, whose agent gets the
+   * brief and the parent's pictures with the marks drawn in, not the usual
+   * first message. The parent does not change.
+   *
+   * @param {string} parent
+   * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
+   * @returns {string} the take number
+   */
+  const fork = (parent, record) => {
+    assertOpen()
+    assertIdle(parent)
+    return store.fork(parent, record)
+  }
+
+  /**
+   * @param {string} take a take `fork` made
+   * @param {string} brief
+   * @param {readonly AttachedImage[]} pictures
+   */
+  const startMarkup = (take, brief, pictures) => {
+    assertOpen()
+    launch(take, brief, pictures, true)
   }
 
   /**
@@ -186,8 +216,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {string} prompt
    * @param {ReadonlyArray<AttachedImage & { file: string }>} images attached to this prompt, already kept
    * @param {AbortSignal} signal
+   * @param {boolean} brief
    */
-  const send = async (take, prompt, images, signal) => {
+  const send = async (take, prompt, images, signal, brief) => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     /** @type {Live} */
     const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [], edited: new Set() }
@@ -214,7 +245,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       const named = namedSkills(entry, prompt)
       if (named.length > 0) onChange()
       const attached = imageContent(images, "this prompt")
-      const content = first
+      const content = first && brief
+        ? [{ type: /** @type {const} */ ("text"), text: prompt }, ...images.map(image => ({ type: /** @type {const} */ ("image"), data: image.bytes.toString("base64"), mimeType: image.mimeType }))]
+        : first
         ? [
           ...await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take),
           // A new agent in an old take, after a restart, has not seen the take's earlier images.
@@ -302,7 +335,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     return files
   }
 
-  return { start, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, fork, startMarkup, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**

@@ -25,10 +25,21 @@ import { IMAGE_TYPES } from "../client/images.js"
  * @typedef {import("../types").Direction} Direction
  *   One way to answer a prompt, from the planner. `title` is a few words; `brief` says what the take tries.
  * @typedef {import("../types").TakeImage} TakeImage
- * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[] }} TakeRecord
+ * @typedef {{ take: string, created: number }} TakeIdentity
+ *   Take numbers are reused after a discard; the creation time tells two takes with one number apart.
+ * @typedef {import("./marks-contract.js").Mark} Mark
+ * @typedef {{ source: TakeIdentity, marks: Mark[] }} MarkupPass
+ *   The marks one Send took from one take.
+ * @typedef {{ prompt: string | null, direction?: Direction, lineage: TakeIdentity[], passes: MarkupPass[] }} TakeHistory
+ *   What a take made from marks knows of its chain, as text. `lineage` runs from the chain's
+ *   first take to the parent. `passes` are the earlier passes, oldest first; the take's own
+ *   pass is its `marks`. A take keeps its own copy, so no discard or accept can break it.
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[], prompt?: string, parent?: TakeIdentity, chain?: TakeIdentity, history?: TakeHistory, marks?: Mark[] }} TakeRecord
  *   `part` and `state` identify the editing subject. Optional `context` identifies a declared
  *   composed preview. It does not restrict edits beyond the existing take-folder fence.
  *   Names, planner directions, and integration review metadata remain independent of that context.
+ *   `prompt` is the first prompt. A take made from marks has `parent`, `chain` (the chain's first
+ *   take), `history` and the `marks` it was sent, and no prompt of its own.
  */
 
 export const CALIPER_DIR = ".caliper"
@@ -299,6 +310,28 @@ export function createTakeStore(root) {
     return changed
   }
 
+  /**
+   * Start a new take as a copy of another: every file the source changes,
+   * and none of its images. The source does not change. On failure no
+   * half-copied take remains.
+   *
+   * @param {string} source
+   * @param {Omit<TakeRecord, "created">} ask the new take's record
+   * @returns {string} the new take number
+   */
+  const fork = (source, ask) => {
+    if (record(source) === null) throw new Error(`Take ${source} does not exist.`)
+    const edited = files(source).map(file => ({ file, content: read(source, file) }))
+    const take = create(ask)
+    try {
+      for (const { file, content } of edited) write(take, file, content)
+    } catch (error) {
+      discard(take)
+      throw error
+    }
+    return take
+  }
+
   /** @param {string} take */
   const discard = take => {
     const metadata = recordFile(take)
@@ -324,7 +357,7 @@ export function createTakeStore(root) {
       .sort()
   }
 
-  return { root, list, create, record, update, addImages, image, original, reset, read, write, files, listFiles, accept, discard }
+  return { root, list, create, fork, record, update, addImages, image, original, reset, read, write, files, listFiles, accept, discard }
 }
 
 /** @typedef {ReturnType<typeof createTakeStore>} TakeStore */

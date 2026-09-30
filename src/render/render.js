@@ -7,6 +7,7 @@ import { runNodeWorker } from "./node-worker.js"
 import { DEVICES } from "../client/device-frame.js"
 import { FRAME_WATCHDOG_MS } from "../pages.js"
 import { auditAccessibility, axeVersion } from "./accessibility.js"
+import { drawMarks, locateAnchor } from "../takes/anchor.js"
 
 /**
  * @typedef {import("./plan.js").RenderJob} RenderJob
@@ -30,11 +31,16 @@ import { auditAccessibility, axeVersion } from "./accessibility.js"
  *   checkRun?: import('../authored/contract.js').CheckRun,
  *   expectations?: import('../expectation-contract.js').StateExpectations,
  *   expectationProblems?: readonly string[],
+ *   annotated?: Annotated,
  * }} RenderResult
  *   `frame` is the frame's own verdict. `problems` are what the frame shows.
  *   `console` holds browser errors the frame did not catch, for example a
  *   failed request. `spill` is null when every element of the part lies
  *   inside the device's viewport.
+ *
+ * @typedef {{ png: string, marks: Array<{ letter: string, found: boolean, visible: boolean }> }} Annotated
+ *   The second picture, with the job's annotations drawn in. `found`: the
+ *   mark's element is in this render. `visible`: the mark lies inside the viewport.
  *
  * @typedef {{
  *   left: number, top: number, right: number, bottom: number,
@@ -219,9 +225,11 @@ async function renderOne(session, url, job, out, audit, signal) {
     const png = join(out, `${slug(job.part)}${job.take === undefined ? "" : `.take-${job.take}`}.${job.state}.${job.device}.png`)
     await page.screenshot({ path: png })
     const accessibility = audit ? await auditAccessibility(page) : undefined
+    const annotated = job.annotations?.length ? await annotate(page, job.annotations, png.replace(/\.png$/, ".marks.png"), viewport) : undefined
 
+    const { annotations: _annotations, ...target } = job
     return {
-      ...job,
+      ...target,
       viewport,
       frame: /** @type {RenderResult["frame"]} */ (report.frame),
       png,
@@ -230,6 +238,7 @@ async function renderOne(session, url, job, out, audit, signal) {
       spill: report.spill,
       ...(report.expectations ? { expectations: report.expectations } : {}),
       ...(report.expectationProblems ? { expectationProblems: report.expectationProblems } : {}),
+      ...(annotated === undefined ? {} : { annotated }),
       ...(accessibility === undefined ? {} : {
         accessibility,
         environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:2`,
@@ -238,6 +247,33 @@ async function renderOne(session, url, job, out, audit, signal) {
     }, { signal })
   } finally {
     await session.closeContext(context)
+  }
+}
+
+/**
+ * Find each mark in the rendered page, draw it, and save the second picture.
+ * A mark that is not found is drawn where it was placed.
+ *
+ * @param {import("playwright-core").Page} page
+ * @param {readonly import("./plan.js").Annotation[]} annotations
+ * @param {string} png
+ * @param {{ width: number, height: number }} viewport
+ * @returns {Promise<Annotated>}
+ */
+async function annotate(page, annotations, png, viewport) {
+  // Both functions are self-contained, so their source runs in the page as is.
+  /** @type {import("../takes/anchor.js").AnchorLocation[]} */
+  const located = await page.evaluate(`(${JSON.stringify(annotations.map(item => item.anchor))}).map(anchor => (${locateAnchor})(document, anchor))`)
+  const drawn = annotations.map((item, index) => ({ letter: item.letter, kind: item.anchor.kind, rect: /** @type {import("../takes/anchor.js").AnchorLocation} */ (located[index]).rect }))
+  const scroll = /** @type {{ x: number, y: number }} */ (await page.evaluate("({ x: scrollX, y: scrollY })"))
+  await page.evaluate(`(${drawMarks})(document, ${JSON.stringify(drawn)})`)
+  await page.screenshot({ path: png })
+  return {
+    png,
+    marks: drawn.map((mark, index) => {
+      const x = mark.rect.x - scroll.x, y = mark.rect.y - scroll.y
+      return { letter: mark.letter, found: located[index]?._tag === "Located", visible: x + mark.rect.width >= 0 && y + mark.rect.height >= 0 && x <= viewport.width && y <= viewport.height }
+    }),
   }
 }
 

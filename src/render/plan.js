@@ -6,7 +6,10 @@ import { DEVICES } from "../client/device-frame.js"
  * @typedef {{ part: string, state?: string, devices?: readonly string[], take?: string }} RenderRequest
  *   `state` is an export name or "*" for every state. `devices` holds device
  *   ids, or "*" for every device. `take` renders the part as that take changes it.
- * @typedef {{ part: string, state: string, device: string, take?: string }} RenderJob
+ * @typedef {{ letter: string, anchor: import("../takes/marks-contract.js").MarkAnchor }} Annotation
+ *   A mark to find and draw on the render, for the picture a take made from marks gets.
+ * @typedef {{ part: string, state: string, device: string, take?: string, annotations?: Annotation[] }} RenderJob
+ *   With `annotations`, the render also saves a second picture with the marks drawn in.
  * @typedef {{ _tag: "Planned", jobs: RenderJob[] } | { _tag: "Invalid", reason: string }} RenderPlan
  */
 

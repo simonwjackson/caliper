@@ -299,6 +299,10 @@ function createSession(server, root, options, env, overlay) {
     serverUrl: () => listeningOrigin(server),
     chromium: env.CHROMIUM,
     onChange: takesChanged,
+    onMarks: draft => {
+      const data = JSON.stringify(draft)
+      for (const stream of streams) stream.write(`event: marks\ndata: ${data}\n\n`)
+    },
     skills: () => discoverSkills({ root, home: homedir(), option: options.agent?.skills }),
   })
 
@@ -495,6 +499,8 @@ function createSession(server, root, options, env, overlay) {
     response.write(`event: project\ndata: ${json}\n\n`)
     response.write(`event: takes\ndata: ${JSON.stringify(takes.snapshot())}\n\n`)
     response.write(`event: checks\ndata: ${JSON.stringify(checks.snapshot())}\n\n`)
+    // A broken marks.json must not close the stream; the chrome reads the reason from marks.json.
+    try { response.write(`event: marks\ndata: ${JSON.stringify(takes.marks())}\n\n`) } catch {}
     streams.add(response)
     response.on("close", () => streams.delete(response))
   }

@@ -167,14 +167,7 @@ export function createIntegrationReview(store) {
     }
     const base = { originals, sourceRevision: hash({ record: source, copies: edited }) }
     // Spread the ask so future product context survives without another copier.
-    const take = store.create({ ...source, name: `${source.name ?? `Take ${sourceTake}`} alternate`.slice(0, 80), integration: { _tag: "Preparing", sourceTake, base } })
-    try {
-      for (const file of edited) store.write(take, file.path, file.after)
-    } catch (error) {
-      store.discard(take)
-      throw error
-    }
-    return take
+    return store.fork(sourceTake, { ...source, name: `${source.name ?? `Take ${sourceTake}`} alternate`.slice(0, 80), integration: { _tag: "Preparing", sourceTake, base } })
   }
   /** @param {string} take @param {unknown} input @returns {Review} */
   const submit = (take, input) => {
