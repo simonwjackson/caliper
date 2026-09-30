@@ -2,8 +2,9 @@
 
 The chosen direction for Caliper's chrome, 2026-09-28. Decision 34 in
 `docs/decisions.md` records it, and decision 35 records how take markup
-looks. Two other directions (Bench, Tiles) were shown and dropped the same
-day; they are in this folder's history at `d2acd70`. The Darkroom passes are
+looks. Decision 36 now chooses React for the eventual chrome and self-editing;
+these HTML files remain visual references, not the live renderer. Two other
+directions (Bench, Tiles) were shown and dropped the same day; they are in this folder's history at `d2acd70`. The Darkroom passes are
 `40a76c1`, `03d63a5`, `9056d03`, `416c6a5`, `daea00b`, `a057ac8` and
 `d60973f`.
 
@@ -163,7 +164,8 @@ All scripts run through `nix develop`. The page loads Public Sans from
 
 - Decision 6 and 8: one frame at true size; a scaled frame says so; a part
   that throws shows its error in the frame and in readable copy.
-- Decision 10: plain HTML and CSS. `b.css` could become the chrome's CSS.
+- The drawing remains plain HTML and CSS. Decision 36 replaces decision 10
+  for the React implementation; the drawing does not constrain its framework.
 - Decision 22: layout is a function of the container. One `@container`
   rule at 44 rem reflows every state to the phone form. Every control stays
   reachable at both sizes.

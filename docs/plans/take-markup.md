@@ -2,7 +2,9 @@
 
 Status: behaviour settled (decisions 1 to 13 below). Appearance settled
 (`docs/decisions.md` 35, drawn in `docs/design/mockups/`). Build order
-chosen (below). Not built. Slice 0 is next.
+chosen (below). Not built. Slice 0 is next. Decision 36 adds the React and
+self-editing foundation. `docs/plans/react-chrome.md` defines the phased,
+two-agent implementation and its shared contract.
 
 ## Problem
 
@@ -190,7 +192,9 @@ before slice 0 starts if it is wrong.
 
 Why slice 0 first: slices 1 to 3 draw on the canvas that slice 0 makes.
 Built in the old skin first, every take surface would change twice. Slice 0
-is also the only slice with no new data: CSS, DOM moves and `planLayout`.
+adds no new take behavior. Decision 36 now requires React, explicit client
+state and a pinned tool/subject setup before markup. The phases in
+`react-chrome.md` extend this slice order.
 
 Cost: one slice passes with no new take behaviour to use. Slice 0 removes
 the Takes panel, so it must carry every capability the panel holds (the
@@ -208,10 +212,10 @@ seventh-pass audit in the mockup README) or it leaves one unreachable.
 
 The decisions above fix behaviour, not appearance. Design these surfaces.
 Read `~/.agents/skills/frontend-design/SKILL.md` and
-`~/.agents/skills/intrinsic-design/SKILL.md` first. Caliper's chrome is plain
-DOM (decision 10), and its layout is one function of the chrome's own size
-(decision 22). It must work on a desk monitor and on a Galaxy Z Fold, with a
-mouse and with touch. Nothing may become unreachable at any size.
+`~/.agents/skills/intrinsic-design/SKILL.md` first. The live chrome is still plain
+DOM. Decision 36 chooses React for the implementation. Its layout remains
+one function of the chrome's own size (decisions 22 and 34). It must work on a
+desk monitor and on a Galaxy Z Fold, with a mouse and with touch. Nothing may become unreachable at any size.
 
 - **Mark mode.** The bar button, and how every frame shows that the mode is
   on (decision 9).

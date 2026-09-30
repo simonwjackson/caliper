@@ -1,0 +1,84 @@
+import type { Availability, ChromeView, FrameView, TakeSummary } from "../../src/client/ui/contract"
+import { DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
+
+export const enabled: Availability = { _tag: "Enabled" }
+export const blocked: Availability = { _tag: "Disabled", reason: "Unavailable in this scenario" }
+const subject = { part: "src/Button.atom.part.tsx", state: "default" }
+const preview = { part: "src/Page.page.part.tsx", state: "MenuOpen" }
+const device = DEVICES[0]
+if (!device) throw new Error("The contract fixture needs one built-in device")
+const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jzQAAAABJRU5ErkJggg=="
+const take: TakeSummary = {
+  id: "6", name: "Quiet button", subjectLabel: "Button · Default", deviceLabel: device.name,
+  createdLabel: "Created in Page · Menu open. Shared source edits can affect other states.",
+  run: { _tag: "Idle" }, files: ["src/Button.tsx", "src/Button.css"], nameIssue: "", direction: { title: "Quiet button", brief: "Use the shared inputs", strange: true },
+  unavailableReason: "", accept: enabled, discard: enabled, stop: blocked, prepareAlternate: enabled, kind: "Experiment",
+}
+const frame: FrameView = {
+  key: "6@1234", label: "Quiet button", title: "Changes src/Button.tsx", src: "/frame?take=6",
+  subject, preview, take: "6", selected: true, run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [],
+}
+
+/** Contract examples, not a second renderer or a server snapshot adapter. Each call supplies fresh values. */
+export function readyView(): ChromeView {
+  return structuredClone({
+    connection: { _tag: "Ready" }, selection: { _tag: "State", subject, preview, label: "Button · Default in Page · Menu open" },
+    navigation: {
+      project: "Caliper", filter: "", countLabel: "2 parts", emptyMessage: "",
+      parts: [{ file: subject.part, name: "Button", note: "A composed preview", layer: "atom", layerSite: "filename suffix", selected: true, expanded: true,
+        states: [{ ref: subject, label: "Default", site: subject.part, selected: true, comparing: true, badge: { status: "Review", label: "Needs review", detail: "Named coverage only" }, takes: [{ id: "6", label: "Quiet button", selected: true }] }] }],
+      scenario: { _tag: "Selected", subject, editingLabel: "Editing Button · Default", choices: [{ key: "isolated", label: "Isolated", context: null }, { key: "page", label: "Page · Menu open", context: preview }], chosen: "page", note: "",
+        whole: { ref: preview, label: "Page · Menu open" }, children: [{ ref: subject, label: "Button · Default", selected: true }] },
+      unavailable: [{ subject: { part: "src/Removed.part.tsx", state: "Gone" }, label: "Removed state", takes: [{ id: "8", label: "Take 8 · review or discard", selected: false }] }],
+      setup: [{ label: "Entry", status: "Derived", values: ["src/mount.tsx"], provenance: "package.json:1", problems: [] }, { label: "CSS", status: "Overridden", values: ["src/global.css"], provenance: "vite.config", problems: [] }, { label: "Wrapper", status: "Failed", values: [], provenance: "Set caliper({wrap})", problems: ["Wrapper not found"] }], setupProblems: ["A declaration needs review"],
+    },
+    devices: DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
+    tools: { active: "takes", navOpen: true, codeOpen: true, side: "record", codeShare: 0.45 },
+    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false }, frame] },
+    plan: { _tag: "None" }, composer: {
+      prompt: "Make the button quiet", placeholder: "Describe a change", edit: enabled, attach: enabled,
+      attachments: [{ id: "image-1", name: "reference.png", url: pixel, remove: enabled }], count: 3, start: enabled, startLabel: "Plan 3 takes",
+      follow: { take: "6", label: "Send to take 6", availability: enabled }, notices: [{ kind: "info", text: "Editing the subject, not the scenario" }],
+      agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "vite.config", keyFrom: "CALIPER_AGENT_API_KEY" },
+      skills: { skills: [{ name: "design", description: "Describe a change", scope: "project", location: ".agents/skills/design/SKILL.md" }], problems: [] },
+    },
+    focusedTake: take, record: { _tag: "Open", take, emptyLogMessage: "No conversation since Vite started", integration: { _tag: "None" },
+      log: [{ _tag: "User", text: "Make it quiet", images: [{ name: "reference.png", url: pixel }] }, { _tag: "Assistant", text: "Changed the spacing" }, { _tag: "Edit", file: "src/Button.css" }, { _tag: "Tool", name: "render", subject: "default@rg353m", outcome: "Done", detail: "Rendered" }] },
+    code: { _tag: "Ready", files: [{ file: "src/Button.tsx", label: "Button.tsx", depth: 1, changed: true, added: 1, removed: 1 }, { file: subject.part, label: "Button.atom.part.tsx", depth: 0, changed: false }], tabs: ["src/Button.tsx"], filter: "", selectedFile: "src/Button.tsx",
+      document: { file: "src/Button.tsx", content: "export const value = 2\n", original: "export const value = 1\n" }, documentKey: "6@1234|src/Button.tsx", mode: { _tag: "Take", original: "export const value = 1\n" }, save: { _tag: "Saved", label: "Saved to the take" }, notice: "", changes: 1, take: "6", stop: blocked, lenses: [{ export: "default", label: "Default", current: true }] },
+    knobs: { _tag: "Ready", target: "Real files", skipped: [{ name: "--output", where: ".button", reason: "Computed output" }], problems: [],
+      knobs: [
+        { id: "gap", name: "--gap", label: "Gap", value: "8px", origin: "Property", where: ".button", source: { file: "src/Button.css", line: 2 }, note: "Space between controls", problems: [], control: { _tag: "Number", number: 8, unit: "px", step: 1, min: 0, max: 40 }, write: { _tag: "Idle" }, edit: enabled },
+        { id: "threshold", name: "@container", label: "Stage width <", value: "45em", origin: "Threshold", where: "width < 45em", source: { file: "src/Button.css", line: 20 }, note: "No invented upper bound", problems: [], control: { _tag: "Number", number: 45, unit: "em", step: 1, min: 0 }, write: { _tag: "Conflict", reason: "Source changed" }, edit: enabled },
+        { id: "color", name: "--ink", label: "Ink", value: "#112233", origin: "Plain", where: ".button", source: { file: "src/Button.css", line: 3 }, note: "", problems: [], control: { _tag: "Color", hex: "#112233" }, write: { _tag: "Saved" }, edit: enabled },
+        { id: "choice", name: "--shape", label: "Shape", value: "round", origin: "Property", where: "@property", source: { file: "src/Button.css", line: 4 }, note: "", problems: [], control: { _tag: "Choice", options: ["round", "square"] }, write: { _tag: "Saving" }, edit: enabled },
+        { id: "token", name: "--bg", label: "Background", value: "var(--ink)", origin: "Plain", where: ".button", source: { file: "src/Button.css", line: 5 }, note: "", problems: [], control: { _tag: "Token", chosen: "--ink", options: [{ name: "--ink", value: "#112233" }, { name: "--paper", value: "#ffffff" }], color: true }, write: { _tag: "Failed", reason: "Not saved" }, edit: enabled },
+      ],
+      literals: { _tag: "Ready", notice: "Review both edits", refused: [{ name: "border", where: ".button", reason: "No source map" }], literals: [{ id: "padding", property: "padding", value: "8px", selector: ".button", source: { file: "src/Button.css", line: 6 }, homes: [{ id: "root", label: ":root · Button.css:1" }], draft: { _tag: "Editing", name: "--button-padding", home: "root", preview: "Adds the token and replaces the literal", problem: "", create: enabled } }] },
+    },
+    checks: { _tag: "Closed" }, calibration: { _tag: "Open", pxPerMm: DEFAULT_PX_PER_MM, calibrated: false },
+  } satisfies ChromeView)
+}
+
+export function contractViews(): Record<string, ChromeView> {
+  const ready = readyView()
+  const plan: ChromeView = { ...ready, plan: { _tag: "Review", prompt: ready.composer.prompt, note: "One direction is strange", directions: [{ id: "a", direction: { title: "Quiet", brief: "Reduce the chrome" } }, { id: "b", direction: { title: "Different structure", brief: "Use a different arrangement", strange: true } }], start: enabled, startLabel: "Start 2 takes" }, composer: { ...ready.composer, edit: blocked, attach: blocked } }
+  const runningTake: TakeSummary = { ...take, run: { _tag: "Running" }, accept: blocked, stop: enabled, prepareAlternate: blocked }
+  const running: ChromeView = { ...ready, focusedTake: runningTake, record: { _tag: "Open", take: runningTake, log: [], emptyLogMessage: "Working…", integration: { _tag: "None" } }, code: ready.code._tag === "Ready" ? { ...ready.code, mode: { _tag: "Watching", original: null }, stop: enabled } : ready.code }
+  const alternate: ChromeView = { ...ready, focusedTake: { ...take, kind: "Alternate", accept: blocked }, record: { _tag: "Open", take: { ...take, kind: "Alternate" }, log: [], emptyLogMessage: "", integration: {
+    _tag: "Review", sourceTake: "1", review: { revision: "review-r1", proposal: { strategy: "variant", summary: "Add a quiet variant", shared: "Same click behavior", preserved: "Existing callers stay unchanged", usage: '<Button tone="quiet" />', preview }, files: [{ path: "src/Button.tsx", before: "const x = 1", after: "const x = 2" }], checks: { _tag: "Passed", summary: "Originals preserved; alternate visible" } }, refresh: enabled, check: enabled, apply: blocked, behaviorReviewed: false, notices: [],
+  } } }
+  const checks: ChromeView = { ...ready, checks: { _tag: "Open", targetLabel: "Button · Real files", runSelected: enabled, runAll: enabled, notices: [], run: {
+    _tag: "Ready", id: "run-1", badge: { status: "Review", label: "Needs review", detail: "Accepted is not a clean pass" }, stale: false, summary: "One state on one device", coverage: "Declared states only", runDetail: "Completed at source generation 1", reportUrl: "/report.json",
+    rows: [{ index: 0, part: subject.part, state: subject.state, device: device.id, take: null, badge: { status: "Review", label: "Review", detail: "Two matching renders" }, findings: [{ id: "spill", label: "Content outside the screen", status: "Review", detail: "One expected edge" }], authored: [{ id: "click", label: "Click opens menu", status: "Passed", detail: "Browser input succeeded", image: { key: "authored-0", kind: "authored", url: pixel, label: "Interaction evidence", caption: "Not a baseline" } }], provenance: "Checks declared in real files", authoredSummary: "Only this named assertion", images: [{ key: "first", kind: "first", url: pixel, label: "First render", caption: "Saved evidence" }, { key: "repeat", kind: "repeat", url: pixel, label: "Repeat render", caption: "Saved evidence" }], approval: enabled, reviewed: false, approved: false, approvalNote: "Visual intent only" }],
+  } } }
+  return {
+    ready, plan, running, alternate, checks,
+    connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
+    failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
+    empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
+    planning: { ...plan, plan: { _tag: "Planning", prompt: "Make it quiet", count: 3, message: "Planning 3 directions" } },
+    loading: { ...ready, code: { _tag: "Loading", message: "Loading editor" }, knobs: { _tag: "Finding", target: "Real files" }, checks: { _tag: "Open", targetLabel: "Button", runSelected: blocked, runAll: blocked, notices: [], run: { _tag: "Loading" } } },
+    checksRunning: { ...checks, checks: { _tag: "Open", targetLabel: "Button", runSelected: blocked, runAll: blocked, notices: [], run: { _tag: "Running", id: "run-2", progress: "Rendering 1 of 2", stop: enabled } } },
+  }
+}

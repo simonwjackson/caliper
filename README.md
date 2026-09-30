@@ -923,6 +923,13 @@ report, not that all behavior is safe.
 
 ## Develop
 
+The React/Darkroom migration starts with the shared contract in
+[`docs/plans/react-chrome.md`](docs/plans/react-chrome.md). The live chrome
+remains plain DOM until that migration lands. Run the unstyled reference's
+browser gate with `nix develop -c bun run verify:chrome-contract`. It makes
+no model calls and changes no consumer files. It does not verify the final
+layout or live-server integration.
+
 ```sh
 bun install
 bun test
