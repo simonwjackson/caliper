@@ -3,7 +3,9 @@
 Status: Run 1 (phases 1 to 3) is merged on `main` as of 2026-09-30. The chrome
 is React, drawn as Darkroom, and Caliper opens and edits its own parts through
 a pinned tool. See "Run 1 merge record" at the end. Run 2 (phases 4 to 6, take
-markup) is not planned yet. Phase 7 (real hardware) is not done.
+markup) is planned in `docs/plans/take-markup-run2.md`, which replaces the
+rows for phases 4 to 6 below and waits for the user to confirm its phase cut.
+Phase 7 (real hardware) is not done.
 
 ## Scope and sequence
 
