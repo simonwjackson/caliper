@@ -17,7 +17,7 @@ const MAX_SHARE = 0.8
 function modeLine(code: Ready): string {
   if (code.mode._tag === "Watching") return `Take ${code.take}'s agent is editing. Read only.`
   if (code.mode._tag === "Take") return code.mode.original === null ? `Take ${code.take} adds this file` : `Take ${code.take} against the real files`
-  return "The real files"
+  return "Real files"
 }
 function saveLine(code: Ready): { readonly text: string; readonly tone: string } {
   const save = code.save

@@ -33,7 +33,7 @@ export function Knob({ knob, actions }: { readonly knob: KnobView; readonly acti
     onFocus={() => setLive(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setLive(false) }}>
     {control._tag === "Number"
       ? <KnobNumber knob={knob} control={control} actions={actions} disabled={disabled} onLive={setLive} />
-      : <span className="dr-knob__label"><code>{knob.name.startsWith("--") ? knob.name : knob.label}</code></span>}
+      : <span className="dr-knob__label"><code>{knob.name.startsWith("--") ? knob.name : knob.label}</code>{knob.name.startsWith("--") && <span className="dr-sr">, {knob.label}</span>}</span>}
     {control._tag === "Color" && <span className="dr-knob__color">
       <input type="color" className="dr-knob__swatch" data-cal={CAL.knobColor} data-knob={knob.id} aria-label={`${knob.label} colour`} disabled={disabled || control.hex === null}
         value={control.hex ?? "#000000"} onInput={event => actions.onKnobInput(knob.id, event.currentTarget.value)} onChange={() => undefined}
@@ -48,7 +48,7 @@ export function Knob({ knob, actions }: { readonly knob: KnobView; readonly acti
       {control.options.map(option => {
         const chosen = option.name === control.chosen
         return <button key={option.name} type="button" role="radio" aria-checked={chosen} className={control.color ? "dr-knob__chip" : "dr-knob__token"}
-          data-cal={CAL.knobToken} data-knob={knob.id} data-token={option.name} disabled={disabled} title={`${option.name}: ${option.value}`}
+          data-cal={CAL.knobToken} data-knob={knob.id} data-token={option.name} disabled={disabled} title={option.value}
           aria-label={option.name} style={control.color ? { background: option.value } : undefined} tabIndex={chosen ? 0 : -1}
           onKeyDown={event => {
             const index = control.options.indexOf(option)

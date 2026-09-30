@@ -268,7 +268,7 @@ try {
   await step("discard removes the take's images", async () => {
     assert(existsSync(join(root, ".caliper/takes", `${take}.images`, "3.png")))
     page.once("dialog", dialog => void dialog.accept())
-    await page.locator(`${cal.discard}[data-take="${take}"]`).click()
+    await (await reveal(page, page.locator(`${cal.discard}[data-take="${take}"]`))).click()
     await page.locator(`${cal.nav} ${cal.navTake}[data-take="${take}"]`).waitFor({ state: "detached" })
     assert(!existsSync(join(root, ".caliper/takes", `${take}.images`)))
   })

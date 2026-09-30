@@ -46,7 +46,8 @@ export function KnobsPanel({ view, actions, sheet }: { readonly view: ChromeView
           {knobs.literals._tag === "Finding" && <p className="dr-side__quiet" role="status">Finding literals…</p>}
           {knobs.literals._tag === "Failed" && <p className="dr-side__bad" role="alert">{knobs.literals.reason}</p>}
           {knobs.literals._tag === "Ready" && <>
-            {knobs.literals.notice && <p className="dr-side__quiet" role="status">{knobs.literals.notice}</p>}
+            {/* One live region for the ready list, present even when it has nothing to say. */}
+            <p className="dr-side__quiet dr-literals__status" role="status">{knobs.literals.notice ?? ""}</p>
             {knobs.literals.literals.length === 0 && <p className="dr-side__quiet">No literal here could be a token.</p>}
             <ul className="dr-kgroup__list">{knobs.literals.literals.map(literal => <Literal key={literal.id} literal={literal} actions={actions} />)}</ul>
             {knobs.literals.refused.length > 0 && <details className="dr-skipped">

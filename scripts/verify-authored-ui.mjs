@@ -139,7 +139,7 @@ try {
     assert.equal(result.authored.provenance.kind, "Original")
   }
   const row = dialog.locator(`${cal.checkRow}[data-index="0"]`)
-  await row.locator(":scope > summary").click()
+  await (await reveal(page, row.locator(":scope > summary"))).click()
   await (await reveal(page, row.getByText(/Wrong label/))).waitFor({ state: "visible" })
   assert(!(await row.innerText()).includes("\u001b["), "Browser assertion details must not display terminal color codes")
   await row.locator(`${cal.finding} > summary`).filter({ hasText: "retry loads the library" }).click()
@@ -227,7 +227,7 @@ try {
   assert.equal(stale.stale, true)
   assert.equal(stale.report.results[0]?.authored.checks[0]?.status, "Passed")
   await dialog.getByText(/^Results are out of date/).waitFor()
-  await dialog.locator(`${cal.checkRow}[data-index="0"] > summary`).click()
+  await (await reveal(page, dialog.locator(`${cal.checkRow}[data-index="0"] > summary`))).click()
   assert(await dialog.getByRole("checkbox").isDisabled())
   assert(await dialog.getByRole("button", { name: "Approve this image", exact: true }).isDisabled())
   await page.screenshot({ path: join(out, "source-changed.png") })

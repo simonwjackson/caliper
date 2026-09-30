@@ -187,6 +187,9 @@ try {
   for (const [width, height] of [[1800, 1000], [1280, 900], [900, 1000], [700, 1100]]) {
     await page.setViewportSize({ width, height })
     await page.waitForTimeout(300)
+    // On a phone-width chrome one sheet is in front; Code stays one tap away.
+    await reveal(page, code)
+    await page.waitForTimeout(300)
     const layout = await page.evaluate(selectors => {
       const box = (/** @type {string} */ selector) => document.querySelector(selector)?.getBoundingClientRect()
       const stage = box(selectors.canvas)

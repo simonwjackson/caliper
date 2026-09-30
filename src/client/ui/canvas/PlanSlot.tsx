@@ -29,7 +29,7 @@ export function PlanSlot(props: PlanSlotProps) {
       onChange={event => actions.onDirection(id, "title", event.currentTarget.value)} />
     <textarea className="dr-slot__brief" data-cal={CAL.directionBrief} data-direction={id} aria-label={`Direction ${index + 1} brief`} value={direction.brief}
       onChange={event => actions.onDirection(id, "brief", event.currentTarget.value)} />
-    {direction.strange && <p className="dr-slot__why">Strange on purpose: it breaks this part's current pattern.</p>}
+    {direction.strange && <p className="dr-slot__why">Strange direction: it breaks this part's current pattern on purpose.</p>}
     <button type="button" className="dr-slot__remove" data-cal={CAL.directionRemove} data-direction={id} aria-label={`Remove direction ${index + 1}: ${direction.title}`}
       title="Remove this direction" onClick={() => actions.onRemoveDirection(id)}><Icon name="close" /></button>
   </fieldset>

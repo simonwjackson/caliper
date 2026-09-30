@@ -72,6 +72,8 @@ try {
   for (const size of sizes) {
     await page.setViewportSize(size)
     for (const tool of ["takes", "preview"]) {
+      // The desk rail has no Preview: nothing covers the canvas there (decision 34).
+      if (tool === "preview" && await page.locator('.dr-root[data-tools="rail"]').count()) continue
       const control = await reveal(page, page.locator(`${cal.tool}[data-tool="${tool}"]`))
       await control.click()
       assert.equal(await control.getAttribute("aria-pressed"), "true", `${tool} remains selectable at ${size.width}x${size.height}`)
@@ -120,7 +122,8 @@ try {
   assert.equal(await scale.inputValue(), calibrated, "calibration survives reload")
   await page.locator(cal.calibrationReset).click()
   assert.equal(await page.evaluate(() => localStorage.getItem("caliper:px-per-mm")), null)
-  assert.match(await page.locator(cal.caption).innerText(), /calibration/i)
+  // The canvas and its caption hide behind the calibration card; the card states the scale is assumed.
+  assert.match(await page.locator(cal.calibration).innerText(), /no calibration/i)
   await scale.press("Home")
   await scale.press("ArrowRight")
   assert.equal(await scale.inputValue(), "2.01", "reset leaves calibration editable")

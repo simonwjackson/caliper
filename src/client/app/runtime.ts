@@ -227,8 +227,10 @@ export function createChromeApp(input: RuntimeInput) {
   const actions: ChromeActions = {
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
-      if (tool === "code") { tools.codeOpen = !tools.codeOpen; remember("code-open", String(tools.codeOpen)) }
-      if (tool === "knobs") { tools.side = tools.side === "knobs" ? "closed" : "knobs"; remember("side", "knobs"); remember("knobs-open", String(tools.side === "knobs")) }
+      // An open pane that another pane covers comes to the front; only a pane already in front closes.
+      const behind = state.tools.active !== tool
+      if (tool === "code" && !(tools.codeOpen && behind)) { tools.codeOpen = !tools.codeOpen; remember("code-open", String(tools.codeOpen)) }
+      if (tool === "knobs" && !(tools.side === "knobs" && behind)) { tools.side = tools.side === "knobs" ? "closed" : "knobs"; remember("side", "knobs"); remember("knobs-open", String(tools.side === "knobs")) }
       if (tool === "takes") tools.side = currentTake(state) ? "record" : "closed"
       if (tool === "preview" || tool === "code" && !tools.codeOpen || tool === "knobs" && tools.side !== "knobs") tools.active = "preview"
       if (tool !== "checks" && tool !== "calibrate") remember("view", tools.active)

@@ -43,7 +43,7 @@ export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, act
     data-verdict={frame.verdict._tag} data-run={frame.run?._tag} data-take={frame.take ?? undefined}>
     <div className="dr-frame__screen" style={{ width, height }}>
       <iframe ref={mount} className="dr-frame__page" data-cal={CAL.frame} data-frame-key={frame.key} data-part={frame.preview.part} data-state={frame.preview.state}
-        data-take={frame.take ?? undefined} title={frame.title || frame.label} src={frame.src} width={css.width} height={css.height}
+        data-take={frame.take ?? undefined} title={frame.label} src={frame.src} width={css.width} height={css.height}
         style={{ width: css.width, height: css.height, transform: `scale(${scale})` }} />
     </div>
     {frame.run?._tag === "Running" && <div className="dr-working dr-frame__working" role="progressbar" aria-label={`Take ${frame.take} is working`} />}

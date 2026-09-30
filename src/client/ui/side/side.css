@@ -123,3 +123,5 @@ summary.dr-kgroup__name .dr-kgroup__count + .dr-chev { margin-left: .3rem; }
 .dr-literal__actions { display: flex; gap: .4rem; justify-content: flex-end; }
 .dr-root[data-tools="dock"] .dr-knob { grid-template-columns: 7rem minmax(0, 1fr) auto; }
 .dr-root[data-tools="dock"] .dr-knob:is([data-control="Token"], [data-control="Color"], [data-control="Choice"]) { grid-template-columns: 7rem minmax(0, 1fr); }
+/* Empty, the live region takes no room but stays in the accessibility tree. */
+.dr-literals__status:empty { margin: 0; padding: 0; min-height: 0; }

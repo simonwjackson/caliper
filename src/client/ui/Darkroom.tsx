@@ -82,7 +82,8 @@ export default function Darkroom({ view, actions, scheme }: DarkroomProps) {
     <main className="dr-room">
       <Connection connection={view.connection} />
       {drawerOpen && <div className="dr-scrim" onClick={closeDrawer} aria-hidden="true" />}
-      {navShown && <PartsPanel view={view} actions={actions} drawer={drawerOpen} onClose={drawerOpen ? closeDrawer : undefined} />}
+      {/* Always mounted, so the filter and scroll survive closing, and the selection stays in the tree. */}
+      <div className="dr-parts-host" hidden={!navShown}><PartsPanel view={view} actions={actions} drawer={drawerOpen} onClose={drawerOpen ? closeDrawer : undefined} /></div>
       <div className="dr-stage">
         <Canvas view={view} actions={actions} />
         {code && <CodePane view={view} actions={actions} place={plan.code === "sheet" ? "sheet" : "below"} hidden={plan.code === "sheet" && front !== "code"} />}

@@ -23,7 +23,7 @@ export function Calibration({ view, actions }: { readonly view: ChromeView; read
         <input data-cal={CAL.calibrationScale} type="range" min="2" max="12" step="0.01" value={pxPerMm} onChange={event => actions.onPxPerMm(Number(event.currentTarget.value))} />
         <output>{pxPerMm.toFixed(2)} px/mm</output>
       </label>
-      <p className="dr-calibrate__state">{Math.round(pxPerMm * 25.4)} px per inch · {calibrated ? "calibrated on this monitor" : "assumed, not measured"}</p>
+      <p className="dr-calibrate__state">{Math.round(pxPerMm * 25.4)} px per inch · {calibrated ? "calibrated on this monitor" : "assumed, no calibration yet"}</p>
       <div className="dr-calibrate__actions">
         <Button hook={CAL.calibrationReset} onClick={actions.onResetCalibration}>Reset</Button>
         <Button hook={CAL.calibrationClose} tone="primary" onClick={actions.onCalibrationClose}>Done</Button>

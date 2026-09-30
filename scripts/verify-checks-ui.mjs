@@ -74,14 +74,14 @@ try {
   const defaultIndex = ready.report.results.findIndex(result => result.state === "default" && result.device === "rg353m")
   const missingIndex = ready.report.results.findIndex(result => result.state === "MissingName" && result.device === "rg353m")
   const missing = dialog.locator(`${cal.checkRow}[data-index="${missingIndex}"]`)
-  await missing.locator(":scope > summary").click()
+  await (await reveal(page, missing.locator(":scope > summary"))).click()
   await (await reveal(page, missing.getByText(/button-name/).first())).waitFor({ state: "visible" })
   assert((await missing.innerText()).includes("Failed"))
   await page.screenshot({ path: join(out, "findings.png") })
-  await missing.locator(":scope > summary").click()
+  await (await reveal(page, missing.locator(":scope > summary"))).click()
 
   let row = dialog.locator(`${cal.checkRow}[data-index="${defaultIndex}"]`)
-  await row.locator(":scope > summary").click()
+  await (await reveal(page, row.locator(":scope > summary"))).click()
   const reviewed = row.locator(cal.imageReviewed)
   await page.waitForFunction(({ index, selector }) => {
     const images = [...document.querySelectorAll(`${selector}[data-index="${index}"] img`)]
@@ -104,7 +104,7 @@ try {
   assert.notEqual(ready.id, originalId)
   assert.equal(ready.report.results[defaultIndex]?.checks.find(check => check.name === "baseline")?.status, "Passed")
   row = dialog.locator(`${cal.checkRow}[data-index="${defaultIndex}"]`)
-  await row.locator(":scope > summary").click()
+  await (await reveal(page, row.locator(":scope > summary"))).click()
   await row.getByText("Baseline at check time", { exact: false }).waitFor()
   assert.equal(await row.locator("img").count(), 3)
 
@@ -141,7 +141,11 @@ try {
   await page.setViewportSize({ width: 320, height: 480 })
   await open()
   await dialog.locator(cal.checksClose).click()
-  if (!reference) assert(await page.locator(`${cal.tool}[data-tool="checks"]`).evaluate(node => node === document.activeElement))
+  // At this size Checks sits in the More tools menu, which closed; focus returns to its opener.
+  if (!reference) assert(await page.evaluate(() => {
+    const active = document.activeElement
+    return active?.matches('[data-cal="tool"][data-tool="checks"]') || active?.getAttribute("aria-label") === "More tools"
+  }), "Close returns focus to the Checks tool or the More tools menu that holds it")
   await page.setViewportSize({ width: 1800, height: 1000 })
 
   // Take reports use the actual overlay, stay labelled, and never enable baseline approval.
@@ -158,7 +162,7 @@ try {
   ready = await getView()
   assert(ready._tag === "Ready" && ready.request.take === take)
   assert(ready.report.results.every(result => result.take === take))
-  await dialog.locator(`${cal.checkRow}[data-index="0"] > summary`).click()
+  await (await reveal(page, dialog.locator(`${cal.checkRow}[data-index="0"] > summary`))).click()
   await dialog.locator(`${cal.checkRow}[data-index="0"]`).getByText(/Take images cannot become product baselines/).waitFor()
   for (const control of await dialog.locator(cal.approveImage).all()) assert(await control.isDisabled(), "Take evidence cannot authorize baseline approval")
   assert(ready.report.results.some(result => result.checks.some(check => check.name === "accessibility" && check.status === "Failed")))

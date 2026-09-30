@@ -5,13 +5,13 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { parseArgs } from "node:util"
-const { values } = parseArgs({ options: { modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-release" } } })
+const { values } = parseArgs({ options: { layout: { type: "boolean", default: false }, modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-release" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
 const out = resolve(values.out)
 mkdirSync(out, { recursive: true })
 for (const name of ["checks", "agent-cli", "ui", "package"]) {
   /** @type {string[]} */
-  const args = [`scripts/verify-authored-${name}.mjs`, ...(name === "package" ? [] : ["--modules", values.modules])]
+  const args = [`scripts/verify-authored-${name}.mjs`, ...(name === "package" ? [] : ["--modules", values.modules]), ...(values.layout && name === "ui" ? ["--layout"] : [])]
   /** @type {import('node:child_process').SpawnSyncReturns<string>} */
   const result = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 300000, maxBuffer: 16000000 })
   writeFileSync(`${out}/${name}.log`, `${result.stdout}\n${result.stderr}`)

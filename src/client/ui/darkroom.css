@@ -19,6 +19,7 @@ body:has(> #caliper > .dr-root) { background: #121316; }
   display: grid; grid-template-columns: 3rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "tools room";
 }
 :is(.dr-root, .dr-scope) [hidden] { display: none !important; }
+.dr-parts-host { display: contents; }
 .dr-root[data-tools="dock"] {
   grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "room" "tools";
   --dr-free-l: 0px; --dr-free-r: 0px; --dr-gap-now: calc(var(--dr-gap) * .48); --dr-pad: .5rem;

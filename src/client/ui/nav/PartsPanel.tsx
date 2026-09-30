@@ -34,7 +34,7 @@ export function PartsPanel({ view, actions, drawer, onClose }: PartsPanelProps) 
           onChange={event => actions.onFilter(event.currentTarget.value)} />
         {scenario._tag === "Selected" && <section className="dr-parts__scenario" aria-label="Scenario context">
           <label className="dr-parts__preview">Preview
-            <select data-cal={CAL.context} value={scenario.chosen} onChange={event => actions.onContext(event.currentTarget.value)}>
+            <select data-cal={CAL.context} aria-label="Preview scenario" value={scenario.chosen} onChange={event => actions.onContext(event.currentTarget.value)}>
               {scenario.choices.map(choice => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
             </select>
           </label>

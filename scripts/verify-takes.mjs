@@ -68,7 +68,10 @@ try {
   /** @type {import('../src/types').TakesSnapshot} */
   const initial = await (await fetch(new URL("takes.json", base))).json()
   const before = new Set(initial.takes.map(take => take.take))
-  await (await reveal(page, page.locator(cal.count))).selectOption(String(count))
+  const countControl = await reveal(page, page.locator(cal.count))
+  // The reference renderer uses a select; the Darkroom New take menu uses menu radios.
+  if (await countControl.evaluate(node => node instanceof HTMLSelectElement)) await countControl.selectOption(String(count))
+  else await countControl.locator(`[data-count="${count}"]`).click()
   await page.locator(cal.prompt).fill(/** @type {string} */ (args.prompt))
   const started = Date.now()
   const planning = count > 1 ? page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/takes/plan") && response.request().method() === "POST", { timeout:120_000 }) : null
@@ -126,7 +129,7 @@ try {
       const control = await reveal(page, page.locator(selector).first())
       assert(await control.isVisible(), `${selector} remains reachable at ${name}; layout fit deferred`)
     }
-    await page.locator(`${cal.nav} ${cal.navTake}[data-take="${ids[0]}"]`).click()
+    await (await reveal(page, page.locator(`${cal.nav} ${cal.navTake}[data-take="${ids[0]}"]`))).click()
     assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("take"), ids[0], `take selection works at ${name}`)
   }
 
@@ -135,8 +138,8 @@ try {
     page.on("dialog", dialog => dialog.accept())
     await page.setViewportSize({ width:1800,height:1000 })
     for (const id of ids) {
-      await page.locator(`${cal.nav} ${cal.navTake}[data-take="${id}"]`).click()
-      await page.locator(`${cal.discard}[data-take="${id}"]`).click()
+      await (await reveal(page, page.locator(`${cal.nav} ${cal.navTake}[data-take="${id}"]`))).click()
+      await (await reveal(page, page.locator(`${cal.discard}[data-take="${id}"]`))).click()
       await page.locator(`${cal.nav} ${cal.navTake}[data-take="${id}"]`).waitFor({ state:"detached" })
     }
   }

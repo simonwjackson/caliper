@@ -51,7 +51,7 @@ export function KnobNumber({ knob, control, actions, disabled, onLive }: {
   return <>
     <span className="dr-knob__label dr-knob__label--scrub" title={disabled ? undefined : "Drag sideways to change"}
       onPointerDown={scrubStart} onPointerMove={scrubMove} onPointerUp={scrubEnd} onPointerCancel={scrubCancel}>
-      <code>{knob.name.startsWith("--") ? knob.name : knob.label}</code>
+      <code>{knob.name.startsWith("--") ? knob.name : knob.label}</code>{knob.name.startsWith("--") && <span className="dr-sr">, {knob.label}</span>}
     </span>
     {bounded ? <input type="range" className="dr-knob__slider" data-cal={CAL.knobSlider} data-knob={knob.id} aria-label={`${knob.label} slider`} disabled={disabled}
       min={control.min} max={control.max} step={control.step} value={current}
@@ -62,7 +62,10 @@ export function KnobNumber({ knob, control, actions, disabled, onLive }: {
       onKeyDown={event => { if (event.key === "Escape") actions.onKnobCancel(knob.id) }} />
       : <span className="dr-knob__free" aria-hidden="true" />}
     <span className="dr-knob__value">
-      <input type="text" inputMode="decimal" data-cal={CAL.knobValue} data-knob={knob.id} aria-label={knob.label} disabled={disabled} value={shown}
+      {/* A text field, so a unit can be typed, that reads as a number field: arrows step it. */}
+      <input type="text" inputMode="decimal" role="spinbutton" aria-valuenow={current} aria-valuetext={knob.value}
+        aria-valuemin={control.min} aria-valuemax={control.max}
+        data-cal={CAL.knobValue} data-knob={knob.id} aria-label={knob.label} disabled={disabled} value={shown}
         size={Math.max(2, shown.length)} spellCheck={false}
         onChange={event => { const text = event.currentTarget.value; setDraft(text); const parsed = parseNumber(text); if (parsed) actions.onKnobInput(knob.id, format(parsed.number)) }}
         onKeyDown={event => {

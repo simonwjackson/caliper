@@ -12,7 +12,7 @@ const out = resolve(values.out)
 mkdirSync(out, { recursive: true })
 for (const name of ["frame-commit", "scenarios", "checks", "checks-ui", "expectations", "integration", "fast-saves"]) {
   /** @type {string[]} */
-  const args = [`scripts/verify-${name}.mjs`, ...(name === "fast-saves" ? [] : ["--modules", values.modules]), ...(values.reference && name === "integration" ? ["--reference"] : [])]
+  const args = [`scripts/verify-${name}.mjs`, ...(name === "fast-saves" ? [] : ["--modules", values.modules]), ...(values.reference && name === "integration" ? ["--reference"] : []), ...(!values.reference && ["checks-ui", "expectations"].includes(name) ? ["--layout"] : [])]
   /** @type {import('node:child_process').SpawnSyncReturns<string>} */
   const result = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 240000, maxBuffer: 16000000 })
   writeFileSync(`${out}/${name}.log`, `${result.stdout}\n${result.stderr}`)

@@ -1,5 +1,5 @@
 #!/usr/bin/env -S nix develop -c node
-// Runs real public browser gates against the reference renderer. No source or fetch replacement.
+// Runs real public browser gates against the served Darkroom chrome, layout gates included. No source or fetch replacement.
 import { spawn } from "node:child_process"
 import { createServer as createHttpServer } from "node:http"
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs"
@@ -53,11 +53,11 @@ if (!url) throw new Error("The subject did not start.")
 /** @type {Array<[string, string[]]>} */
 const specs = [
   ["browser", ["--url", url, "--root", root]],
-  ["code", ["--url", url, "--root", root, "--part", "src/Chip.part.tsx", "--reference"]],
+  ["code", ["--url", url, "--root", root, "--part", "src/Chip.part.tsx"]],
   ["takes", ["--url", url, "--part", "src/Chip.part.tsx", "--prompt", "Use three directions", "--takes", "3"]],
-  ...["attachments", "css-loading", "scenarios", "checks", "checks-ui", "expectations", "frame-commit", "authored-checks", "authored-agent-cli", "authored-ui", "authored-release", "knobs", "pwa"].map(name => /** @type {[string, string[]]} */ ([name, ["--modules", modules]])),
-  ["integration", ["--modules", modules, "--reference"]],
-  ["authored-regressions", ["--modules", modules, "--reference"]],
+  ...["attachments", "css-loading", "scenarios", "checks", "checks-ui", "expectations", "frame-commit", "authored-checks", "authored-agent-cli", "authored-ui", "authored-release", "knobs", "pwa"].map(name => /** @type {[string, string[]]} */ ([name, ["--modules", modules, ...(["checks-ui", "authored-ui", "authored-release", "expectations"].includes(name) ? ["--layout"] : [])]])),
+  ["integration", ["--modules", modules]],
+  ["authored-regressions", ["--modules", modules]],
   ["knobs-product", ["--root", root, "--part", "src/Chip.part.tsx"]],
   ...["fast-saves", "authored-package"].map(name => /** @type {[string, string[]]} */ ([name, []])),
 ]

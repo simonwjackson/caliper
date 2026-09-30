@@ -36,6 +36,24 @@ async function revealDarkroom(page, control) {
   for (let step = 0; step < 6; step++) {
     await settle(page)
     const target = control.first()
+    // A folded group, such as the passed checks, opens with its own summary.
+    if (await target.count()) {
+      const folded = await target.evaluate(node => {
+        let count = 0
+        for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement && !parent.open && !(node.tagName === "SUMMARY" && node.parentElement === parent)) count++
+        return count
+      })
+      for (let i = 0; i < folded; i++) {
+        await target.evaluate(node => {
+          /** @type {HTMLDetailsElement | null} */
+          let outer = null
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement && !parent.open && !(node.tagName === "SUMMARY" && node.parentElement === parent)) outer = parent
+          outer?.setAttribute("data-reveal", "")
+        })
+        await page.locator("details[data-reveal] > summary").first().click()
+        await page.locator("details[data-reveal]").evaluate(node => node.removeAttribute("data-reveal"))
+      }
+    }
     if (await target.isVisible()) {
       await target.scrollIntoViewIfNeeded()
       return target
@@ -52,11 +70,21 @@ async function revealDarkroom(page, control) {
     const drawerOpen = await root.getAttribute("data-drawer") === "open"
     /** @type {import("playwright-core").Locator | null} */
     let tap = null
-    if (!attached || where?.nav) {
-      // A missing control is most often in the closed parts drawer or column.
+    if (where?.nav) {
+      // The parts panel is mounted but closed: its toggle opens the column or the drawer.
       const parts = page.locator(`${cal.navToggle}[aria-expanded="false"]`)
-      if (!tried.has("parts") && await parts.count()) { tap = parts.first(); tried.add("parts") }
+      if (await parts.count() && await parts.first().isVisible()) tap = parts.first()
       else if (!tried.has("more")) { tap = page.getByRole("button", { name: "More tools" }); tried.add("more") }
+    } else if (!attached) {
+      // A missing control sits in a closed menu: New take options, or More tools.
+      if (drawerOpen) { await page.keyboard.press("Escape"); continue }
+      const menu = page.getByRole("button", { name: "New take options" })
+      if (!tried.has("new-take") && await menu.count() && await menu.first().isVisible() && await menu.first().getAttribute("aria-expanded") !== "true") { tap = menu.first(); tried.add("new-take") }
+      else if (!tried.has("more")) {
+        tried.add("more")
+        if (await menu.first().getAttribute("aria-expanded").catch(() => null) === "true") await page.keyboard.press("Escape")
+        tap = page.getByRole("button", { name: "More tools" })
+      }
     } else if (drawerOpen) {
       await page.keyboard.press("Escape"); continue
     } else if (where?.side) tap = page.locator(`${cal.tool}[data-tool="${where.sideKind}"]`)

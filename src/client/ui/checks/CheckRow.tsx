@@ -20,26 +20,30 @@ export function glyph(status: string): Glyph {
 export function CheckRow({ run, row, actions, open }: { readonly run: string; readonly row: Row; readonly actions: ChromeActions; readonly open: boolean }) {
   const mark = glyph(row.badge.status)
   const findings: readonly FindingView[] = [...row.findings, ...row.authored]
-  const approvable = row.images.length > 0 || row.approval._tag === "Enabled"
   return <details className={`dr-check dr-check--${mark.tone}`} data-cal={CAL.checkRow} data-index={row.index} open={open || undefined}>
     <summary className="dr-check__summary">
       <span className={`dr-check__glyph dr-check__glyph--${mark.tone}`} aria-hidden="true">{mark.mark}</span>
       <span className="dr-check__name"><b>{row.state}</b> <span className="dr-check__device">{row.device}</span>{row.take && <span className="dr-check__take"> · take {row.take}</span>}
-        <span className="dr-sr">, {mark.word}</span></span>
+        <span className="dr-sr">, {row.badge.label}</span></span>
       <span className="dr-check__reason">{row.badge.detail}</span>
     </summary>
     <div className="dr-check__body">
       {findings.length > 0 && <ul className="dr-check__findings">{findings.map(finding => {
         const f = glyph(finding.status)
-        return <li key={finding.id} className="dr-finding" data-cal={CAL.finding}>
-          <span className={`dr-check__glyph dr-check__glyph--${f.tone}`} aria-hidden="true">{f.mark}</span>
-          <span><span className="dr-finding__label">{finding.label}</span> <span className="dr-finding__word">{f.word}</span>
+        const status = finding.status === "NotRun" ? "Not run" : finding.status
+        // A finding opens to its detail and evidence.
+        return <li key={finding.id} className="dr-finding-item">
+          <details className="dr-finding" data-cal={CAL.finding}>
+            <summary className="dr-finding__summary">
+              <span className={`dr-check__glyph dr-check__glyph--${f.tone}`} aria-hidden="true">{f.mark}</span>
+              <span><span className="dr-finding__label">{finding.label}</span><span className="dr-finding__word"> · {status}</span></span>
+            </summary>
             {finding.detail && <span className="dr-finding__detail">{finding.detail}</span>}
             {finding.image && <a className="dr-check__shot" href={finding.image.url} target="_blank" rel="noopener" title="Open full size">
               <img data-cal={CAL.evidence} src={finding.image.url} alt={finding.image.label}
                 onLoad={() => finding.image && actions.onImageLoaded(run, row.index, finding.image.key)} onError={() => finding.image && actions.onImageFailed(run, row.index, finding.image.key)} />
               <span>{finding.image.caption}</span></a>}
-          </span>
+          </details>
         </li>
       })}</ul>}
       {row.authoredSummary && <p className="dr-check__note">{row.authoredSummary}</p>}
@@ -49,17 +53,17 @@ export function CheckRow({ run, row, actions, open }: { readonly run: string; re
           onLoad={() => actions.onImageLoaded(run, row.index, image.key)} onError={() => actions.onImageFailed(run, row.index, image.key)} /></a>
         <figcaption><b>{image.label}</b> {image.caption}</figcaption>
       </figure>)}</div>}
-      {approvable && <div className="dr-check__approve">
+      <div className="dr-check__approve">
         {row.approvalNote && <p className="dr-check__note">{row.approvalNote}</p>}
         <label className="dr-check__reviewed">
           <input type="checkbox" data-cal={CAL.imageReviewed} data-index={row.index} checked={row.reviewed} disabled={row.approved || row.approval._tag === "Disabled"}
             title={row.approval._tag === "Disabled" ? row.approval.reason : undefined} onChange={event => actions.onImageReviewed(run, row.index, event.currentTarget.checked)} />
-          <span>I looked at both renders.</span>
+          <span>I reviewed both renders.</span>
         </label>
         <Button hook={CAL.approveImage} tone={row.reviewed && !row.approved ? "primary" : "plain"}
-          availability={row.approved ? { _tag: "Disabled", reason: "This render is the baseline" } : row.reviewed ? row.approval : { _tag: "Disabled", reason: "Look at both renders first" }}
-          onClick={() => actions.onApproveImage(run, row.index)}>{row.approved ? "Baseline approved" : "Approve this render"}</Button>
-      </div>}
+          availability={row.approved ? { _tag: "Disabled", reason: "This render is the baseline" } : row.reviewed ? row.approval : { _tag: "Disabled", reason: "Review both images first" }}
+          onClick={() => actions.onApproveImage(run, row.index)}>{row.approved ? "Baseline approved" : "Approve this image"}</Button>
+      </div>
     </div>
   </details>
 }
