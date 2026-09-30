@@ -22,7 +22,7 @@ import { DEVICES } from "../../device-frame.js"
 import { identityKey } from "../../../takes/chains.js"
 import type { AcceptRecord, ChainTake, TakeIdentity } from "../../../takes/chains.js"
 import { PICO_GAME_DETAIL } from "./pico"
-import { frameIdentity, withMarkup } from "./markup"
+import { sourceOf, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, takeKey, withChains } from "./chains"
 import type { ChainChoices, ChainFamily } from "./chains"
@@ -61,7 +61,8 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
     key: take ? `${take}@2026-09-29T13:${take.padStart(2, "0")}` : "real", label: take ? TAKE_NAMES[take] ?? `Take ${take}` : "Real files",
     title: take ? `Take ${take} · ${TAKE_NAMES[take]}` : "The real files", src: frameSource(FILTERS[id]), subject: DEFAULT, preview: DEFAULT,
     take, selected: take === "6", run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], marks: [],
-    markable: take ? enabled : blocked("The real files cannot be marked yet. Mark a take."), ...overrides,
+    // Phase 6: the real files take marks too (plan decision 8).
+    markable: enabled, ...overrides,
   }
 }
 
@@ -590,13 +591,7 @@ export function setupProblemsView(): ChromeView {
  * so no frame on this canvas shows it.
  */
 function mockupMarks(view: ChromeView, overrides: { readonly lost?: boolean } = {}): LocalMark[] {
-  const on = (take: string) => {
-    const found = view.canvas._tag === "Frames" ? view.canvas.frames.find(item => item.take === take) : undefined
-    const source = found ? frameIdentity(found) : null
-    if (!found || !source) throw new Error(`The takes fixture has no take ${take}`)
-    return { source, frame: found.key }
-  }
-  const point = (x: number, y: number) => ({ x, y, width: 0, height: 0 })
+  const on = on_(view)
   const located = { _tag: "Located" } as const
   const base = { previewLabel: "Default", deviceLabel: rg353m.name }
   return [
@@ -608,6 +603,14 @@ function mockupMarks(view: ChromeView, overrides: { readonly lost?: boolean } = 
     { id: "m-2a", ...on("2"), frame: null, letter: "A", kind: "Region", rect: { x: 960, y: 700, width: 640, height: 240 }, location: located,
       note: "The stats need this much room on the big screen", previewLabel: "Default", deviceLabel: odin.name },
   ]
+}
+/** A point mark's rect: the clicked point, with no size. */
+const point = (x: number, y: number) => ({ x, y, width: 0, height: 0 })
+/** Where a mark on take N ("0": the real files) sits: its source and the frame that shows it. */
+const on_ = (view: ChromeView) => (take: string) => {
+  const found = view.canvas._tag === "Frames" ? view.canvas.frames.find(item => item.take === (take === "0" ? null : take)) : undefined
+  if (!found) throw new Error(`The fixture has no frame for ${take === "0" ? "the real files" : `take ${take}`}`)
+  return { source: sourceOf(found), frame: found.key }
 }
 function marked(state: Partial<MarkupState>, options: { readonly lost?: boolean; readonly change?: (view: ChromeView) => ChromeView } = {}): ChromeView {
   const view = (options.change ?? (item => item))(takesView())
@@ -634,6 +637,57 @@ export function markRunningView(): ChromeView {
   return marked({ draftOpen: true }, { lost: false, change: view => ({ ...view, canvas: mapFrames(view, item => item.take === "5" ? { ...item, run: { _tag: "Running" } as const } : item) }) })
 }
 
+/**
+ * Marks on the real files (phase 6, plan decision 8), as the mockup draws
+ * 0A: a pin on the old actions list, and 0B, a box round the title.
+ */
+function originalMarks(view: ChromeView): LocalMark[] {
+  const base = { ...on_(view)("0"), previewLabel: "Default", deviceLabel: rg353m.name, location: { _tag: "Located" } as const }
+  return [
+    { id: "m-0a", ...base, letter: "A", kind: "Point", rect: point(205, 341), note: "The old actions list was clearer" },
+    { id: "m-0b", ...base, letter: "B", kind: "Region", rect: { x: 276, y: 30, width: 190, height: 70 }, note: "The title's size was right" },
+  ]
+}
+const renote = (marks: readonly LocalMark[], notes: Readonly<Record<string, string>>) => marks.map(mark => notes[mark.id] === undefined ? mark : { ...mark, note: notes[mark.id] ?? mark.note })
+/**
+ * The mockup's draft with references (plan decisions 6 to 8): 6B says "like
+ * 0A" and 5A "restore 0A here, with the spacing of 3A". So the real files
+ * and take 3 are material for 6's and 5's agents and make no take; 6, 5 and
+ * 2 make one each. The draft is open.
+ */
+export function referencesView(): ChromeView {
+  const view = takesView()
+  const marks = [originalMarks(view)[0]!, ...renote(mockupMarks(view, { lost: false }), {
+    "m-6b": "Too heavy. Thin the border to one pixel, like 0A", "m-5a": "Restore 0A here, with the spacing of 3A",
+  })]
+  return withMarkup(view, marks, { revision: 9, mode: { _tag: "Off" }, draftOpen: true, editor: null })
+}
+/**
+ * The mockup's mark state with the type-ahead open: mark mode on, the note at
+ * 6B reads "… like 0", and the list offers 0A and 0B on the real files, each
+ * with a crop. 3A is lost, so it has no picture.
+ */
+export function typeaheadView(): ChromeView {
+  const view = takesView()
+  const marks = [...originalMarks(view), ...renote(mockupMarks(view), { "m-6b": "Too heavy. Thin the border to one pixel, like 0" })]
+  return withMarkup(view, marks, { revision: 8, mode: { _tag: "Marking" }, draftOpen: false, editor: "m-6b" })
+}
+/** Marks on the real files in mark mode: 0A and 0B. No note points to them, so Send makes one take from the real files. */
+export function originalView(): ChromeView {
+  const view = takesView()
+  return withMarkup(view, originalMarks(view), { revision: 3, mode: { _tag: "Marking" }, draftOpen: false, editor: null })
+}
+/**
+ * First run with a typed prompt (planner choice 14): 0A and 0B on the real
+ * files go with the prompt when you press New take, so New take stays the
+ * main button and the draft says so. Send is in its menu.
+ */
+export function withPromptView(): ChromeView {
+  const first = emptyView()
+  const view: ChromeView = { ...first, composer: { ...first.composer, prompt: "Tidy the actions and keep the title", start: enabled } }
+  return withMarkup(view, originalMarks(view), { revision: 4, mode: { _tag: "Off" }, draftOpen: true, editor: null })
+}
+
 export type FixtureName = keyof typeof FIXTURES
 /** Every fixture by name. The gallery and the gates walk this list. */
 export const FIXTURES = {
@@ -645,4 +699,5 @@ export const FIXTURES = {
   mark: markView, marked: markedView, draft: draftView, draftReady: draftReadyView, replacing: replacingView,
   sending: sendingView, sendFailed: sendFailedView, markRunning: markRunningView,
   chainHistory: chainHistoryView, chainsAccepted: chainsAcceptedView, chainsOdin: chainsOdinView,
+  references: referencesView, typeahead: typeaheadView, original: originalView, withPrompt: withPromptView,
 } satisfies Record<string, () => ChromeView>

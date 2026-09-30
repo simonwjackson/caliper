@@ -66,6 +66,7 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
   const markup = view.markup._tag === "Ready" ? view.markup : null
   const mode = markup?.mode ?? { _tag: "Off" as const }
   const replacing = mode._tag === "Replacing" ? markup?.groups.flatMap(group => group.marks).find(mark => mark.id === mode.id) : undefined
+  const replacingOn = mode._tag === "Replacing" && markup?.groups.some(group => group.source.take === "0" && group.marks.some(mark => mark.id === mode.id)) ? "the real files" : "its take"
   const style = geometry ? { "--dr-col": `${geometry.width}px`, "--dr-row": `${geometry.height}px` } as CSSProperties : undefined
   // Takes as chains: every take frame sits in one chain; the rest (the real files) draw loose, first.
   const chains = canvas._tag === "Frames" && canvas.mode === "Takes" ? canvas.chains : []
@@ -86,7 +87,7 @@ export function Canvas({ view, actions }: { readonly view: ChromeView; readonly 
             {label && <span className="dr-canvas__label">{label}</span>}
             {plan._tag !== "None" && <q className="dr-canvas__ask">{plan.prompt}</q>}
             {mode._tag === "Marking" && <span className="dr-canvas__marking" role="status">Mark mode. Click or drag on a frame. <kbd>M</kbd> leaves.</span>}
-            {mode._tag === "Replacing" && <span className="dr-canvas__marking" role="status">Re-place {replacing?.name ?? "the mark"}: click or drag on its take. <kbd>Esc</kbd> cancels.</span>}
+            {mode._tag === "Replacing" && <span className="dr-canvas__marking" role="status">Re-place {replacing?.name ?? "the mark"}: click or drag on {replacingOn}. <kbd>Esc</kbd> cancels.</span>}
           </header>
           <div className="dr-frames" data-bands={bands || undefined} data-cal={plan._tag === "None" ? undefined : CAL.plan} aria-label={plan._tag === "None" ? undefined : "Take plan"} role={plan._tag === "None" ? undefined : "group"}>
             {/* A loose frame keeps one wrapper in every mode, so a change of mode never remounts its page. */}

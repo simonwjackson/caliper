@@ -15,8 +15,12 @@
 
 /* The well: images, text, the attach button and the primary button inside one edge. */
 .dr-well { position: relative; display: grid; min-width: 0; padding: var(--dr-well-pad); border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: calc(var(--dr-radius) + 2px);
-  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "images images images" "clip text go"; align-items: end; column-gap: var(--dr-well-pad); }
-.dr-bar[data-fit="Stacked"] .dr-well { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "images images" "text text" "clip go"; row-gap: 2px; }
+  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "images images images" "marks marks marks" "clip text go"; align-items: end; column-gap: var(--dr-well-pad); }
+.dr-bar[data-fit="Stacked"] .dr-well { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "images images" "marks marks" "text text" "clip go"; row-gap: 2px; }
+/* Marks on the real files that go with this prompt: named above the text, like the images that go with it. */
+.dr-well__marks { grid-area: marks; padding: .3rem .45rem 0; font-size: var(--dr-fs-1); line-height: 1.45; color: var(--dr-ink-2); }
+.dr-well__marks::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: .45rem; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: var(--dr-ink-2); vertical-align: .05em; }
 .dr-well:focus-within { border-color: var(--dr-ink-3); }
 .dr-well[data-disabled] .dr-well__text { color: var(--dr-ink-3); }
 .dr-well__text { grid-area: text; min-width: 0; border: 0; background: none; outline: 0; resize: none; max-height: 8rem; color: var(--dr-ink); line-height: 1.4; field-sizing: content;

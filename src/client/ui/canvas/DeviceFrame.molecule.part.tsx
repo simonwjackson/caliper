@@ -1,7 +1,7 @@
 import { DeviceFrame } from "./DeviceFrame"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
-import { errorView, markView, markedView, runningView, takesView } from "../fixtures/views"
+import { errorView, markView, markedView, originalView, runningView, takesView, typeaheadView } from "../fixtures/views"
 import { frameGeometry } from "../../device-frame.js"
 import type { ChromeView } from "../contract"
 
@@ -22,3 +22,7 @@ export function Marking() { return <One make={markView} take="6" /> }
 export function LostMark() { return <One make={markedView} take="3" /> }
 /** A chain's parent: the before of its pair, at 78 %. */
 export function Parent() { return <One make={takesView} take="1" before /> }
+/** Phase 6: the real files in mark mode, with 0A and 0B. */
+export function RealFilesMarked() { return <One make={originalView} take={null} /> }
+/** Phase 6: the note at 6B under its frame, offering marks to point to. */
+export function TypeAhead() { return <One make={typeaheadView} take="6" /> }

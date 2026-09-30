@@ -2,7 +2,7 @@ import { Canvas } from "./Canvas"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
 import {
-  chainHistoryView, chainsAcceptedView, chainsOdinView, errorView, gridView, markView, markedView, noneView, planView, planningView, replacingView, runningView, takesView,
+  chainHistoryView, chainsAcceptedView, chainsOdinView, errorView, gridView, markView, markedView, noneView, originalView, planView, planningView, replacingView, runningView, takesView, typeaheadView,
 } from "../fixtures/views"
 import type { ChromeView } from "../contract"
 
@@ -28,3 +28,7 @@ export function AfterAccept() { return <Scene make={chainsAcceptedView} /> }
 /** One frame of each chain: two frames and a gap do not fit 30 rem at true size. */
 export function NoRoomForPairs() { return <Scene make={takesView} width="30rem" /> }
 export function OdinChains() { return <Scene make={chainsOdinView} /> }
+/** Phase 6: marks on the real files, 0A and 0B, in mark mode. */
+export function RealFilesMarked() { return <Scene make={originalView} /> }
+/** Phase 6: the note at 6B offers the marks on the real files as you type 0. */
+export function TypeAhead() { return <Scene make={typeaheadView} /> }

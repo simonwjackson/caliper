@@ -64,6 +64,9 @@ export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, act
   const editor = ready && !ready.draftOpen && ready.editor._tag === "Open" ? ready.editor : null
   const editing = editor && frame.marks.some(mark => mark.id === editor.id) ? editor : null
   const name = frame.take ? `Take ${frame.take}` : frame.label
+  // Notes and the names they point to, for the pins' titles and the type-ahead (phase 6).
+  const drafted = ready && (frame.marks.length > 0 || editing) ? new Map(ready.groups.flatMap(group => group.marks.map(mark => [mark.id, mark] as const))) : undefined
+  const referencesOf = drafted && editing ? new Map([...drafted].map(([id, mark]) => [id, mark.references] as const)) : undefined
   return <figure className="dr-frame" data-frame-key={frame.key} data-selected={frame.selected || undefined} data-before={before || undefined} hidden={hidden || undefined}
     data-verdict={frame.verdict._tag} data-run={frame.run?._tag} data-take={frame.take ?? undefined} data-marking={marking || undefined}>
     <div className="dr-frame__mount" style={{ width, height }}>
@@ -74,7 +77,7 @@ export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, act
       </div>
       {marking && <MarkSurface frameKey={frame.key} label={name} css={css} onPoint={onMarkPoint} onRegion={onMarkRegion} />}
       {ready && frame.marks.length > 0 && <MarkLayer marks={frame.marks} scale={scale} css={css} take={frame.take ?? "0"} current={ready.editor._tag === "Open" ? ready.editor.id : null}
-        onPick={id => onMarkEdit(id)} />}
+        notes={drafted} onPick={id => onMarkEdit(id)} />}
     </div>
     {frame.run?._tag === "Running" && <div className="dr-working dr-frame__working" role="progressbar" aria-label={`Take ${frame.take} is working`} />}
     <figcaption className="dr-frame__caption">
@@ -87,6 +90,6 @@ export const DeviceFrame = memo(function DeviceFrame({ frame, geometry, css, act
       </span>}
     </figcaption>
     {editing && <NoteEditor id={editing.id} name={editing.name} note={editing.note} edit={editing.edit} onNote={onMarkNote}
-      onClose={() => { onMarkEdit(null); refocus(editing.id) }} />}
+      references={editing.references} referencesOf={referencesOf} onClose={() => { onMarkEdit(null); refocus(editing.id) }} />}
   </figure>
 })

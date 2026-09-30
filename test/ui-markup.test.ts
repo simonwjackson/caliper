@@ -58,12 +58,18 @@ describe("the gallery's local markup follows the shared Send policy", () => {
     const frame = scenario.getView().canvas
     expect(frame._tag === "Frames" && frame.frames.find(item => item.take === "6")?.marks.length).toBe(3)
   })
-  test("the real files take no mark, and mark mode off places nothing", () => {
+  test("phase 6: the real files take marks named 0A; mark mode off places nothing", () => {
     const scenario = createScenario(markView())
     scenario.actions.onMarkPoint("real", { x: 10, y: 20 })
+    const original = ready(scenario.getView()).groups.find(group => group.source.take === "0" && group.source.created === 0)
+    expect(original?.label).toBe("Original · the real files")
+    expect(original?.marks.map(mark => mark.name)).toEqual(["0A"])
+    expect(original?.outcome).toEqual({ _tag: "NewTake", label: "Send makes a new take from the real files." })
+    const canvas = scenario.getView().canvas
+    expect(canvas._tag === "Frames" && canvas.frames.find(frame => frame.key === "real")?.marks.map(mark => mark.letter)).toEqual(["A"])
     scenario.actions.onMarkMode(false)
     scenario.actions.onMarkPoint("1@2026-09-29T13:01", { x: 10, y: 20 })
-    expect(readMarks(scenario.getView()).length).toBe(readMarks(markView()).length)
+    expect(readMarks(scenario.getView()).length).toBe(readMarks(markView()).length + 1)
   })
   test("Send with a stale revision does nothing; while Send runs the draft is locked", () => {
     const scenario = createScenario(takesView())

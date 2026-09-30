@@ -23,15 +23,23 @@ export function Draft({ markup, view, actions }: DraftProps) {
   const replacing = markup.mode._tag === "Replacing" ? markup.mode.id : null
   const device = { name: view.device.name, width: view.device.cssWidth, height: view.device.cssHeight }
   const state = view.selection._tag === "State" ? view.selection.label : ""
+  const drafted = markup.groups.flatMap(group => group.marks)
+  const onCanvas = new Set(frames.flatMap(frame => frame.marks.map(mark => mark.id)))
+  const names = drafted.map(mark => mark.name)
+  const references = markup.editor._tag === "Open" ? markup.editor.references : []
+  const referencesOf = editing ? new Map(drafted.map(mark => [mark.id, mark.references] as const)) : undefined
+  const takes = markup.groups.filter(group => group.source.take !== "0").length
+  const original = markup.groups.some(group => group.source.take === "0")
+  const on = [takes ? `${takes} ${takes === 1 ? "take" : "takes"}` : "", original ? "the real files" : ""].filter(Boolean).join(" and ")
   return <section className="dr-draft" data-cal={CAL.draft} aria-label="Draft marks">
     <header className="dr-draft__head">
       <b>{marks} {marks === 1 ? "mark" : "marks"}</b>
-      <span>on {markup.groups.length} {markup.groups.length === 1 ? "take" : "takes"}</span>
+      <span>on {on}</span>
     </header>
     <ul className="dr-draft__takes">
       {markup.groups.map(group => <DraftTake key={`${group.source.take}@${group.source.created}`} group={group}
         frame={frames.find(frame => frame.marks.some(pin => group.marks.some(mark => mark.id === pin.id)))}
-        device={device} state={state} editing={editing} replacing={replacing} actions={actions} />)}
+        device={device} state={state} onCanvas={onCanvas} editing={editing} replacing={replacing} actions={actions} names={names} references={references} referencesOf={referencesOf} />)}
     </ul>
   </section>
 }

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react"
-import type { MarkPin as MarkPinView } from "../contract"
+import type { DraftMarkView, MarkPin as MarkPinView } from "../contract"
 import { CAL } from "../hooks"
 import { MarkPin } from "./MarkPin"
 import "../tokens.css"
@@ -18,11 +18,24 @@ export type MarkLayerProps = {
   /** The mark whose note is open. */
   readonly current?: string | null
   readonly size?: "frame" | "thumb"
+  /** Each mark's note and the names it points to, from the draft. A pin's title reads them. */
+  readonly notes?: ReadonlyMap<string, Pick<DraftMarkView, "note" | "references">>
 }
 
 const TAB_H = 18
 const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value))
-const describe = (mark: MarkPinView, name: string) => mark.location._tag === "Located" ? `Mark ${name}` : `Mark ${name}: ${mark.location.reason}`
+const listed = (names: readonly string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+/** "Mark 6B: Too heavy, like 0A. Points to 0A." A lost mark adds its reason. */
+function describe(mark: MarkPinView, name: string, notes?: MarkLayerProps["notes"]) {
+  const drafted = notes?.get(mark.id)
+  const note = drafted?.note.trim() ?? ""
+  const said = [
+    note && !/[.!?]$/.test(note) ? `${note}.` : note,
+    drafted?.references.length ? `Points to ${listed(drafted.references)}.` : "",
+    mark.location._tag === "Located" ? "" : mark.location.reason,
+  ].filter(Boolean)
+  return said.length ? `Mark ${name}: ${said.join(" ")}` : `Mark ${name}`
+}
 
 /**
  * The marks on one screen: a pin on a click, a box on a drag. A pin's tip
@@ -31,7 +44,7 @@ const describe = (mark: MarkPinView, name: string) => mark.location._tag === "Lo
  * starts at the screen's top edge. Only the pin and the tab take a press, so
  * a click inside a box can still place a new mark.
  */
-export function MarkLayer({ marks, scale, css, take, onPick, current = null, size = "frame" }: MarkLayerProps) {
+export function MarkLayer({ marks, scale, css, take, onPick, current = null, size = "frame", notes }: MarkLayerProps) {
   return <div className="dr-marks">
     {marks.map(mark => {
       const name = `${take}${mark.letter}`
@@ -42,7 +55,7 @@ export function MarkLayer({ marks, scale, css, take, onPick, current = null, siz
         const style: CSSProperties = { left: clamp(mark.rect.x + mark.rect.width / 2, css.width) * scale, top: clamp(mark.rect.y + mark.rect.height / 2, css.height) * scale }
         return onPick
           ? <button key={mark.id} type="button" className="dr-mark dr-mark--point" style={style} {...common} data-cal={CAL.markPin}
-            aria-label={describe(mark, name)} title={describe(mark, name)} onClick={() => onPick(mark.id)}>{glyph}</button>
+            aria-label={describe(mark, name, notes)} title={describe(mark, name, notes)} onClick={() => onPick(mark.id)}>{glyph}</button>
           : <span key={mark.id} className="dr-mark dr-mark--point" style={style} {...common}>{glyph}</span>
       }
       const x = clamp(mark.rect.x, css.width), y = clamp(mark.rect.y, css.height)
@@ -52,7 +65,7 @@ export function MarkLayer({ marks, scale, css, take, onPick, current = null, siz
       }
       return <div key={mark.id} className="dr-mark dr-mark--region" style={style} {...common} data-inside={y * scale < TAB_H || undefined}>
         {onPick
-          ? <button type="button" className="dr-mark__tab" data-cal={CAL.markPin} data-mark-id={mark.id} aria-label={describe(mark, name)} title={describe(mark, name)} onClick={() => onPick(mark.id)}>{glyph}</button>
+          ? <button type="button" className="dr-mark__tab" data-cal={CAL.markPin} data-mark-id={mark.id} aria-label={describe(mark, name, notes)} title={describe(mark, name, notes)} onClick={() => onPick(mark.id)}>{glyph}</button>
           : <span className="dr-mark__tab">{glyph}</span>}
       </div>
     })}

@@ -8,7 +8,7 @@
 import type { ChainView, ChromeActions, ChromeView, KnobView, Tool } from "../contract"
 import { DEFAULT_PX_PER_MM } from "../../device-frame.js"
 import { CHAIN_FAMILIES, frameSource } from "./views"
-import { frameIdentity, markupState, nextLetter, readMarks, withMarkup } from "./markup"
+import { markupState, nameOf, nextLetter, readMarks, sameSource, sourceOf, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, familyOf, readChoices, takeKey, withChains } from "./chains"
 import type { ChainChoices } from "./chains"
@@ -61,17 +61,18 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
   const editable = (marks: readonly LocalMark[], id: string) => view.markup._tag === "Ready" && view.markup.send._tag !== "Sending" && marks.some(mark => mark.id === id)
   const place = (frameKey: string, kind: LocalMark["kind"], rect: MarkRect) => markup((marks, state) => {
     const frame = view.canvas._tag === "Frames" ? view.canvas.frames.find(item => item.key === frameKey) : undefined
-    const source = frame ? frameIdentity(frame) : null
+    // Phase 6: a frame of the real files marks the original, 0A, 0B.
+    const source = frame ? sourceOf(frame) : null
     if (!frame || !source || frame.markable._tag !== "Enabled" || state.mode._tag === "Off") return null
     const mode = state.mode
     if (mode._tag === "Replacing") {
       const moving = marks.find(mark => mark.id === mode.id)
-      if (!moving || moving.source.take !== source.take || moving.source.created !== source.created) return null
+      if (!moving || !sameSource(moving.source, source)) return null
       return { marks: marks.map(mark => mark.id === mode.id ? { ...mark, frame: frameKey, kind, rect, location: { _tag: "Located" } } : mark), state: { mode: { _tag: "Off" }, editor: mode.id } }
     }
-    const letter = nextLetter(marks.filter(mark => mark.source.take === source.take && mark.source.created === source.created).map(mark => mark.letter))
+    const letter = nextLetter(marks.filter(mark => sameSource(mark.source, source)).map(mark => mark.letter))
     const id = `local-${source.take}-${letter}-${marks.length}`
-    const previewLabel = view.selection._tag === "State" ? view.selection.label : ""
+    const previewLabel = view.selection._tag === "State" ? view.selection.label : frame.label
     return { marks: [...marks, { id, source, frame: frameKey, letter, kind, rect, location: { _tag: "Located" }, note: "", previewLabel, deviceLabel: view.device.name }], state: { editor: id } }
   })
 
@@ -149,12 +150,19 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       const ready = view.composer.agent._tag === "Ready" && prompt.trim() !== ""
       const availability = ready ? { _tag: "Enabled" } as const : { _tag: "Disabled", reason: prompt.trim() ? "The agent is not ready" : "Describe a change first" } as const
       const follow = view.composer.follow && view.focusedTake?.run._tag !== "Running" ? { ...view.composer.follow, availability } : view.composer.follow
-      update({ ...view, composer: { ...view.composer, prompt, start: availability, follow } })
+      const next: ChromeView = { ...view, composer: { ...view.composer, prompt, start: availability, follow } }
+      // Marks on the real files go with a typed prompt and not with an empty one (planner choice 14).
+      update(next.markup._tag === "Ready" ? withMarkup(next, readMarks(next), markupState(next)) : next)
     }),
     onCount: record("onCount", count => update({ ...view, composer: { ...view.composer, count, startLabel: count === 1 ? "New take" : `Plan ${count} takes` } })),
     onAttach: record("onAttach", files => update({ ...view, composer: { ...view.composer, attachments: [...view.composer.attachments, ...files.map((file, index) => ({ id: `local-${Date.now()}-${index}`, name: file.name, url: frameSource(), remove: { _tag: "Enabled" } as const }))] } })),
     onRemoveAttachment: record("onRemoveAttachment", id => update({ ...view, composer: { ...view.composer, attachments: view.composer.attachments.filter(image => image.id !== id) } })),
-    onStart: record("onStart"), onFollow: record("onFollow"),
+    // New take takes the marks that go with the prompt; they leave the draft (planner choice 14). Starting the take is core's.
+    onStart: record("onStart", () => {
+      const going = view.plan._tag === "None" && view.composer.start._tag === "Enabled" && view.composer.marks._tag === "WithPrompt" ? view.composer.marks.names : []
+      if (going.length) markup(marks => ({ marks: marks.filter(mark => !going.includes(nameOf(mark))) }))
+    }),
+    onFollow: record("onFollow"),
     onPlanBack: record("onPlanBack", () => update({ ...view, plan: { _tag: "None" }, composer: { ...view.composer, edit: { _tag: "Enabled" }, attach: { _tag: "Enabled" } } })),
     onDirection: record("onDirection", (id, field, text) => {
       if (view.plan._tag === "Review") update({ ...view, plan: { ...view.plan, directions: view.plan.directions.map(item => item.id === id ? { ...item, direction: { ...item.direction, [field]: text } } : item) } })

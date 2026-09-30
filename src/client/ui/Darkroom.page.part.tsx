@@ -38,3 +38,7 @@ export function SendFailed() { return <Chrome fixture="sendFailed" /> }
 export function ChainHistory() { return <Chrome fixture="chainHistory" /> }
 export function AfterAccept() { return <Chrome fixture="chainsAccepted" /> }
 export function OdinChains() { return <Chrome fixture="chainsOdin" /> }
+export function References() { return <Chrome fixture="references" /> }
+export function TypeAhead() { return <Chrome fixture="typeahead" /> }
+export function RealFilesMarked() { return <Chrome fixture="original" /> }
+export function WithPrompt() { return <Chrome fixture="withPrompt" /> }

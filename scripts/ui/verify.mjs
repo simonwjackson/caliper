@@ -62,8 +62,11 @@ const called = async (page, name) => (await calls(page)).filter(call => call.nam
 /** @param {string} hook */
 const cal = hook => `[data-cal="${hook}"]`
 
-/** In the New take menu. While the draft holds marks the menu also holds New take (take-start). */
-const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-skills", "take-start"])
+/**
+ * In the New take menu. While the draft holds marks the menu also holds New take (take-start),
+ * and while marks on the real files go with a typed prompt it holds Send (marks-send).
+ */
+const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-skills", "take-start", "marks-send"])
 /**
  * Read every hook, opening the UI-owned disclosures first. A menu behind a
  * sheet in front, or anything behind the modal Checks window, is one tap
@@ -380,7 +383,8 @@ await gate("markup: mark mode, a click is a pin and a drag a box in device px, n
     assert.deepEqual((await called(page, "onMarkMode")).map(call => call.args[0]), [true])
     assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true")
     assert.match(await page.locator(".dr-canvas__marking").textContent() ?? "", /M leaves/)
-    assert.equal(await page.locator(cal("mark-surface")).count(), 5, "Every take takes marks; the real files do not")
+    assert.equal(await page.locator(cal("mark-surface")).count(), 6, "Every take takes marks, and so do the real files (phase 6)")
+    assert.equal(await page.locator(`${cal("mark-surface")}[data-frame-key="real"]`).count(), 1)
     await gesture(page, "6", [0.25, 0.5])
     const point = (await called(page, "onMarkPoint")).at(-1)
     assert.equal(point?.args[0], "6@2026-09-29T13:06")
@@ -786,6 +790,235 @@ for (const fixture of ["takes", "chainHistory", "chainsAccepted", "chainsOdin"])
   })
 }
 
+// ---------------------------------------------------------------- 2d. references and marks on the original (phase 6)
+/** The type-ahead's options, as mark ids, in order. @param {import("playwright-core").Page} page */
+const offered = page => page.locator(cal("mark-reference")).evaluateAll(nodes => nodes.map(node => node.getAttribute("data-mark-id")))
+/** @param {import("playwright-core").Page} page */
+const activeOption = page => page.locator(`${cal("mark-reference")}[aria-selected="true"]`).getAttribute("data-mark-id")
+/** @param {import("playwright-core").Page} page */
+const noteFocused = page => page.locator(cal("mark-note")).evaluate(node => node === document.activeElement)
+const TYPED = "Too heavy. Thin the border to one pixel, like 0"
+
+await gate("references: typing a take number offers its marks; arrows, then Enter or Tab, put the name into the note", async () => {
+  const { page, close } = await open(desk, "typeahead")
+  try {
+    const field = page.locator(cal("mark-note"))
+    assert(await noteFocused(page), "The note has focus when it opens")
+    assert.equal(await field.inputValue(), TYPED)
+    assert.deepEqual(await offered(page), ["m-0a", "m-0b"], "A note ending in 0 offers the marks on the real files")
+    assert.equal(await field.getAttribute("aria-expanded"), "true")
+    assert.equal(await activeOption(page), "m-0a")
+    assert.equal(await page.locator(`${cal("mark-reference")} iframe`).count(), 2, "One crop page for each option drawn")
+    await page.keyboard.press("ArrowDown")
+    assert.equal(await activeOption(page), "m-0b")
+    assert.equal(await field.getAttribute("aria-activedescendant"), await page.locator(`${cal("mark-reference")}[aria-selected="true"]`).getAttribute("id"))
+    await page.keyboard.press("ArrowDown")
+    assert.equal(await activeOption(page), "m-0a", "Arrows wrap")
+    await page.keyboard.press("ArrowUp")
+    await page.keyboard.press("Enter")
+    assert.deepEqual((await called(page, "onMarkNote")).at(-1)?.args, ["m-6b", `${TYPED}B `], "Enter writes the name in place of what was typed")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0, "Picking closes the list")
+    assert.equal(await field.count(), 1, "and keeps the note open")
+    assert.equal((await called(page, "onMarkEdit")).length, 0)
+    assert(await noteFocused(page))
+    await page.keyboard.type("and 5")
+    assert.deepEqual(await offered(page), ["m-5a"])
+    await page.keyboard.press("Tab")
+    assert.equal(await field.inputValue(), `${TYPED}B and 5A `, "Tab picks too")
+    assert(await noteFocused(page), "Tab keeps focus in the note")
+    await page.keyboard.press("Enter")
+    assert.deepEqual((await called(page, "onMarkEdit")).at(-1)?.args, [null], "With the list closed, Enter closes the note")
+  } finally { await close() }
+})
+await gate("references: the list filters by what is typed; a lost mark has no picture; a note never offers its own take", async () => {
+  const { page, close } = await open(desk, "typeahead")
+  try {
+    assert.deepEqual(await offered(page), ["m-0a", "m-0b"])
+    await page.keyboard.type("b")
+    assert.deepEqual(await offered(page), ["m-0b"], "0b narrows the list to 0B")
+    await page.keyboard.press("Backspace")
+    assert.deepEqual(await offered(page), ["m-0a", "m-0b"])
+    await page.keyboard.press("Backspace")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0, "No take number, no list")
+    await page.keyboard.type("3")
+    assert.deepEqual(await offered(page), ["m-3a"])
+    const lost = page.locator(`${cal("mark-reference")}[data-mark-id="m-3a"]`)
+    assert.equal(await lost.getAttribute("data-picture"), "none")
+    assert.equal(await lost.locator("iframe").count(), 0, "A lost mark loads no page")
+    assert.match(await lost.textContent() ?? "", /No picture/)
+    await page.keyboard.type("Z")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0, "3Z matches nothing")
+    await page.keyboard.press("Backspace")
+    await page.keyboard.press("Backspace")
+    await page.keyboard.type("6")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0, "6B's note does not point to take 6")
+    await page.keyboard.press("Backspace")
+    await page.keyboard.type("2")
+    const other = page.locator(`${cal("mark-reference")}[data-mark-id="m-2a"]`)
+    assert.match(await other.textContent() ?? "", /2A.*Take 2/)
+    assert.equal(await other.locator("iframe").getAttribute("width"), "1920", "A crop keeps the viewport of the device the mark was placed on")
+  } finally { await close() }
+})
+await gate("references: Escape closes the list and keeps the note and mark mode; typing on opens it again", async () => {
+  const { page, close } = await open(desk, "typeahead")
+  try {
+    assert.equal(await page.locator(cal("mark-reference")).count(), 2)
+    await page.keyboard.press("Escape")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0, "Escape closes the list")
+    assert.equal(await page.locator(cal("mark-note")).count(), 1, "and not the note")
+    assert(await noteFocused(page))
+    assert.equal(await page.locator(cal("mark-note")).inputValue(), TYPED, "The note is as it was")
+    assert.equal((await called(page, "onMarkEdit")).length, 0)
+    assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true", "and not mark mode")
+    assert.equal(await page.locator(cal("mark-note")).getAttribute("aria-expanded"), "false")
+    await page.keyboard.press("ArrowDown")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 2, "ArrowDown opens it again")
+    await page.keyboard.press("Escape")
+    await page.keyboard.type("A")
+    assert.deepEqual(await offered(page), ["m-0a"], "Typing on opens it again")
+    await page.keyboard.press("Escape")
+    await page.keyboard.press("Escape")
+    assert.deepEqual((await called(page, "onMarkEdit")).at(-1)?.args, [null], "Escape with the list closed closes the note")
+    assert.equal(await page.locator(cal("mark-mode")).getAttribute("aria-pressed"), "true")
+  } finally { await close() }
+})
+await gate("references: a press on an option picks it and keeps focus in the note", async () => {
+  const { page, close } = await open(desk, "typeahead")
+  try {
+    await page.locator(`${cal("mark-reference")}[data-mark-id="m-0b"]`).click()
+    assert.deepEqual((await called(page, "onMarkNote")).at(-1)?.args, ["m-6b", `${TYPED}B `])
+    assert(await noteFocused(page), "The press did not take focus from the note")
+    assert.equal(await page.locator(cal("mark-reference")).count(), 0)
+  } finally { await close() }
+})
+await gate("references: each draft group says what Send does with it; names in notes are set apart, never rewritten", async () => {
+  const { page, close } = await open(desk, "references")
+  try {
+    const groups = await page.evaluate(() => {
+      const markup = window.gallery.view().markup
+      return markup._tag === "Ready" ? markup.groups.map(group => ({ take: group.source.take, label: group.label, outcome: group.outcome, marks: group.marks.map(mark => ({ id: mark.id, note: mark.note, references: mark.references })) })) : []
+    })
+    assert.deepEqual(groups.map(group => [group.take, group.outcome._tag]), [["0", "PointedTo"], ["6", "NewTake"], ["5", "NewTake"], ["3", "PointedTo"], ["2", "NewTake"]])
+    for (const group of groups) {
+      const row = page.locator(`.dr-dtake[data-take="${group.take}"]`)
+      const outcome = row.locator(cal("draft-outcome"))
+      assert.equal(await outcome.getAttribute("data-outcome"), group.outcome._tag)
+      assert.equal(await outcome.textContent(), group.outcome.label, `Group ${group.take} reads core's sentence`)
+      assert.equal(await row.getAttribute("aria-label"), group.label)
+      for (const mark of group.marks) {
+        const note = page.locator(`${cal("mark-edit")}[data-mark-id="${mark.id}"]`)
+        assert.equal(await note.textContent(), mark.note, `${mark.id}'s note is not rewritten`)
+        assert.deepEqual(await note.locator(".dr-ref").allTextContents(), mark.references, `${mark.id}'s names are set apart`)
+      }
+    }
+    assert.deepEqual(await page.locator(`.dr-dtake[data-take="0"] ${cal("draft-outcome")} .dr-ref`).allTextContents(), ["6B", "5A"], "The names in the outcome are set apart too")
+    assert.match(await page.locator('.dr-dtake[data-take="0"] .dr-dtake__head').textContent() ?? "", /^Original\s*the real files$/)
+    assert.equal(await page.locator(cal("marks-send")).textContent(), "Send · 3 new takes")
+    assert.equal(await page.locator('.dr-dtake[data-take="3"] .dr-dtake__thumb').evaluate(node => getComputedStyle(node).opacity), "0.78", "Material for another take is drawn as a pair's parent is")
+    assert.equal(await page.locator('.dr-dtake[data-take="6"] .dr-dtake__thumb').evaluate(node => getComputedStyle(node).opacity), "1")
+    assert.match(await page.locator(`${cal("mark-pin")}[data-mark-id="m-6b"]`).getAttribute("title") ?? "", /^Mark 6B: .*like 0A\. Points to 0A\.$/, "A pin's title reads its note and what it points to")
+    // A reference typed in the draft's own editor changes what Send does.
+    await page.locator(`${cal("mark-edit")}[data-mark-id="m-6a"]`).click()
+    await page.locator(`${cal("mark-note")}[data-mark-id="m-6a"]`).waitFor()
+    await page.keyboard.type(" 0")
+    assert.deepEqual(await offered(page), ["m-0a"])
+    await page.keyboard.press("Enter")
+    assert.deepEqual((await called(page, "onMarkNote")).at(-1)?.args, ["m-6a", "Love this 0A "])
+    await page.keyboard.press("Enter")
+    assert.deepEqual(await page.locator(`${cal("mark-edit")}[data-mark-id="m-6a"] .dr-ref`).allTextContents(), ["0A"])
+    assert.equal(await page.locator(`.dr-dtake[data-take="0"] ${cal("draft-outcome")}`).textContent(), "Pointed to by 6A, 6B and 5A; makes no take.")
+  } finally { await close() }
+})
+await gate("references: marks on the real files go with a typed prompt; the line says so and New take stays the main button", async () => {
+  const { page, close } = await open(desk, "withPrompt")
+  try {
+    const line = page.locator(cal("prompt-marks"))
+    const main = page.locator(".dr-split__main")
+    const outcome = page.locator(`.dr-dtake[data-take="0"] ${cal("draft-outcome")}`)
+    assert.equal(await line.textContent(), "0A and 0B go with this prompt.")
+    assert.deepEqual(await line.locator(".dr-ref").allTextContents(), ["0A", "0B"])
+    assert(await line.evaluate(node => node.closest(".dr-well") !== null), "The line is in the well, with the prompt")
+    assert.equal(await main.getAttribute("data-cal"), "take-start", "New take is the main half")
+    assert.equal(await outcome.getAttribute("data-outcome"), "WithPrompt")
+    await page.getByRole("button", { name: "New take options" }).click()
+    assert.equal(await page.getByRole("menuitem", { name: "Send · 1 new take" }).getAttribute("data-cal"), "marks-send", "Send is at the top of the menu")
+    await page.keyboard.press("Escape")
+    await page.locator(cal("prompt")).fill("")
+    assert.equal(await line.count(), 0, "No prompt, no marks with it")
+    assert.equal(await outcome.getAttribute("data-outcome"), "NewTake")
+    assert.equal(await main.getAttribute("data-cal"), "marks-send", "Without a prompt Send is the main half again")
+    await page.locator(cal("prompt")).fill("Tidy the actions")
+    assert.equal(await line.textContent(), "0A and 0B go with this prompt.")
+    await page.locator(cal("prompt")).press("Control+Enter")
+    assert.equal((await called(page, "onStart")).length, 1)
+    assert.equal(await line.count(), 0, "The marks left the draft with New take")
+    assert.equal(await page.locator(cal("draft-open")).count(), 0)
+  } finally { await close() }
+})
+await gate("references: the real files take marks in mark mode, by pointer and by keyboard, named 0A, 0B and on", async () => {
+  const { page, close } = await open(desk, "original")
+  try {
+    const real = page.locator('.dr-frame[data-frame-key="real"]')
+    assert.equal(await real.getAttribute("data-marking"), "true", "The real files get the dashed edge")
+    assert.deepEqual(await real.locator(cal("mark-pin")).evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))),
+      ["Mark 0A: The old actions list was clearer.", "Mark 0B: The title's size was right."])
+    const surface = page.locator(`${cal("mark-surface")}[data-frame-key="real"]`)
+    const box = await surface.boundingBox()
+    assert(box)
+    await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.25)
+    const point = (await called(page, "onMarkPoint")).at(-1)
+    assert.equal(point?.args[0], "real")
+    near(parsed(point?.args[1]).x, 480, "x"); near(parsed(point?.args[1]).y, 120, "y")
+    await page.locator(`${cal("mark-note")}`).waitFor()
+    assert.equal(await page.locator(".dr-note__name").textContent(), "0C")
+    await page.keyboard.type("Quieter")
+    await page.keyboard.press("Enter")
+    const key = page.locator(`${cal("mark-point")}[data-frame-key="real"]`)
+    await key.focus()
+    await page.keyboard.press("Enter")
+    assert.deepEqual(parsed((await called(page, "onMarkPoint")).at(-1)?.args[1]), { x: 320, y: 240 }, "Pin places a mark from the keyboard")
+    await page.keyboard.press("Escape")
+    await page.locator(cal("draft-open")).click()
+    const group = page.locator('.dr-dtake[data-take="0"]')
+    assert.equal(await group.getAttribute("aria-label"), "Original · the real files")
+    assert.equal(await group.locator(".dr-dmark").count(), 4)
+    assert.equal(await group.locator(cal("draft-outcome")).textContent(), "Send makes a new take from the real files.")
+    assert.equal(await page.locator(cal("marks-send")).textContent(), "Send · 1 new take")
+    assert.match(await page.locator(".dr-draft__head").textContent() ?? "", /4 marks\s*on the real files/)
+  } finally { await close() }
+})
+await gate("references: the type-ahead, its options and its note are in reach at every size", async () => {
+  for (const size of [...LADDER, ...SIZES]) {
+    const { page, close } = await open(size, "typeahead")
+    const where = `${size.width}x${size.height}`
+    try {
+      await page.locator(cal("mark-reference")).first().waitFor({ state: "attached" })
+      await page.waitForTimeout(60)
+      const report = await page.evaluate(() => {
+        const inside = (/** @type {DOMRect} */ rect, /** @type {{ top: number, bottom: number, left: number, right: number }} */ box) => rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1 && rect.left >= box.left - 1 && rect.right <= box.right + 1
+        const screen = { top: 0, left: 0, bottom: innerHeight, right: innerWidth }
+        const list = /** @type {HTMLElement} */ (document.querySelector(".dr-refs"))
+        const field = /** @type {HTMLElement} */ (document.querySelector('[data-cal="mark-note"]'))
+        const problems = []
+        if (!list.matches(":popover-open") || getComputedStyle(list).visibility === "hidden") problems.push("the list is not shown")
+        if (!inside(field.getBoundingClientRect(), screen)) problems.push(`the note is off screen: ${JSON.stringify(field.getBoundingClientRect())}`)
+        const box = list.getBoundingClientRect()
+        if (!inside(box, screen)) problems.push(`the list leaves the window: ${JSON.stringify(box)}`)
+        const scrolls = list.scrollHeight > list.clientHeight + 1
+        for (const option of list.querySelectorAll('[data-cal="mark-reference"]')) {
+          const rect = option.getBoundingClientRect()
+          if (rect.width < 1 || rect.height < 1) problems.push(`${option.getAttribute("data-mark-id")} has no box`)
+          else if (!inside(rect, box) && !scrolls) problems.push(`${option.getAttribute("data-mark-id")} is cut off in a list that does not scroll`)
+        }
+        const overlap = field.getBoundingClientRect()
+        if (overlap.bottom > box.top + 1 && overlap.top < box.bottom - 1) problems.push("the list covers the note")
+        return problems
+      })
+      assert.deepEqual(report, [], where)
+    } finally { await close() }
+  }
+})
+
 // ---------------------------------------------------------------- 3. keyboard and focus
 await gate("keyboard: the New take menu opens, moves, chooses and returns focus", async () => {
   const { page, close } = await open(desk, "prompt")
@@ -955,7 +1188,8 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
 
 // ---------------------------------------------------------------- 5. reachability
 for (const size of [...LADDER, ...SIZES]) {
-  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin"]) {
+  for (const fixture of ["takes", "log", "knobs", "code", "plan", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin",
+    "references", "typeahead", "original", "withPrompt"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)
       try {

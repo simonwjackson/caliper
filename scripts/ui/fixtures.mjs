@@ -47,6 +47,10 @@ export const SHOTS = [
   { fixture: "chainHistory", mockup: null, note: "Undrawn: take 1's history unfolded, with 4 struck and 7, a branch beside 6." },
   { fixture: "chainsAccepted", mockup: null, note: "Undrawn: after take 8 was accepted every chain is flagged; 7 from 3 shows its parent when the pair does not fit." },
   { fixture: "chainsOdin", mockup: null, note: "Undrawn: the ODIN 2 PORTAL, where a desk canvas holds one frame of each chain." },
+  { fixture: "references", mockup: "draft", note: "Phase 6: notes point to 0A and 3A, so the real files and take 3 make no take." },
+  { fixture: "typeahead", mockup: "mark", note: "Phase 6: the note at 6B offers the marks on the real files as you type 0." },
+  { fixture: "original", mockup: null, note: "Phase 6: marks on the real files, 0A and 0B, in mark mode." },
+  { fixture: "withPrompt", mockup: null, note: "Phase 6: 0A and 0B go with the typed prompt; New take stays the main button." },
 ]
 
 export const FIXTURE_NAMES = [...new Set(SHOTS.map(shot => shot.fixture))]

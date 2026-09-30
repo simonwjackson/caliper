@@ -31,6 +31,13 @@
 .dr-dtake__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dr-dtake__will { margin-left: auto; white-space: nowrap; color: var(--dr-ink-2); }
 .dr-dtake__will[data-decision="Blocked"] { color: var(--dr-warn); }
+/* What Send does with this take: core's sentence. A new take reads in ink 2; material for another
+   take's agent is quieter, and its picture is drawn at 78 %, as a pair's parent is; marks that go
+   with the prompt read in ink, because they leave with the next New take. */
+.dr-dtake__outcome { margin-top: -.3rem; font-size: 11px; line-height: 1.45; color: var(--dr-ink-2); }
+.dr-dtake__outcome[data-outcome="PointedTo"] { color: var(--dr-ink-3); }
+.dr-dtake__outcome[data-outcome="WithPrompt"] { color: var(--dr-ink); }
+.dr-dtake[data-outcome="PointedTo"] .dr-dtake__thumb { opacity: .78; }
 .dr-dtake__reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: .2rem; font-size: 11px; color: var(--dr-warn); }
 .dr-dtake__marks { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 

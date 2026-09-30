@@ -71,4 +71,23 @@ button.dr-mark--point:focus-visible .dr-pin, button.dr-mark__tab:focus-visible .
 .dr-note__hint kbd { font: inherit; color: var(--dr-ink-2); }
 .dr-note__done { flex: none; }
 .dr-note__field::placeholder { color: var(--dr-ink-3); }
+
+/* --- the type-ahead: the marks a note can point to, each with a crop of its place --------
+   A card at window level, under the field or over it, so no card or scrolling region clips
+   it. The active option is ink: a raised row and an ink rule at its left edge. */
+.dr-refs { display: grid; align-content: start; gap: 2px; padding: .3rem; background: var(--dr-card); color: var(--dr-ink); border-radius: var(--dr-radius);
+  box-shadow: var(--dr-lift); font-size: var(--dr-fs-1); overflow: auto; overscroll-behavior: contain; }
+.dr-refs[popover] { position: fixed; inset: auto; margin: 0; border: 0; z-index: 40; }
+.dr-refs[popover]:not(:popover-open) { display: none; }
+.dr-refs__option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .65rem; align-items: center; padding: .35rem .5rem .35rem .4rem; border-radius: 5px;
+  color: var(--dr-ink-2); cursor: pointer; }
+.dr-refs__option[aria-selected="true"] { background: var(--dr-card-2); color: var(--dr-ink); box-shadow: inset 2px 0 0 var(--dr-ink); }
+.dr-refs__text { display: grid; gap: .1rem; min-width: 0; }
+.dr-refs__head { display: flex; gap: .5rem; align-items: baseline; min-width: 0; }
+.dr-refs__name { font-weight: 700; color: var(--dr-ink); flex: none; }
+.dr-refs__label { color: var(--dr-ink-3); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-refs__note { line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.dr-refs__empty { color: var(--dr-ink-3); }
+.dr-refs__option[data-picture="none"] .dr-refs__name { color: var(--dr-ink-2); }
+.dr-refs__more { color: var(--dr-ink-3); font-size: 11px; padding: .3rem .5rem .15rem; }
 .dr-note__field[readonly] { border-bottom-color: var(--dr-edge-2); color: var(--dr-ink-2); }

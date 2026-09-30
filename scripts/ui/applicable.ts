@@ -58,16 +58,22 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
   const barMarkup = layout.bar && view.plan._tag === "None" ? markup : null
   const drafted = markup ? markup.groups.flatMap(group => group.marks) : []
   if (markup && markup.editor._tag === "Open") {
-    const id = markup.editor.id
+    const editor = markup.editor
+    const id = editor.id
     // In the draft when it is open, under the frame that shows the mark, or else in the bar.
     const where = markup.draftOpen ? (barMarkup && drafted.length ? "draft" : null) : frames.some(frame => frame.marks.some(mark => mark.id === id)) ? "frame" : barMarkup ? "bar" : null
     if (where) add(CAL.markNote, CAL.markEditorClose)
+    // Phase 6 type-ahead: the note, which has focus when it opens with the caret at its end, ends in a
+    // take number and up to three letters, and some mark the note can point to has a name that starts so.
+    const typing = /(?:^|[^\p{L}\p{N}_.])(\d+[A-Za-z]{0,3})$/u.exec(editor.note)?.[1]?.toUpperCase()
+    if (where && editor.edit._tag === "Enabled" && typing && editor.references.some(option => option.name.toUpperCase().startsWith(typing))) add(CAL.markReference)
   }
   if (barMarkup) {
     if (frames.some(frame => frame.markable._tag === "Enabled") || barMarkup.mode._tag !== "Off" || drafted.length) add(CAL.markup, CAL.markMode)
     if (drafted.length) add(CAL.draftOpen, CAL.send)
     if (barMarkup.draftOpen && drafted.length) {
-      add(CAL.draft, CAL.markRemove)
+      // Phase 6: each group in the draft says what Send, or New take, does with it.
+      add(CAL.draft, CAL.markRemove, CAL.draftOutcome)
       const editing = barMarkup.editor._tag === "Open" ? barMarkup.editor.id : null
       if (drafted.some(mark => mark.id !== editing)) add(CAL.markEdit)
       const replacing = barMarkup.mode._tag === "Replacing" ? barMarkup.mode.id : null
@@ -83,6 +89,8 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
     add(CAL.composer, CAL.prompt)
     if (view.plan._tag === "None") {
       add(CAL.start, CAL.count, CAL.agent, CAL.skills, CAL.attach)
+      // Phase 6 (planner choice 14): marks on the real files that go with the typed prompt are named beside it.
+      if (composer.marks._tag === "WithPrompt") add(CAL.promptMarks)
       if (composer.follow) add(CAL.follow)
       const take = view.focusedTake
       if (take) {

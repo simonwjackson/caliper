@@ -1,7 +1,7 @@
 import { ComposerBar } from "./ComposerBar"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
-import { agentFailedView, agentOffView, draftView, emptyView, markedView, planView, planningView, promptView, runningView, sendFailedView, sendingView, takesView } from "../fixtures/views"
+import { agentFailedView, agentOffView, draftView, emptyView, markedView, planView, planningView, promptView, referencesView, runningView, sendFailedView, sendingView, takesView, withPromptView } from "../fixtures/views"
 import type { ChromeView } from "../contract"
 
 export const name = "Composer bar"
@@ -25,3 +25,8 @@ export function DraftOpen() { return <Bar make={draftView} /> }
 export function DraftNarrow() { return <Bar make={draftView} width="24rem" /> }
 export function Sending() { return <Bar make={sendingView} /> }
 export function SendFailed() { return <Bar make={sendFailedView} /> }
+/** Phase 6: 0A and 0B go with this prompt; New take stays the main button and Send is in its menu. */
+export function WithPrompt() { return <Bar make={withPromptView} /> }
+export function WithPromptNarrow() { return <Bar make={withPromptView} width="24rem" /> }
+/** Phase 6: a draft with references between takes. */
+export function References() { return <Bar make={referencesView} /> }

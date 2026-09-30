@@ -12,6 +12,7 @@ import { MarkModeButton } from "./MarkModeButton"
 import { DraftButton } from "./DraftButton"
 import { Draft } from "./Draft"
 import { NoteEditor } from "../canvas/NoteEditor"
+import { NoteText } from "../atoms/NoteText"
 import "../tokens.css"
 import "./bar.css"
 
@@ -32,6 +33,8 @@ const GAP = 10
  * Take markup lives here too (decision 35): the pin button at the left, the
  * draft's count and Send at the right, and the draft unfolded above. A note
  * whose mark no frame on the canvas shows is edited here, above the well.
+ * Marks on the real files that go with a typed prompt (planner choice 14)
+ * are named at the top of the well, with the prompt they go with.
  */
 export function ComposerBar({ view, actions, hidden = false }: { readonly view: ChromeView; readonly actions: ChromeActions; readonly hidden?: boolean }) {
   const composer = view.composer
@@ -47,6 +50,8 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
   const editor = markup && !markup.draftOpen && markup.editor._tag === "Open" ? markup.editor : null
   const stray = editor && !frames.some(frame => frame.marks.some(mark => mark.id === editor.id)) ? editor : null
   const failed = markup?.send._tag === "Failed" ? markup.send : null
+  const withPrompt = plan._tag === "None" && composer.marks._tag === "WithPrompt" ? composer.marks : null
+  const strayRefs = stray && markup ? new Map(markup.groups.flatMap(group => group.marks.map(mark => [mark.id, mark.references] as const))) : undefined
   const form = useRef<HTMLFormElement>(null)
   const lead = useRef<HTMLDivElement>(null)
   const go = useRef<HTMLDivElement>(null)
@@ -96,7 +101,8 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
     <Notices notices={composer.notices} />
     {failed && <p className="dr-bar__agent dr-bar__agent--failed" role="alert"><b>Send did not go through.</b> {failed.reason}</p>}
     {markup && markup.draftOpen && drafted > 0 && <Draft markup={markup} view={view} actions={actions} />}
-    {stray && <div className="dr-bar__note"><NoteEditor id={stray.id} name={stray.name} note={stray.note} edit={stray.edit} onNote={actions.onMarkNote} onClose={() => actions.onMarkEdit(null)} /></div>}
+    {stray && <div className="dr-bar__note"><NoteEditor id={stray.id} name={stray.name} note={stray.note} edit={stray.edit} onNote={actions.onMarkNote}
+      references={stray.references} referencesOf={strayRefs} onClose={() => actions.onMarkEdit(null)} /></div>}
     <div className="dr-bar__layout">
       {(focused || marking) && <div ref={lead} className="dr-bar__take">
         {marking && <span className="dr-bar__mark" data-cal={CAL.markup} role="group" aria-label="Take markup">
@@ -114,6 +120,7 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
           </li>)}
           {canAttach && <li><button type="button" className="dr-well__more" aria-label="Add another image" title="Add another image" onClick={pick}><Icon name="plus" /></button></li>}
         </ul>}
+        {withPrompt && <p className="dr-well__marks" data-cal={CAL.promptMarks} role="status"><NoteText text={withPrompt.label} names={withPrompt.names} /></p>}
         <textarea className="dr-well__text" data-cal={CAL.prompt} aria-label="Prompt" rows={1} placeholder={composer.placeholder} value={composer.prompt}
           readOnly={composer.edit._tag === "Disabled"} aria-readonly={composer.edit._tag === "Disabled" || undefined}
           title={composer.edit._tag === "Disabled" ? composer.edit.reason : undefined}
@@ -134,7 +141,7 @@ export function ComposerBar({ view, actions, hidden = false }: { readonly view: 
         </>}
         <div ref={go} className="dr-well__go">
           {markup && drafted > 0 && <DraftButton marks={drafted} open={markup.draftOpen} blocked={markup.groups.some(group => group.decision._tag === "Blocked")} onDraftOpen={actions.onDraftOpen} />}
-          {plan._tag === "None" && <NewTakeMenu composer={composer} actions={actions} send={markup && drafted > 0 ? { send: markup.send, revision: markup.revision } : null} />}
+          {plan._tag === "None" && <NewTakeMenu composer={composer} actions={actions} send={markup && drafted > 0 ? { send: markup.send, revision: markup.revision, first: !withPrompt } : null} />}
           {plan._tag === "Review" && <>
             <Button hook={CAL.planBack} onClick={actions.onPlanBack}>Back</Button>
             <Button hook={CAL.planStart} tone="primary" availability={plan.start} onClick={actions.onStart}>{plan.startLabel}</Button>
