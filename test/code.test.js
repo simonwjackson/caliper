@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
 import { codeChange } from "../src/code/api.js"
+import { chromeDelivery } from "../src/build/chrome.js"
 import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "../src/code/modules.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { manifest, withProject } from "./project-server.js"
@@ -117,31 +118,46 @@ describe("codeChange", () => {
 })
 
 describe("the code API", () => {
-  test("the chrome page maps CodeMirror to Caliper's own copy, and the server sends it", async () => {
+  test("the chrome serves Caliper's bundled editor as a lazy resource, without an import map", async () => {
+    const delivery = chromeDelivery()
+    /** @type {Record<string, {file: string, isDynamicEntry?: boolean, imports?: string[]}>} */
+    const manifest = JSON.parse(readFileSync(join(CALIPER, "dist/chrome/.vite/manifest.json"), "utf8"))
+    const editor = manifest["src/client/code-editor.js"]
+    expect(editor?.isDynamicEntry).toBe(true)
+    const entry = Object.keys(manifest).find(key => manifest[key]?.file === delivery.entry)
+    const eager = new Set(entry ? [entry] : [])
+    for (const key of eager) for (const imported of manifest[key]?.imports ?? []) eager.add(imported)
+    expect(eager.has("src/client/code-editor.js")).toBe(false)
     await withProject({ files }, async ({ get }) => {
       const html = await (await get("/__caliper/")).text()
-      const map = JSON.parse(/** @type {string} */ (html.match(/<script type="importmap">(.*?)<\/script>/)?.[1]))
-      const url = map.imports["@codemirror/view"]
-      expect(url).toStartWith("/__caliper/modules/@codemirror/view@")
-      expect(html.indexOf("importmap")).toBeLessThan(html.indexOf("chrome.js"))
+      expect(html).toContain(`src="/__caliper/assets/${delivery.entry}"`)
+      expect(html).not.toContain("importmap")
+      expect(html).not.toContain(editor?.file ?? "missing editor")
+      const url = `/__caliper/assets/${editor?.file}`
       const response = await get(url)
       expect(response.status).toBe(200)
-      expect(response.headers.get("cache-control")).toContain("immutable")
-      expect(await response.text()).toContain("class EditorView")
+      expect(response.headers.get("content-type")).toContain("text/javascript")
+      expect(response.headers.get("cache-control")).toBe("no-store")
+      const served = delivery.read(editor?.file ?? "")
+      if (!served) throw new Error("The editor is not in Caliper's build resources")
+      expect(Buffer.from(await response.arrayBuffer()).equals(served.body)).toBe(true)
     })
   })
 
-  test("serves every client module the chrome imports", async () => {
+  test("serves every manifest resource, not legacy chrome sources or package module paths", async () => {
+    /** @type {Record<string, {file: string, css?: string[], assets?: string[], imports?: string[], dynamicImports?: string[]}>} */
+    const manifest = JSON.parse(readFileSync(join(CALIPER, "dist/chrome/.vite/manifest.json"), "utf8"))
+    const resources = new Set(Object.values(manifest).flatMap(chunk => [chunk.file, ...(chunk.css ?? []), ...(chunk.assets ?? [])]))
+    for (const chunk of Object.values(manifest)) for (const key of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) expect(manifest[key]).toBeDefined()
     await withProject({ files }, async ({ get }) => {
-      const client = join(CALIPER, "src/client")
-      const imported = new Set(["chrome.js"])
-      for (const name of imported) {
-        const response = await get(`/__caliper/client/${name}`)
+      for (const name of resources) {
+        const response = await get(`/__caliper/assets/${name}`)
         expect({ name, status: response.status }).toEqual({ name, status: 200 })
-        const source = readFileSync(join(client, name), "utf8")
-        for (const [, next] of source.matchAll(/(?:from|import\()\s*"\.\/([\w-]+\.js)"/g)) imported.add(/** @type {string} */ (next))
+        expect(Buffer.from(await response.arrayBuffer()).equals(readFileSync(join(CALIPER, "dist/chrome", name)))).toBe(true)
       }
-      expect([...imported]).toContain("code-editor.js")
+      for (const path of ["/__caliper/client/chrome.js", "/__caliper/client/code-editor.js", "/__caliper/modules/@codemirror/view@6.43.13/dist/index.js", "/__caliper/assets/.vite/manifest.json"]) expect((await get(path)).status).toBe(404)
+      // Only the product-frame bootstrap still uses the consumer's Vite.
+      expect((await get("/__caliper/client/frame.js")).status).toBe(200)
     })
   })
 
@@ -211,14 +227,14 @@ describe("the code API", () => {
   })
 
   test("a real save needs the chrome's origin, and only overwrites a project file that exists", async () => {
-    await withProject({ files, git: true }, async ({ url, root }) => {
-      writeFileSync(join(root, ".env"), "SECRET=1\n")
+    await withProject({ files: { ...files, ".env": "SECRET=1\n" }, git: true }, async ({ url, root }) => {
       const denied = await fetch(new URL("__caliper/code/file", url), {
         method: "POST",
         headers: { "content-type": "application/json", origin: "https://evil.example" },
         body: JSON.stringify({ file: "src/ui/Chip.css", content: "x" }),
       })
       expect(denied.status).toBe(403)
+      await denied.arrayBuffer()
       /** @param {object} body */
       const error = async body => (await (await post(url, "/__caliper/code/file", body)).json()).error
       expect(await error({ content: "x" })).toBe("Name the file to save.")

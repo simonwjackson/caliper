@@ -9,13 +9,11 @@ export const FRAME_WATCHDOG_MS = 10_000
  * Caliper's own page. It loads no project code and no Vite client, so a save
  * in the project reloads only the device frame, never this page.
  *
- * The import map names the browser packages the chrome loads from Caliper's
- * own node_modules, such as CodeMirror. It must come before any module script.
+ * All chrome dependencies are bundled by Caliper, outside the consumer's Vite.
  *
- * @param {{ clientUrl: string, pwaUrl: string, themeColor: string, importMap: { imports: Record<string, string> } }} input
+ * @param {{ entryUrl: string, cssUrls: string[], pwaUrl: string, themeColor: string }} input
  */
-export function chromePage({ clientUrl, pwaUrl, themeColor, importMap }) {
-  const map = JSON.stringify(importMap).replaceAll("<", "\\u003c")
+export function chromePage({ entryUrl, cssUrls, pwaUrl, themeColor }) {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -33,9 +31,8 @@ export function chromePage({ clientUrl, pwaUrl, themeColor, importMap }) {
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Caliper" />
-    <link rel="stylesheet" href="${clientUrl}/chrome.css" />
-    <script type="importmap">${map}</script>
-    <script type="module" src="${clientUrl}/chrome.js"></script>
+    ${cssUrls.map(url => `<link rel="stylesheet" href="${escapeHtml(url)}" />`).join("\n    ")}
+    <script type="module" src="${escapeHtml(entryUrl)}"></script>
   </head>
   <body>
     <div id="caliper" class="cal-root"></div>

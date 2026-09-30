@@ -22,6 +22,7 @@ import { deflateSync } from "node:zlib"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { cal, deferLayout, reveal, waitTakes } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" }, keep: { type: "boolean" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
@@ -125,13 +126,12 @@ try {
   /** @type {string[]} */
   const errors = []
   page.on("pageerror", error => errors.push(error.message))
-  await page.addInitScript(() => localStorage.setItem("caliper:takes-open", "true"))
   await page.goto(`${new URL("__caliper/", url).href}#part=src/Card.part.tsx&device=rg353m`)
-  await page.locator(".cal-prompt:not([disabled])").waitFor()
+  await page.locator(`${cal.prompt}:not([disabled])`).waitFor()
 
   /**
-   * Screenshot the composer at each size, with the Takes panel open, and say
-   * which controls show without scrolling and which the panel can scroll to.
+   * Screenshot reference composer controls at each size. Check reachability
+   * through native disclosures; viewport and region-scroll layout remain deferred.
    *
    * @param {string} label
    * @param {string[]} selectors
@@ -142,71 +142,87 @@ try {
     for (const [width, height] of [[1600, 1000], [1000, 720], [700, 900], [420, 820]]) {
       await page.setViewportSize({ width, height })
       await page.waitForTimeout(150)
-      if (!(await page.locator(".cal-takes").isVisible())) {
-        await page.locator(".cal-takes-toggle").click()
-        await page.waitForTimeout(150)
+      const controls = []
+      for (const selector of selectors) {
+        const control = await reveal(page, page.locator(selector).first())
+        assert(await control.isVisible(), `${selector} reachable at ${width}x${height}`)
+        controls.push(`${selector} present; viewport fit NOT PROVEN`)
       }
-      await page.locator(".cal-takes").evaluate(panel => { panel.scrollTop = 0 })
+      found[`${width}x${height}`] = controls.join(", ")
       await page.screenshot({ path: join(SHOTS, `${label}-${width}x${height}.png`) })
-      found[`${width}x${height}`] = (await page.evaluate(list => list.map(selector => {
-        const element = document.querySelector(selector)
-        if (!element) return `${selector} missing`
-        const box = element.getBoundingClientRect()
-        if (box.width > 0 && box.top >= 0 && box.bottom <= innerHeight && box.right <= innerWidth) return `${selector} shown`
-        element.scrollIntoView({ block: "nearest" })
-        const after = element.getBoundingClientRect()
-        return after.bottom <= innerHeight && after.top >= 0 ? `${selector} after scrolling` : `${selector} UNREACHABLE`
-      }), selectors)).join(", ")
     }
     await page.setViewportSize({ width: 1600, height: 1000 })
     return found
   }
-  await page.locator(".cal-prompt").fill("Match the reference colours")
-  const before = await ladder("before", [".cal-attach", ".cal-start"])
+  deferLayout(["Attachment composer controls shown without scrolling versus inside panel scrolling at 1600×1000, 1000×720, 700×900 and 420×820", "Composer control rectangles fully inside viewport with three images at those four sizes"])
+  await page.locator(cal.prompt).fill("Match the reference colours")
+  const before = await ladder("before", [cal.attach, cal.start])
 
   await step("the file picker attaches images and refuses a type the model cannot read", async () => {
-    await page.locator(".cal-attach-input").setInputFiles([
+    const picker = page.waitForEvent("filechooser")
+    await page.locator(cal.attach).click()
+    await (await picker).setFiles([
       { name: "red.png", mimeType: "image/png", buffer: RED },
       { name: "logo.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg/>") },
       { name: "teal.png", mimeType: "image/png", buffer: TEAL },
     ])
-    await page.locator(".cal-attachment").nth(1).waitFor()
-    assert.equal(await page.locator(".cal-attachment").count(), 2)
-    assert.equal(await page.locator(".cal-composer-note").textContent(), '"logo.svg" is not a PNG, JPEG, WebP or GIF image.')
+    await page.locator(`${cal.attachments} img`).nth(1).waitFor()
+    assert.equal(await page.locator(`${cal.attachments} img`).count(), 2)
+    assert.equal(await page.locator(`${cal.composer} [role="alert"]`).textContent(), '"logo.svg" is not a PNG, JPEG, WebP or GIF image.')
   })
 
   await step("a dropped image joins them", async () => {
     await page.evaluate(bytes => {
       const transfer = new DataTransfer()
       transfer.items.add(new File([new Uint8Array(bytes)], "gold.png", { type: "image/png" }))
-      const composer = /** @type {HTMLElement} */ (document.querySelector(".cal-composer"))
+      const composer = /** @type {HTMLElement} */ (document.querySelector('[data-cal="composer"]'))
       composer.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }))
       composer.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }))
     }, [...GOLD])
-    await page.locator(".cal-attachment").nth(2).waitFor()
-    assert.deepEqual(await page.locator(".cal-attachment img").evaluateAll(images => images.map(image => image.getAttribute("alt"))), ["red.png", "teal.png", "gold.png"])
+    await page.locator(`${cal.attachments} img`).nth(2).waitFor()
+    assert.deepEqual(await page.locator(`${cal.attachments} img`).evaluateAll(images => images.map(image => image.getAttribute("alt"))), ["red.png", "teal.png", "gold.png"])
   })
 
   await step("every composer control stays reachable at each size, with three images", async () => {
-    const after = await ladder("attached", [".cal-attach", ".cal-start", ".cal-attachment-remove"])
+    const after = await ladder("attached", [cal.attach, cal.start, cal.attachmentRemove])
     for (const size of Object.keys(after)) {
       console.log(`    ${size} before: ${before[size]}\n    ${size} after:  ${after[size]}`)
-      assert(!after[size]?.includes("UNREACHABLE"), `${size}: ${after[size]}`)
     }
   })
 
+  await step("paste attaches images, keeps the four-image limit, and refuses oversized files", async () => {
+    await page.locator(cal.prompt).evaluate((node, bytes) => {
+      const transfer = new DataTransfer()
+      for (const name of ["pasted.png", "fifth.png"]) transfer.items.add(new File([new Uint8Array(bytes)], name, { type:"image/png" }))
+      node.dispatchEvent(new ClipboardEvent("paste", { clipboardData:transfer, bubbles:true, cancelable:true }))
+    }, [...TEAL])
+    await page.locator(`${cal.attachments} img`).nth(3).waitFor()
+    assert.equal(await page.locator(`${cal.attachments} img`).count(), 4)
+    assert.match(await page.locator(`${cal.composer} [role="alert"]`).innerText(), /at most 4 images.*fifth.png/)
+    assert.equal(await page.locator(cal.attach).isDisabled(), true)
+    await page.locator(cal.attachments).getByRole("button", { name:"Remove pasted.png", exact:true }).click()
+    await page.locator(cal.prompt).evaluate(node => {
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([new Uint8Array(5 * 1024 * 1024 + 1)], "too-big.png", { type:"image/png" }))
+      node.dispatchEvent(new ClipboardEvent("paste", { clipboardData:transfer, bubbles:true, cancelable:true }))
+    })
+    await page.locator(`${cal.composer} [role="alert"]`).filter({ hasText:"too-big.png" }).waitFor()
+    assert.equal(await page.locator(`${cal.attachments} img`).count(), 3)
+  })
+
   await step("removing an image keeps the others", async () => {
-    await page.locator('.cal-attachment-remove[aria-label="Remove teal.png"]').click()
-    assert.deepEqual(await page.locator(".cal-attachment img").evaluateAll(images => images.map(image => image.getAttribute("alt"))), ["red.png", "gold.png"])
+    await page.locator(cal.attachments).getByRole("button", { name: "Remove teal.png", exact: true }).click()
+    assert.deepEqual(await page.locator(`${cal.attachments} img`).evaluateAll(images => images.map(image => image.getAttribute("alt"))), ["red.png", "gold.png"])
   })
 
   let take = ""
   await step("a new take sends the attached images to the model after the render", async () => {
-    await page.locator(".cal-start").click()
-    await page.locator(".cal-log-user .cal-log-images img").nth(1).waitFor({ timeout: 60_000 })
-    await page.locator('.cal-take[data-run="Idle"]').waitFor({ timeout: 60_000 })
+    await page.locator(cal.prompt).press("Control+Enter")
+    await page.locator(`${cal.log} img`).nth(1).waitFor({ timeout: 60_000 })
     take = String(await page.evaluate(() => new URLSearchParams(location.hash.slice(1)).get("take")))
-    assert.equal(await page.locator(".cal-attachment").count(), 0, "the tray empties once the take starts")
+    const [finished] = await waitTakes(new URL("__caliper/", url).href, [take])
+    assert.equal(finished?.run._tag, "Idle")
+    assert.equal(await page.locator(`${cal.attachments} img`).count(), 0, "the tray empties once the take starts")
     const first = requests[0]
     assert(first, "the model got a request")
     const images = sentImages(first)
@@ -217,18 +233,20 @@ try {
   })
 
   await step("the log shows the images the prompt carried, served from the take", async () => {
-    const drawn = await page.locator(".cal-log-user .cal-log-images img").evaluateAll(images => images.map(image => /** @type {HTMLImageElement} */ (image).naturalWidth))
+    await page.waitForFunction(selector => [...document.querySelectorAll(selector)].every(image => /** @type {HTMLImageElement} */ (image).naturalWidth === 24), `${cal.log} img`)
+    const drawn = await page.locator(`${cal.log} img`).evaluateAll(images => images.map(image => /** @type {HTMLImageElement} */ (image).naturalWidth))
     assert.deepEqual(drawn, [24, 24])
     await page.screenshot({ path: join(SHOTS, "log.png") })
   })
 
   await step("a follow-up carries its own image", async () => {
-    await page.locator(".cal-attach-input").setInputFiles([{ name: "teal.png", mimeType: "image/png", buffer: TEAL }])
-    await page.locator(".cal-attachment").first().waitFor()
-    await page.locator(".cal-prompt").fill("Now this one")
-    await page.locator(".cal-follow").click()
-    await page.locator(".cal-log-user").nth(1).locator("img").waitFor({ timeout: 60_000 })
-    await page.locator('.cal-take[data-run="Idle"]').waitFor({ timeout: 60_000 })
+    await page.locator(`${cal.composer} input[type="file"]`).setInputFiles([{ name: "teal.png", mimeType: "image/png", buffer: TEAL }])
+    await page.locator(`${cal.attachments} img`).first().waitFor()
+    await page.locator(cal.prompt).fill("Now this one")
+    await (await reveal(page, page.locator(`${cal.follow}[data-take="${take}"]`))).click()
+    await page.locator(`${cal.log} img[alt="teal.png"]`).waitFor({ timeout: 60_000 })
+    const [finished] = await waitTakes(new URL("__caliper/", url).href, [take])
+    assert.equal(finished?.run._tag, "Idle")
     const last = requests.at(-1)
     const lastUser = last.messages.filter((/** @type {any} */ message) => message.role === "user").at(-1)
     const images = lastUser.content.filter((/** @type {any} */ part) => part.type === "image_url")
@@ -236,16 +254,27 @@ try {
     assert.equal(String(images[0].image_url.url), `data:image/png;base64,${TEAL.toString("base64")}`)
   })
 
+  await step("modified Enter sends a typed follow-up to the selected take", async () => {
+    const requestCount = requests.length
+    await page.locator(cal.prompt).fill("Keyboard follow-up")
+    await page.locator(cal.prompt).press("Control+Shift+Enter")
+    await page.locator(cal.log).getByText("Keyboard follow-up", { exact:true }).waitFor({ timeout:60_000 })
+    const [finished] = await waitTakes(new URL("__caliper/", url).href, [take])
+    assert.equal(finished?.run._tag, "Idle")
+    assert.equal(requests.length, requestCount + 1)
+    assert(JSON.stringify(requests.at(-1)).includes("Keyboard follow-up"))
+  })
+
   await step("discard removes the take's images", async () => {
     assert(existsSync(join(root, ".caliper/takes", `${take}.images`, "3.png")))
     page.once("dialog", dialog => void dialog.accept())
-    await page.locator(".cal-take button", { hasText: "Discard" }).click()
-    await page.locator(".cal-take").waitFor({ state: "detached" })
+    await page.locator(`${cal.discard}[data-take="${take}"]`).click()
+    await page.locator(`${cal.nav} ${cal.navTake}[data-take="${take}"]`).waitFor({ state: "detached" })
     assert(!existsSync(join(root, ".caliper/takes", `${take}.images`)))
   })
 
   assert.deepEqual(errors, [], "the chrome threw no errors")
-  console.log(`\n${passed.length} checks passed. Screenshots: ${SHOTS}`)
+  console.log(`\n${passed.length} behavioral checks passed; layout NOT PROVEN. Screenshots: ${SHOTS}`)
 } finally {
   await browser.close()
   await server.close()

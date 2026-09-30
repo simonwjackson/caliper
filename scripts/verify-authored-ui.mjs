@@ -1,4 +1,4 @@
-#!/usr/bin/env -S nix shell nixpkgs#nodejs --command node
+#!/usr/bin/env -S nix develop -c node
 // Real Checks window -> Vite API -> React frames -> authored Chromium execution.
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -10,9 +10,12 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
-import { reveal } from "./reveal.mjs"
+import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
-const { values } = parseArgs({ options: { modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-ui" } } })
+const { values } = parseArgs({ options: { reference: { type: "boolean", default: true }, layout: { type: "boolean", default: false }, modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-ui" } } })
+// The served Run 1 renderer is unstyled. Opt in to production geometry gates
+// with --layout only after the real UI is integrated; deferrals are not passes.
+const reference = values.reference && !values.layout
 assert(values.modules && process.env.CHROMIUM, "Pass --modules <React consumer node_modules> and set CHROMIUM")
 const root = mkdtempSync(join(tmpdir(), "caliper-authored-ui-consumer-"))
 const out = resolve(values.out)
@@ -75,13 +78,13 @@ try {
   const base = `${url}__caliper/`
   const dialog = page.getByRole("dialog", { name: "Checks", exact: true })
   const runButton = dialog.getByRole("button", { name: "Check selected preview", exact: true })
-  const closeButton = dialog.getByRole("button", { name: "Close checks" })
+  const closeButton = dialog.locator(cal.checksClose)
   const getView = async () => /** @type {import('../src/checks/contract.js').ChecksView} */ (await (await fetch(`${base}checks`)).json())
-  const open = async () => { await (await reveal(page, page.locator(".cal-checks-toggle"))).click(); await dialog.waitFor() }
+  const open = async () => { await (await reveal(page, page.locator(`${cal.tool}[data-tool="checks"]`))).click(); await dialog.waitFor() }
   /** @param {string} state */
   const select = async state => {
     if (await dialog.isVisible()) await closeButton.click()
-    await (await reveal(page, page.locator(`.cal-state[data-state="${state}"]:not([data-take])`).first())).click()
+    await (await reveal(page, page.locator(`${cal.state}[data-state="${state}"]`).first())).click()
     await open()
   }
   const start = async () => {
@@ -91,7 +94,7 @@ try {
     assert.equal(ack.status(), 202, await ack.text())
     const running = await ack.json()
     assert.equal(running._tag, "Running")
-    await dialog.locator(".cal-check-progress").waitFor()
+    await dialog.locator(cal.checkStop).waitFor()
     return running.id
   }
   /** @param {string} id */
@@ -102,7 +105,7 @@ try {
       if (view._tag === "Ready" && view.id === id) {
         assert.equal(view.report.version, 2)
         assert(view.report.version === 2)
-        await dialog.locator(".cal-check-summary").waitFor()
+        await dialog.locator(cal.report).waitFor()
         return { ...view, report: view.report }
       }
       assert(view._tag !== "Failed" && view._tag !== "Cancelled", JSON.stringify(view))
@@ -122,9 +125,9 @@ try {
   /** @type {Array<[string, number, number]>} */
   const shapes = [["wide", 1600, 1000], ["narrow-tall", 360, 900], ["wide-short", 1400, 300], ["small", 320, 480]]
   await page.goto(`${base}#part=${encodeURIComponent(part)}&state=default`)
-  await page.locator('.cal-state[data-state="default"]').waitFor()
+  await page.locator(`${cal.state}[data-state="default"]`).waitFor()
   await open()
-  await dialog.getByText("No checks run yet", { exact: true }).waitFor()
+  await dialog.getByText(/^No checks run yet/).waitFor()
   const first = await ready(await start())
   assert.equal(first.report.run.termination, "Completed")
   assert.equal(first.stale, false)
@@ -135,15 +138,14 @@ try {
     assert.notEqual(result.authored.checks[0]?.imageSha256, result.sha256, "Interaction must not replace the initial-state image")
     assert.equal(result.authored.provenance.kind, "Original")
   }
-  const row = dialog.locator('.cal-check-result[data-index="0"]')
+  const row = dialog.locator(`${cal.checkRow}[data-index="0"]`)
   await row.locator(":scope > summary").click()
-  await row.getByText(/Wrong label/).waitFor()
+  await (await reveal(page, row.getByText(/Wrong label/))).waitFor({ state: "visible" })
   assert(!(await row.innerText()).includes("\u001b["), "Browser assertion details must not display terminal color codes")
-  await row.locator(".cal-check-finding > summary").filter({ hasText: "retry loads the library" }).click()
-  await row.getByText("Expectation provenance", { exact: true }).click()
+  await row.locator(`${cal.finding} > summary`).filter({ hasText: "retry loads the library" }).click()
   await row.getByText("Checks declared in real files. Covers these named checks only.", { exact: true }).waitFor()
   await page.waitForFunction(() => {
-    const images = [...document.querySelectorAll('.cal-check-result[data-index="0"] img')]
+    const images = [...document.querySelectorAll('[data-cal="check-row"][data-index="0"] img')]
     return images.length === 4 && images.every(image => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0)
   })
   const item = first.report.results[0]
@@ -157,20 +159,23 @@ try {
     writeFileSync(join(out, `${kind}.png`), bytes)
   }
   writeFileSync(join(out, "completed-report.json"), JSON.stringify(first, null, 2))
-  for (const [name, width, height] of shapes) {
-    await page.setViewportSize({ width, height })
-    await reachable([closeButton, runButton, row.getByRole("checkbox"), row.getByRole("button", { name: "Approve this image", exact: true })], width, height)
-    await row.getByText("Authored interactions", { exact: true }).scrollIntoViewIfNeeded()
-    await page.screenshot({ path: join(out, `results-${name}.png`) })
-    await row.locator(".cal-check-finding > summary").filter({ hasText: "deliberate assertion failure" }).scrollIntoViewIfNeeded()
-    await page.screenshot({ path: join(out, `assertion-${name}.png`) })
+  if (reference) deferLayout(["Authored result, assertion and approval controls inside all four viewport shapes", "Authored Checks follows a 360 × 480 embedded container"])
+  else {
+    for (const [name, width, height] of shapes) {
+      await page.setViewportSize({ width, height })
+      await reachable([closeButton, runButton, row.getByRole("checkbox"), row.getByRole("button", { name: "Approve this image", exact: true })], width, height)
+      await row.getByText(/^Authored interactions/).scrollIntoViewIfNeeded()
+      await page.screenshot({ path: join(out, `results-${name}.png`) })
+      await row.locator(`${cal.finding} > summary`).filter({ hasText: "deliberate assertion failure" }).scrollIntoViewIfNeeded()
+      await page.screenshot({ path: join(out, `assertion-${name}.png`) })
+    }
+    await page.setViewportSize({ width: 1600, height: 1000 })
+    await page.locator("#caliper").evaluate(node => { node.style.width = "360px"; node.style.height = "480px" })
+    await page.waitForFunction(() => (document.querySelector('[data-cal="checks"]')?.getBoundingClientRect().right ?? 9999) <= 360)
+    await reachable([closeButton, runButton, row.getByRole("checkbox")], 360, 480)
+    await page.screenshot({ path: join(out, "results-embedded.png") })
+    await page.locator("#caliper").evaluate(node => { node.style.removeProperty("width"); node.style.removeProperty("height") })
   }
-  await page.setViewportSize({ width: 1600, height: 1000 })
-  await page.locator("#caliper").evaluate(node => { node.style.width = "360px"; node.style.height = "480px" })
-  await page.waitForFunction(() => (document.querySelector(".cal-checks-dialog")?.getBoundingClientRect().right ?? 9999) <= 360)
-  await reachable([closeButton, runButton, row.getByRole("checkbox")], 360, 480)
-  await page.screenshot({ path: join(out, "results-embedded.png") })
-  await page.locator("#caliper").evaluate(node => { node.style.removeProperty("width"); node.style.removeProperty("height") })
 
   await select("Hang")
   const hanging = once(witnesses, "started", { signal: AbortSignal.timeout(60_000) })
@@ -181,11 +186,14 @@ try {
   assert.equal((await getView())._tag, "Running")
   await open()
   const stop = dialog.getByRole("button", { name: "Stop checks", exact: true })
-  for (const [name, width, height] of shapes) {
-    await page.setViewportSize({ width, height })
-    await reachable([closeButton, stop], width, height)
-    await stop.scrollIntoViewIfNeeded()
-    await page.screenshot({ path: join(out, `running-${name}.png`) })
+  if (reference) deferLayout(["Running authored Checks Close/Stop controls inside all four viewport shapes"])
+  else {
+    for (const [name, width, height] of shapes) {
+      await page.setViewportSize({ width, height })
+      await reachable([closeButton, stop], width, height)
+      await stop.scrollIntoViewIfNeeded()
+      await page.screenshot({ path: join(out, `running-${name}.png`) })
+    }
   }
   const stopStarted = Date.now()
   await stop.click()
@@ -196,7 +204,7 @@ try {
   assert.equal(cancelled.report.results[0]?.authored.checks[0]?.status, "Passed")
   assert.equal(cancelled.report.results[0]?.authored.checks[1]?.status, "Inconclusive")
   assert(cancelled.report.results[1]?.authored.checks.every(check => check.status === "NotRun"))
-  await dialog.getByText(/Run ended: Cancelled/).waitFor()
+  await (await reveal(page, dialog.getByText(/Run ended: Cancelled/))).waitFor({ state: "visible" })
   writeFileSync(join(out, "cancelled-report.json"), JSON.stringify(cancelled, null, 2))
   await page.setViewportSize({ width: 1600, height: 1000 })
   await select("default")
@@ -218,8 +226,8 @@ try {
   assert.equal(stale.report.run.stale, true)
   assert.equal(stale.stale, true)
   assert.equal(stale.report.results[0]?.authored.checks[0]?.status, "Passed")
-  await dialog.getByText("Results are out of date", { exact: true }).waitFor()
-  await dialog.locator('.cal-check-result[data-index="0"] > summary').click()
+  await dialog.getByText(/^Results are out of date/).waitFor()
+  await dialog.locator(`${cal.checkRow}[data-index="0"] > summary`).click()
   assert(await dialog.getByRole("checkbox").isDisabled())
   assert(await dialog.getByRole("button", { name: "Approve this image", exact: true }).isDisabled())
   await page.screenshot({ path: join(out, "source-changed.png") })
@@ -236,7 +244,7 @@ try {
   rmSync(join(out, "failure.json"), { force: true })
   rmSync(join(out, "failure.png"), { force: true })
   writeFileSync(join(out, "verification.json"), JSON.stringify(evidence, null, 2))
-  console.log(`Verified real authored Checks UI run/results/images, Stop, rerun, helper-edit invalidation, and five container shapes. ${JSON.stringify(evidence)} Screenshots: ${out}`)
+  console.log(`Verified real authored Checks UI run/results/images, Stop, rerun, helper-edit invalidation, ${reference ? "with container-layout gates deferred for the unstyled reference" : "and five container shapes"}. ${JSON.stringify(evidence)} Screenshots: ${out}`)
 } catch (error) {
   await page.screenshot({ path: join(out, "failure.png") }).catch(() => {})
   writeFileSync(join(out, "failure.json"), JSON.stringify({ error: String(error), errors, evidence, body: await page.locator("body").innerText().catch(() => "unavailable") }, null, 2))

@@ -1,6 +1,7 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
 import { caliper } from "../src/plugin.js"
+import { chromeDelivery } from "../src/build/chrome.js"
 import { manifest, withProject } from "./project-server.js"
 
 const files = {
@@ -41,7 +42,9 @@ describe("the chrome page", () => {
       const response = await get("/__caliper/")
       expect(response.status).toBe(200)
       const html = await response.text()
-      expect(html).toContain("/__caliper/client/chrome.js")
+      expect(html).toContain(`/__caliper/assets/${chromeDelivery().entry}`)
+      expect(html).not.toContain("/__caliper/client/chrome.js")
+      expect(html).not.toContain("importmap")
       expect(html).not.toContain("/@vite/client")
     })
   })
@@ -86,7 +89,7 @@ describe("the chrome page", () => {
       expect(pageResponse.status).toBe(200)
       const html = await pageResponse.text()
       expect(html).toContain('rel="manifest" href="/preview/__caliper/manifest.webmanifest"')
-      expect(html).toContain('src="/preview/__caliper/client/chrome.js"')
+      expect(html).toContain(`src="/preview/__caliper/assets/${chromeDelivery().entry}"`)
       const response = await get("/__caliper/manifest.webmanifest")
       expect(response.status).toBe(200)
       const manifest = await response.json()
@@ -104,10 +107,26 @@ describe("the chrome page", () => {
     })
   })
 
-  test("serves its own client files and nothing else from its folder", async () => {
+  test("serves bundled chrome artifacts and only the product-frame client files", async () => {
     await withProject({ files }, async ({ get }) => {
-      expect((await get("/__caliper/client/chrome.js")).status).toBe(200)
-      expect((await get("/__caliper/client/device-frame.js")).status).toBe(200)
+      const delivery = chromeDelivery()
+      const entry = await get(`/__caliper/assets/${delivery.entry}`)
+      expect(entry.status).toBe(200)
+      expect(entry.headers.get("content-type")).toContain("text/javascript")
+      const artifact = delivery.read(delivery.entry)
+      if (artifact === null) throw new Error("The built manifest entry must be readable")
+      expect(await entry.text()).toBe(artifact.body.toString())
+      for (const css of delivery.css) {
+        const stylesheet = await get(`/__caliper/assets/${css}`)
+        expect(stylesheet.status).toBe(200)
+        expect(stylesheet.headers.get("content-type")).toContain("text/css")
+      }
+      expect((await get("/__caliper/client/frame.js")).status).toBe(200)
+      expect((await get("/__caliper/client/frame.css")).status).toBe(200)
+      expect((await get("/__caliper/client/chrome.js")).status).toBe(404)
+      expect((await get("/__caliper/client/device-frame.js")).status).toBe(404)
+      expect((await get("/__caliper/assets/.vite/manifest.json")).status).toBe(404)
+      expect((await get("/__caliper/assets/../plugin.js")).status).toBe(404)
       expect((await get("/__caliper/client/../plugin.js")).status).toBe(404)
       expect((await get("/__caliper/client/types.d.ts")).status).toBe(404)
     })

@@ -3,7 +3,7 @@ import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { css } from "@codemirror/lang-css"
 import { javascript } from "@codemirror/lang-javascript"
-import { bracketMatching, foldGutter, foldKeymap, HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language"
+import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from "@codemirror/language"
 import { Chunk, getChunks, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView } from "@codemirror/merge"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
 import { Annotation, ChangeSet, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from "@codemirror/state"
@@ -19,11 +19,12 @@ import {
   lineNumbers,
   WidgetType,
 } from "@codemirror/view"
-import { tags } from "@lezer/highlight"
+import { editorAppearance } from "./ui/editor-appearance"
+import { CAL } from "./ui/hooks"
 
 /**
  * Caliper's code editor: CodeMirror 6, composed from its own packages and
- * styled with the chrome's tokens.
+ * with appearance supplied by the chrome UI.
  *
  * It knows nothing about takes or the server. The code pane tells it which
  * file to show and in which mode, and hears about edits through hooks.
@@ -31,9 +32,8 @@ import { tags } from "@lezer/highlight"
  * @typedef {{ _tag: "Real" }
  *   | { _tag: "Take", original: string | null }
  *   | { _tag: "Watching", original: string | null }} Mode
- *   `Real`: the real file. It stays editable, and the first edit asks the
- *   pane to start a take. `Take`: edits save to the take, shown against the
- *   real file. `Watching`: the take's agent is editing, so you only watch.
+ *   `Real`: the real file. Edits save directly to the project.
+ *   `Take`: edits save to the take, shown against the real file. `Watching`: the take's agent is editing, so you only watch.
  *   `original` is null when the take adds the file.
  * @typedef {{ export: string, label: string, current: boolean }} Lens
  *   One state of the part, shown above the line that exports it.
@@ -55,7 +55,7 @@ const fromDisk = Annotation.define()
 const setLenses = StateEffect.define()
 /** @type {import("@codemirror/state").StateEffectType<null>} */
 const clearArrivals = StateEffect.define()
-/** How long text that arrives from disk stays marked. Matches chrome.css. */
+/** How long text that arrives from disk stays marked. */
 const ARRIVAL_MS = 1600
 
 /**
@@ -78,6 +78,7 @@ export function createEditor(parent, hooks) {
   let currentMode = { _tag: "Real" }
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let arrivalTimer
+  let destroyed = false
 
   const view = new EditorView({
     parent,
@@ -92,7 +93,7 @@ export function createEditor(parent, hooks) {
     const chunks = getChunks(view.state)?.chunks.length ?? 0
     // With no change left, nothing is worth folding away: show the whole file.
     if (chunks === 0 && view.state.field(collapsing, false)) {
-      queueMicrotask(() => view.dispatch({ effects: diff.reconfigure(diffExtensions(currentMode, false)) }))
+      queueMicrotask(() => { if (!destroyed) view.dispatch({ effects: diff.reconfigure(diffExtensions(currentMode, false)) }) })
     }
     hooks.onChanges(chunks)
   }
@@ -108,7 +109,6 @@ export function createEditor(parent, hooks) {
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
     indentOnInput(),
-    syntaxHighlighting(caliperHighlight, { fallback: true }),
     bracketMatching(),
     closeBrackets(),
     autocompletion(),
@@ -126,7 +126,7 @@ export function createEditor(parent, hooks) {
       ...completionKeymap,
       indentWithTab,
     ]),
-    caliperTheme,
+    editorAppearance,
     arrivals,
     lensField(hooks.onSelectState),
     language.of(languageFor(opened.file)),
@@ -182,7 +182,9 @@ export function createEditor(parent, hooks) {
     if (before === undefined || after === undefined || before === null || after === null) {
       // The diff starts, stops, or switches between an added file and a changed one.
       // It never folds here: you may be typing the first change.
-      if (before !== after) effects.push(diff.reconfigure(diffExtensions(next, false)))
+      if (before !== after || currentMode._tag !== next._tag) effects.push(diff.reconfigure(diffExtensions(next, false)))
+    } else if (currentMode._tag !== next._tag) {
+      effects.push(diff.reconfigure(diffExtensions(next, false)))
     } else if (before !== after) {
       effects.push(originalDocChangeEffect(view.state, changesBetween(before, after)))
     }
@@ -238,6 +240,14 @@ export function createEditor(parent, hooks) {
     nextChange: () => goToNextChunk(view),
     previousChange: () => goToPreviousChunk(view),
     focus: () => view.focus(),
+    destroy: () => {
+      destroyed = true
+      clearTimeout(arrivalTimer)
+      states.clear()
+      scrolls.clear()
+      modes.clear()
+      view.destroy()
+    },
   }
 }
 
@@ -258,10 +268,9 @@ export function createDiffView(parent, { path, before, after }) {
       extensions: [
         lineNumbers(),
         highlightSpecialChars(),
-        syntaxHighlighting(caliperHighlight, { fallback: true }),
         EditorState.readOnly.of(true),
         EditorView.editable.of(false),
-        caliperTheme,
+        editorAppearance,
         languageFor(path),
         unifiedMergeView({
           original: before ?? "",
@@ -380,10 +389,13 @@ function diffExtensions(mode, collapse) {
       if (type === "accept") return document.createElement("span")
       const button = document.createElement("button")
       button.type = "button"
+      button.disabled = mode._tag === "Watching"
       button.className = "cm-cal-revert"
       button.textContent = "Revert"
       button.title = "Put the real file's lines back in this take"
-      button.addEventListener("mousedown", action)
+      button.addEventListener("mousedown", event => {
+        if (mode._tag !== "Watching") action(event)
+      })
       return button
     },
   })]
@@ -509,6 +521,9 @@ class LensWidget extends WidgetType {
     const button = document.createElement("button")
     button.type = "button"
     button.dataset.current = String(this.lens.current)
+    button.dataset.cal = CAL.state
+    button.dataset.state = this.lens.export
+    button.setAttribute("aria-current", String(this.lens.current))
     button.textContent = this.lens.current ? `On the stage · ${this.lens.label}` : `Show ${this.lens.label}`
     button.title = this.lens.current ? "The stage shows this state" : `Show the state “${this.lens.label}” on the stage`
     button.addEventListener("mousedown", event => {
@@ -523,125 +538,3 @@ class LensWidget extends WidgetType {
     return true
   }
 }
-
-// ---------------------------------------------------------------------- theme
-
-/*
- * Colours come from the chrome's tokens in chrome.css, so the editor and the
- * chrome change together.
- */
-const caliperTheme = EditorView.theme({
-  "&": {
-    height: "100%",
-    color: "var(--cal-ink)",
-    backgroundColor: "var(--cal-code-bg)",
-    fontSize: "var(--cal-text-sm)",
-  },
-  "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--cal-mono)", lineHeight: "1.55" },
-  ".cm-content": { caretColor: "var(--cal-accent)", padding: "var(--cal-space-2) 0" },
-  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--cal-accent)", borderLeftWidth: "2px" },
-  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-    backgroundColor: "var(--cal-code-selection)",
-  },
-  ".cm-activeLine": { backgroundColor: "var(--cal-code-active)" },
-  ".cm-selectionMatch": { backgroundColor: "var(--cal-code-match)" },
-  "&.cm-focused .cm-matchingBracket": { backgroundColor: "var(--cal-code-match)", outline: "1px solid var(--cal-line)" },
-  ".cm-gutters": {
-    backgroundColor: "var(--cal-code-bg)",
-    color: "var(--cal-code-gutter)",
-    border: "none",
-  },
-  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--cal-ink)" },
-  ".cm-lineNumbers .cm-gutterElement": { padding: "0 var(--cal-space-2) 0 var(--cal-space-3)" },
-  ".cm-foldGutter .cm-gutterElement": { color: "var(--cal-code-gutter)", paddingRight: "var(--cal-space-1)" },
-  ".cm-foldPlaceholder": { backgroundColor: "var(--cal-raised)", border: "none", color: "var(--cal-muted)" },
-  ".cm-tooltip": {
-    backgroundColor: "var(--cal-raised)",
-    border: "1px solid var(--cal-line)",
-    borderRadius: "var(--cal-radius)",
-    color: "var(--cal-ink)",
-  },
-  ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--cal-accent)", color: "var(--cal-stage)" },
-  ".cm-panels": { backgroundColor: "var(--cal-panel)", color: "var(--cal-ink)", borderColor: "var(--cal-line)" },
-  ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--cal-line)" },
-  ".cm-panels.cm-panels-bottom": { borderTop: "1px solid var(--cal-line)" },
-  ".cm-panel input, .cm-panel button": { fontSize: "var(--cal-text-sm)" },
-  ".cm-searchMatch": { backgroundColor: "var(--cal-code-match)", outline: "1px solid var(--cal-code-find)" },
-  ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--cal-code-find)" },
-
-  // The diff: a take's lines against the real file's.
-  "&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine": { backgroundColor: "var(--cal-code-added)" },
-  "&.cm-merge-b .cm-changedText": { background: "var(--cal-code-added-strong)" },
-  ".cm-deletedChunk": {
-    backgroundColor: "var(--cal-code-removed)",
-    paddingLeft: "var(--cal-space-2)",
-    position: "relative",
-  },
-  ".cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-deletedText": { background: "var(--cal-code-removed-strong)" },
-  ".cm-deletedLine": { color: "var(--cal-muted)" },
-  // The change's row is as wide as the longest line. Revert floats right and
-  // sticks to the visible edge, so it stays in reach on a wide file.
-  ".cm-deletedChunk .cm-chunkButtons": { position: "sticky", float: "right", insetInlineEnd: "var(--cal-space-2)", marginTop: "1px", zIndex: "1", lineHeight: "1" },
-  // A change that only adds lines removes nothing: no red row, only Revert beside the first added line.
-  ".cm-deletedChunk:not(:has(.cm-deletedLine))": { backgroundColor: "transparent", padding: "0", height: "0" },
-  "&.cm-cal-watching .cm-chunkButtons": { display: "none" },
-  ".cm-changedLineGutter": { background: "var(--cal-good) !important" },
-  ".cm-deletedLineGutter": { background: "var(--cal-bad) !important" },
-  ".cm-changeGutter": { width: "3px", paddingLeft: "0" },
-  ".cm-collapsedLines": {
-    color: "var(--cal-muted)",
-    background: "var(--cal-panel) !important",
-    fontFamily: "var(--cal-font)",
-    fontSize: "var(--cal-text-sm)",
-    padding: "var(--cal-space-1) var(--cal-space-3)",
-    borderBlock: "1px solid var(--cal-line)",
-  },
-  ".cm-collapsedLines:hover": { color: "var(--cal-ink)" },
-  // CodeMirror draws ⦚ around the count, which many monospace fonts lack.
-  ".cm-collapsedLines:before": { content: '"↕"' },
-  ".cm-collapsedLines:after": { content: "none" },
-  ".cm-cal-revert": {
-    border: "1px solid var(--cal-line)",
-    borderRadius: "var(--cal-radius)",
-    background: "var(--cal-raised)",
-    color: "var(--cal-ink)",
-    font: "0.75rem / 1.4 var(--cal-font)",
-    padding: "0 var(--cal-space-2)",
-    cursor: "pointer",
-  },
-  ".cm-cal-revert:hover": { borderColor: "var(--cal-bad)", color: "var(--cal-bad)" },
-
-  // Lenses above the lines that export the part's states.
-  ".cm-cal-lens": { padding: "var(--cal-space-1) 0 0", lineHeight: "1" },
-  ".cm-cal-lens button": {
-    border: "none",
-    background: "none",
-    padding: "2px 0",
-    color: "var(--cal-muted)",
-    font: "0.75rem / 1.2 var(--cal-font)",
-    cursor: "pointer",
-  },
-  ".cm-cal-lens button:hover": { color: "var(--cal-accent)", textDecoration: "underline" },
-  ".cm-cal-lens button[data-current=true]": { color: "var(--cal-accent)", cursor: "default", textDecoration: "none" },
-  ".cm-cal-lens button[data-current=true]::before": { content: '"● "' },
-
-  ".cm-cal-arrived": { animation: `cal-arrived ${ARRIVAL_MS}ms ease-out` },
-}, { dark: true })
-
-const caliperHighlight = HighlightStyle.define([
-  { tag: [tags.keyword, tags.moduleKeyword, tags.controlKeyword, tags.operatorKeyword, tags.definitionKeyword], color: "var(--cal-code-keyword)" },
-  { tag: [tags.string, tags.special(tags.string), tags.regexp], color: "var(--cal-code-string)" },
-  { tag: [tags.number, tags.bool, tags.null, tags.atom, tags.unit], color: "var(--cal-code-number)" },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: "var(--cal-code-comment)", fontStyle: "italic" },
-  { tag: [tags.typeName, tags.className, tags.namespace], color: "var(--cal-code-type)" },
-  { tag: [tags.tagName, tags.angleBracket], color: "var(--cal-code-tag)" },
-  { tag: [tags.attributeName], color: "var(--cal-code-attribute)" },
-  { tag: [tags.propertyName, tags.special(tags.propertyName)], color: "var(--cal-code-property)" },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--cal-code-function)" },
-  { tag: [tags.definition(tags.variableName), tags.definition(tags.propertyName)], color: "var(--cal-ink)" },
-  { tag: [tags.variableName, tags.self], color: "var(--cal-ink)" },
-  { tag: [tags.operator, tags.punctuation, tags.separator, tags.bracket], color: "var(--cal-code-punctuation)" },
-  { tag: [tags.meta, tags.processingInstruction, tags.annotation], color: "var(--cal-code-keyword)" },
-  { tag: tags.invalid, color: "var(--cal-bad)" },
-])

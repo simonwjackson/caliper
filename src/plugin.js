@@ -14,7 +14,7 @@ import { createChecksApi } from "./checks/api.js"
 import { createSourceRevision } from "./checks/source-revision.js"
 import { checkSource } from "./authored/source.js"
 import { authoredCheckDelivery } from "./authored/delivery.js"
-import { browserPackages, CHROME_PACKAGES, importMap, serveModule } from "./code/modules.js"
+import { chromeDelivery } from "./build/chrome.js"
 import { listeningOrigin } from "./server-origin.js"
 import { reportLateChanges } from "./late-changes.js"
 import { resolveAgent } from "./agent/config.js"
@@ -49,25 +49,8 @@ const PWA_FILES = new Map([
   ["icon-maskable-192.png", "image/png"],
   ["icon-maskable-512.png", "image/png"],
 ])
-/** Caliper's package folder, where the chrome's browser packages resolve from. */
-const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url))
+// Only the product-frame bootstrap goes through the consumer's Vite.
 const CLIENT_FILES = new Map([
-  ["chrome.js", "text/javascript"],
-  ["integration-review.js", "text/javascript"],
-  ["knobs-panel.js", "text/javascript"],
-  ["knob-cssom.js", "text/javascript"],
-  ["knob-values.js", "text/javascript"],
-  ["checks-panel.js", "text/javascript"],
-  ["checks-view.js", "text/javascript"],
-  ["checks.css", "text/css"],
-  ["chrome.css", "text/css"],
-  ["code-pane.js", "text/javascript"],
-  ["code-editor.js", "text/javascript"],
-  ["device-frame.js", "text/javascript"],
-  ["scenarios.js", "text/javascript"],
-  ["dom.js", "text/javascript"],
-  ["images.js", "text/javascript"],
-  ["layout.js", "text/javascript"],
   ["frame.js", "text/javascript"],
   ["frame.css", "text/css"],
 ])
@@ -91,6 +74,7 @@ export function caliper(options = {}) {
   /** @type {string} */
   let root = process.cwd()
   let cacheDir = join(root, "node_modules/.vite")
+  let base = ""
   const overlay = takeOverlay(() => root, () => cacheDir)
   const checkDelivery = authoredCheckDelivery()
   /** @type {Record<string, string | undefined>} */
@@ -120,6 +104,7 @@ export function caliper(options = {}) {
     configResolved(config) {
       root = config.root
       cacheDir = config.cacheDir
+      base = config.base.replace(/\/$/, "")
       // The shell's environment wins over .env files, as in Vite itself.
       env = { ...loadEnv(config.mode, typeof config.envDir === "string" ? config.envDir : root, ""), ...process.env }
     },
@@ -135,7 +120,7 @@ export function caliper(options = {}) {
         if (tagged) return tagged
         // Vite pre-transforms the frame page's script. Point it at the real file,
         // although Caliper's middleware serves the request itself.
-        const client = clientFile(id)
+        const client = clientFile(base && id.startsWith(`${base}/`) ? id.slice(base.length) : id)
         return client === null ? null : join(CLIENT_DIR, client)
       },
     },
@@ -278,13 +263,14 @@ function createSession(server, root, options, env, overlay) {
   server.watcher.on("add", codeChanged)
   server.watcher.on("unlink", codeChanged)
 
-  const modules = browserPackages(PACKAGE_DIR, CHROME_PACKAGES)
-  for (const problem of modules.problems) server.config.logger.warn(`Caliper: ${problem}`)
-  /** @type {Map<string, import("./code/modules.js").ServedModule>} */
-  const moduleCache = new Map()
-  const modulesUrl = `${base}${CALIPER_PATH}/modules`
   const themeColor = JSON.parse(readFileSync(join(PWA_DIR, "manifest.webmanifest"), "utf8")).theme_color
-  const chromeHtml = chromePage({ clientUrl: `${base}${CALIPER_PATH}/client`, pwaUrl: `${base}${CALIPER_PATH}`, themeColor, importMap: importMap(modules.packages, modulesUrl) })
+  // Resolve the bundle on demand: frame-only APIs still work before a linked
+  // checkout's first build, and a missing chrome build has a visible response.
+  const chromeHtml = () => {
+    const delivery = chromeDelivery()
+    const assets = `${base}${CALIPER_PATH}/assets`
+    return chromePage({ entryUrl: `${assets}/${delivery.entry}`, cssUrls: delivery.css.map(file => `${assets}/${file}`), pwaUrl: `${base}${CALIPER_PATH}`, themeColor })
+  }
 
   const agent = resolveAgent({ option: options.agent, env, home: homedir() })
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -347,21 +333,21 @@ function createSession(server, root, options, env, overlay) {
     if (await code.handle(path, url, request, response)) return undefined
     if (await knobs.handle(path, request, response)) return undefined
     if (await checks.handle(path, url, request, response)) return undefined
-    if (path.startsWith("/modules/")) {
-      const gzip = /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))
-      const served = serveModule(modules.packages, path.slice("/modules/".length), gzip, moduleCache)
-      if (served === null) return send(response, 404, "text/plain", `Caliper has no browser module ${path.slice("/modules/".length)}.`)
-      response.writeHead(200, {
-        "content-type": `${served.type}; charset=utf-8`,
-        // The version is in the path, so the file at this URL never changes.
-        "cache-control": "public, max-age=31536000, immutable",
-        ...(served.encoding === null ? {} : { "content-encoding": served.encoding }),
-        vary: "accept-encoding",
-      })
-      return response.end(served.body)
+    if (path.startsWith("/assets/")) {
+      try {
+        const served = chromeDelivery().read(path.slice("/assets/".length))
+        if (served === null) return send(response, 404, "text/plain", "Caliper has no such chrome resource.")
+        response.writeHead(200, { "content-type": `${served.type}; charset=utf-8`, "cache-control": "no-store" })
+        return response.end(served.body)
+      } catch (error) {
+        return send(response, 503, "text/plain", error instanceof Error ? error.message : String(error))
+      }
     }
     if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
-    if (path === "/") return send(response, 200, "text/html", chromeHtml)
+    if (path === "/") {
+      try { return send(response, 200, "text/html", chromeHtml()) }
+      catch (error) { return send(response, 503, "text/plain", error instanceof Error ? error.message : String(error)) }
+    }
     const pwaFile = path.slice(1)
     const pwaType = PWA_FILES.get(pwaFile)
     if (pwaType !== undefined) {
@@ -435,7 +421,9 @@ function createSession(server, root, options, env, overlay) {
     }
     const takeQuery = flat === null ? "" : `&take=${take}`
     const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}&state=${encodeURIComponent(stateName)}${takeQuery}`
-    const html = framePage({ clientUrl: `${base}${CALIPER_PATH}/client`, config, problem })
+    // Vite prefixes HTML resource URLs with its base during transformation.
+    // The JSON config already has final URLs and is not transformed by Vite.
+    const html = framePage({ clientUrl: `${CALIPER_PATH}/client`, config, problem })
     send(response, problem === null ? 200 : 404, "text/html", await server.transformIndexHtml(frameUrl, html))
   }
 

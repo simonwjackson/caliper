@@ -2,19 +2,11 @@
 import { createHash } from "node:crypto"
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, sep } from "node:path"
-import { Type } from "typebox"
 import { Value } from "typebox/value"
 import { fenceProjectPath, isTakeId, TAKES_DIR } from "./store.js"
-
-const text = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: "\\S" })
-export const integrationProposalSchema = Type.Object({
-  strategy: Type.Union([Type.Literal("variant"), Type.Literal("component")]),
-  summary: text(2000),
-  shared: text(2000),
-  preserved: text(2000),
-  usage: text(),
-  preview: Type.Object({ part: text(1024), state: text(200) }, { additionalProperties: false }),
-}, { additionalProperties: false })
+import { integrationProposalSchema } from "./integration-contract.js"
+// Preserve the existing public schema import while moving validation out of Node-only code.
+export { integrationProposalSchema } from "./integration-contract.js"
 
 /**
  * @typedef {import('typebox').Static<typeof integrationProposalSchema>} IntegrationProposal

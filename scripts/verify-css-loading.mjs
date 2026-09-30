@@ -13,6 +13,7 @@ import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
 import { createTakeStore } from "../src/takes/store.js"
+import { cal, reveal } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
@@ -176,8 +177,10 @@ try {
   assert.equal(await value(overridden, ".badge", "color"), "rgb(11, 12, 13)")
   const chrome = await browser.newPage()
   await chrome.goto(`${url}__caliper/`)
-  await chrome.locator(".cal-setup").evaluate(element => { element.setAttribute("open", "") })
-  await chrome.getByText("from caliper({ css })", { exact: true }).waitFor()
+  await chrome.locator(cal.setup).waitFor()
+  await reveal(chrome, chrome.locator(cal.setup).getByText(/^src\/legacy.css/))
+  assert.match(await chrome.locator(cal.setup).innerText(), /Set by caliper\(\{ css \}\) in vite.config/)
+  assert.match(await chrome.locator(cal.setup).innerText(), /src\/legacy.css/)
   console.log("PASS: explicit globals, existing global CSS import chains, tagged global overrides and Setup provenance")
 } finally {
   await browser.close()

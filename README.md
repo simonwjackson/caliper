@@ -12,7 +12,7 @@ It does not run the app to do this.
 1. Register this checkout once per machine:
 
    ```sh
-   cd /path/to/caliper && bun install && bun link
+   cd /path/to/caliper && bun install && bun run build && bun link
    ```
 
 2. In the project, add the dev dependency and the plugin:
@@ -32,26 +32,25 @@ It does not run the app to do this.
 3. Run `vite` in the project and open `/__caliper/` on the dev server.
 
 4. Select **Calibrate** once for each monitor. Set the browser zoom to 100%,
-   hold a credit card to the screen and move the slider until the outline
-   matches the card.
+   hold a credit card to the screen and change px per mm until the outline
+   matches the card. The reference uses a number field, not a slider.
 
 `vite build` never includes Caliper. The plugin sets `apply: "serve"`.
 
-Caliper fits the window it has, including a phone. In a wide window, the part
-list, the stage, the code pane and the Takes panel sit side by side. The
-Knobs panel takes the Takes panel's place when you choose **Knobs**. In a
-small window, **Parts** opens the part list over the stage, and **Preview**,
-**Code** and **Takes** switch the one pane that fills the rest; **Knobs**
-keeps the preview and shows the knobs under it. Controls that do not fit the
-bar, such as the devices and **Calibrate**, move into the **⋯** menu. Nothing
-is removed at any size.
+This core branch serves the unstyled React reference. Takes are on the canvas;
+Knobs and the selected take's record share a side region. Native disclosures
+keep controls reachable with scrolling. Darkroom styling, rail/dock placement,
+sheet height budgets and no-overflow layout remain for UI integration. The
+reference is not the finished design. See
+[`docs/plans/react-chrome-core-notes.md`](docs/plans/react-chrome-core-notes.md)
+for its verification record and limits.
 
 ## Install the dev chrome
 
 Open `/__caliper/` on a secure origin (localhost or HTTPS) and use the browser's
 Install action. The install opens Caliper in fullscreen, with standalone and
 minimal-UI fallbacks. Android gets regular and maskable icons; iOS gets a home-screen
-icon and a viewport that keeps controls clear of display cutouts. The manifest,
+icon and viewport metadata. Safe-area placement still needs the styled UI. The manifest,
 icons and install scope stay under `/__caliper/`, including when Vite uses a base
 path. They do not replace the product's own manifest or icons.
 
@@ -59,7 +58,8 @@ This is still a dev tool. Keep the project's Vite server running while using the
 installed app. Caliper has no service worker and does not work offline. To rebuild
 its icons after changing chrome colors, run `nix develop -c node scripts/gen-icons.mjs`
 in this checkout. Run `nix develop -c node scripts/verify-pwa.mjs` to check the
-install metadata, browser installability and safe-area layout on a test product.
+install metadata and browser installability on a test product. The reference
+reports safe-area layout as deferred; it does not pass that layout gate.
 
 ## What Caliper finds by itself
 
@@ -97,8 +97,9 @@ export function NoResults() { return <Button label="Retry" /> } // "No results"
 Click a part's name to show all its states side by side on the selected
 device. The separate arrow expands or collapses its state list without changing
 the preview. Click a child state to show it alone. Each state has its own frame,
-so one that throws fails alone. All frames have the same size: true size when
-one frame fits the window, or scaled down together when not. More states add rows that scroll. Click a frame's label
+so one that throws fails alone. All frames use the same device CSS viewport. The reference scales each frame
+by available width. It does not fit frames to a canvas height budget; that
+layout remains for UI integration. Click a frame's label
 to show that state alone.
 
 Navigation lists **Pages → Templates → Organisms → Molecules → Atoms**, then
@@ -360,7 +361,7 @@ names and descriptions too, so a direction can name the skill its take should
 use. Caliper reads the skills again for each new agent, so a new or changed
 skill needs no restart.
 
-The Takes panel lists the skills under the model. It also lists the problems:
+The composer lists the skills under the model. It also lists the problems:
 a missing folder, a skill with no description (skipped), a name that differs
 from its folder, or a skill hidden by another with the same name.
 
@@ -409,9 +410,9 @@ supported choice.
 
 ## Edit code in Caliper
 
-The **Code** button opens the code pane next to the stage. It sits beside the
-stage when the main column is wide, and under it otherwise. Drag the divider to
-resize it; double-click the divider to reset it. The pane needs no agent.
+The **Code** button opens the code pane. It needs no agent. The core reference
+supports editing and diffs. Side-by-side/stacked placement and divider gestures
+remain UI integration work.
 
 The pane shows the files of the part you edit. Tabs hold the part file, the
 files it imports directly, and the files a take changes. **Files** lists every
@@ -444,9 +445,9 @@ show in the take's conversation.
 In a part file, a line above each exported state names it. Click it to show
 that state on the stage. The state on the stage says **On the stage**.
 
-The pane uses CodeMirror 6. Caliper serves its packages from Caliper's own
-`node_modules` through an import map, so the project's Vite never loads them.
-The first open loads 355 KB with gzip; the browser then caches it. The
+The pane uses CodeMirror 6 in Caliper's own lazy bundle. The project's Vite
+does not transform those dependencies. The current editor chunk is about
+230 KB with gzip. Code and alternate-review diffs load it when needed. The
 pane has no type checking or completion from the project's types yet.
 
 ## Tune design inputs with knobs
@@ -923,17 +924,39 @@ report, not that all behavior is safe.
 
 ## Develop
 
-The React/Darkroom migration starts with the shared contract in
-[`docs/plans/react-chrome.md`](docs/plans/react-chrome.md). The live chrome
-remains plain DOM until that migration lands. Run the unstyled reference's
-browser gate with `nix develop -c bun run verify:chrome-contract`. It makes
-no model calls and changes no consumer files. It does not verify the final
-layout or live-server integration.
+The core migration wires the unchanged reference from
+[`docs/plans/react-chrome.md`](docs/plans/react-chrome.md) to real state and
+controllers. Caliper builds React/React DOM and lazy CodeMirror chunks into
+`dist/chrome`; the consumer's Vite serves them under `/__caliper/assets/`
+without resolving their dependencies. Product frames still use the consumer's
+React. A linked checkout needs `bun run build` after chrome changes. `bun pack`
+builds the artifacts through `prepack`. Consumer production builds omit Caliper.
+
+Self-hosting uses a separate recovery tool at commit `8d23556`, not this
+checkout's plugin. Install it with `nix develop -c bun run tool:install`, then
+run `nix develop -c bun run dev` and open `/__caliper/`. Select **Reference
+chrome** to inspect `src/client/app/Reference.page.part.tsx`. Its three local
+scenarios use the real reference with an empty project; they are not UI-owned
+region coverage. The pinned tool retains the baseline DOM outer chrome. Its
+archive, source and lock hashes are checked before startup. To restore a
+missing or changed copy, run
+`nix develop -c bun run tool:install -- --repair`. This explicit pin permits
+recovery when subject edits break the current renderer, but needs an explicit
+update after UI integration.
+
+Run the unchanged contract gate with
+`nix develop -c bun run verify:chrome-contract`. Run live public gates on
+disposable consumers with `nix develop -c node scripts/verify-chrome-core.mjs`.
+The latter uses a deterministic local model endpoint for take transport, not a
+paid model. Run `nix develop -c bun run verify:chrome-delivery` for linked/packed
+React-major isolation, source HMR, lazy editor delivery and pinned-tool
+self-hosting. Reference passes do not prove final layout or real-device input.
 
 ```sh
-bun install
-bun test
-bun run typecheck
+nix develop -c bun install
+nix develop -c bun run build
+nix develop -c env CALIPER_TEST_MODULES="$PWD/node_modules" bun test
+nix develop -c bun run typecheck
 CHROMIUM=/path/to/chromium CALIPER_TEST_MODULES=/path/to/react-project/node_modules bun test test/navigation.test.js
 CHROMIUM=/path/to/chromium bun run verify:browser -- --url http://127.0.0.1:5173 --root /path/to/project
 CHROMIUM=/path/to/chromium node scripts/verify-css-loading.mjs --modules /path/to/react-project/node_modules
@@ -956,13 +979,15 @@ CHROMIUM=/path/to/chromium node scripts/verify-knobs-product.mjs --root /path/to
 ```
 
 `scripts/verify-knobs.mjs` runs the Knobs panel on a temporary project shaped
-like Pico's tokens: discovery and its refusals, a live drag that writes the
-file once on release, a `@container` threshold, a plain custom property, a
-literal made a token, the token picker, a take's copy, a save to the same file during a drag, and five window sizes. Screenshots go to
+like Pico's tokens: discovery and refusals, live input that writes the
+file once on commit, a `@container` threshold, a plain custom property, literal
+promotion, token choices, a take's copy, HMR during input and five window sizes.
+Label-pointer scrubbing, capture and dock/sheet layout remain deferred on the
+reference. Screenshots go to
 `/tmp/caliper-verify-knobs`. `scripts/verify-knobs-product.mjs` copies a real
 project to a temporary folder, prints every knob and refusal Caliper finds for
-one part, drags the first number knob of a property, of a plain custom
-property and of a `@container` threshold, then lists the literals and makes
+one part, previews and commits the first number knob of a property, a plain
+custom property and a `@container` threshold, then lists literals and makes
 the first one a token, and checks that no element of the part changed its
 value. `--with ../../contracts` copies a
 folder the project imports from, at the same place. The real project never
@@ -988,8 +1013,9 @@ calls and changes no supplied project files.
 
 `scripts/verify-checks-ui.mjs` exercises the Checks window through real Chromium:
 run progress, findings, saved-image approval, stale results, page reload, take
-selection, unchanged Replace, five size-ladder shapes, and a constrained Caliper
-container inside a larger browser window. It writes screenshots for review.
+selection and unchanged Replace. Add `--layout` after UI integration to require
+five size-ladder shapes, embedded-container containment and focus restoration.
+These assertions remain in the script; the reference explicitly defers them.
 
 `scripts/verify-checks.mjs` uses a temporary React consumer to check the public
 CLI, both device sizes, render errors, browser errors, empty states, spill,
@@ -1001,23 +1027,26 @@ It makes no model calls or changes to the supplied project.
 It types in a real file and checks that the file on disk changes, no take
 starts and the frame renders. Then it undoes the edit and checks that the file
 is back. It starts a take in the project at `--root`, and checks the take's
-frame, the diff and its line count, Revert, the state lenses, and the layout at
-four window sizes. It makes no model calls. It writes the real file back and
+frame, the diff and its line count, Revert, the state lenses, and samples
+four window sizes. Add `--reference` on the unstyled core branch to report its
+layout gates as deferred, not passed. It makes no model calls. It writes the real file back and
 discards every take it starts, even when a step fails. Pick a part with two or
 more states to check the lenses.
 
-`scripts/verify-takes.mjs` checks the Takes panel against a real model: it
+`scripts/verify-takes.mjs` checks takes on the canvas against a configured model: it
 starts takes from the chrome, waits for the agents, checks every take frame,
 takes screenshots at three window sizes and discards the takes.
 
 `scripts/verify-integration.mjs` checks alternate preview, unchanged original
 renders, real click behavior, revision-bound review/apply, and review controls at
-five container sizes. It uses a temporary React consumer. Add `--live` to also
+five container sizes. On the core reference, add `--reference` to defer that
+containment gate. It uses a temporary React consumer. Add `--live` to also
 exercise naming and alternate preparation through the configured local proxy.
 
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
-every part of a running project and checks true size, scaling, calibration, a
-visible error and reload on save. It writes screenshots to
+every part of a running project and checks calibration actions, a visible error
+and reload on save. It reports final physical sizing, overflow and height-budget
+layout as deferred on the reference. It writes screenshots to
 `/tmp/caliper-verify`.
 
 The design decisions behind this shape are in

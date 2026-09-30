@@ -9,6 +9,7 @@ import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
 import { FRAME_WATCHDOG_MS } from "../src/pages.js"
+import { cal, waitFrames } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
@@ -101,8 +102,9 @@ try {
   const parent = await browser.newPage()
   try {
     await parent.goto(`${url}__caliper/#part=src%2FCommit.part.tsx&state=Pending`)
-    await parent.waitForFunction(() => document.querySelector('.cal-device')?.getAttribute('data-frame-state') === 'Failed', undefined, { timeout: FRAME_WATCHDOG_MS + 5_000 })
-    assert((await parent.locator('.cal-problems').innerText()).includes('did not finish its first render'), 'watchdog failures reach the parent chrome')
+    await waitFrames(parent, 1, "Failed")
+    await parent.locator(cal.frameProblem).filter({ hasText: 'did not finish its first render' }).waitFor({ timeout: FRAME_WATCHDOG_MS + 5_000 })
+    assert((await parent.locator(cal.frameProblem).allTextContents()).some(problem => problem.includes('did not finish its first render')), 'watchdog failures reach the parent chrome')
   } finally { await parent.close() }
   assert.equal(failures.length, 0, `${failures.length} frame verdict regressions`)
   console.log("Verified real React delayed commits, null renders, effect updates, errors, and unresolved suspension.")

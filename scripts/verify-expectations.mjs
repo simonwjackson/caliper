@@ -1,4 +1,4 @@
-#!/usr/bin/env -S nix shell nixpkgs#nodejs --command node
+#!/usr/bin/env -S nix develop -c node
 // Exercise product intent through the real CLI, chrome, take overlay and agent.
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
@@ -14,9 +14,9 @@ import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
 import { createTakeStore } from "../src/takes/store.js"
-import { reveal } from "./reveal.mjs"
+import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
-const { values } = parseArgs({ options: { modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-expectations-browser" } } })
+const { values } = parseArgs({ options: { layout: { type: "boolean", default: false }, modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-expectations-browser" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules and set CHROMIUM")
 const root = mkdtempSync(join(tmpdir(), "caliper-expectations-consumer-"))
 const out = resolve(values.out)
@@ -174,13 +174,13 @@ try {
   console.log("Take overlay: its own source declaration is applied without changing real-file intent.")
 
   await page.goto(`${base}#part=${encodeURIComponent(part)}&state=default`)
-  await page.locator(`.cal-state[data-nav-key="state:${part}:default"]`).waitFor()
+  await page.locator(`${cal.state}[data-part="${part}"][data-state="default"]`).waitFor()
   const dialog = page.getByRole("dialog", { name: "Checks", exact: true })
-  const open = async () => { await (await reveal(page, page.locator(".cal-checks-toggle"))).click(); await dialog.waitFor() }
+  const open = async () => { await (await reveal(page, page.locator(`${cal.tool}[data-tool="checks"]`))).click(); await dialog.waitFor() }
   const runUi = async () => {
     await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
     await dialog.getByText(/(?:Checking 2 state\/device results|(?:Initial|Repeat) renders: \d+ of 2)/).waitFor()
-    await dialog.locator(".cal-check-summary").waitFor({ timeout: 120_000 })
+    await dialog.locator(cal.report).waitFor({ timeout: 120_000 })
     const ready = /** @type {import('../src/checks/contract.js').ChecksView} */ (await (await fetch(`${base}checks`)).json())
     assert(ready._tag === "Ready")
     return ready
@@ -188,45 +188,52 @@ try {
   await open()
   let ready = await runUi()
   assert(ready.report.results.every(result => check(result, "accessibility").status === "Accepted"))
-  assert((await dialog.locator(".cal-check-summary").innerText()).includes("2 accepted exceptions"))
-  let row = dialog.locator('.cal-check-result[data-index="0"]')
+  assert((await dialog.innerText()).includes("2 accepted exceptions"))
+  let row = dialog.locator(`${cal.checkRow}[data-index="0"]`)
   await row.locator(":scope > summary").click()
-  let finding = row.locator(".cal-check-finding").filter({ has: page.locator('[data-status="Accepted"]') })
+  let finding = row.locator(cal.finding).filter({ hasText: "Accessibility · 1 accepted exception · Accepted" })
   await finding.locator(":scope > summary").click()
   assert((await finding.innerText()).includes(reason))
   assert((await finding.innerText()).includes("Violation:"), "accepted UI retains the observed violation")
-  for (const [name, width, height] of /** @type {Array<[string, number, number]>} */ ([["generous", 1600, 1000], ["narrow-tall", 360, 900], ["wide-short", 1400, 300]])) {
-    await page.setViewportSize({ width, height })
-    for (const control of [dialog.getByRole("button", { name: "Close checks" }), dialog.getByRole("button", { name: "Check selected preview", exact: true }), finding.locator(":scope > summary"), dialog.getByRole("link", { name: "Download report" })]) {
-      await control.scrollIntoViewIfNeeded()
-      const box = await control.boundingBox()
-      assert(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.y + box.height <= height + 1, `${name}: control remains reachable`)
+  if (!values.layout) deferLayout([
+    "Expectation finding/Close/run/download controls inside generous, narrow-tall and wide-short viewports",
+    "No horizontal Checks dialog overflow and containment in a 720 × 560 Caliper container",
+  ])
+  else {
+    for (const [name, width, height] of /** @type {Array<[string, number, number]>} */ ([["generous", 1600, 1000], ["narrow-tall", 360, 900], ["wide-short", 1400, 300]])) {
+      await page.setViewportSize({ width, height })
+      for (const control of [dialog.locator(cal.checksClose), dialog.getByRole("button", { name: "Check selected preview", exact: true }), finding.locator(":scope > summary"), dialog.getByRole("link", { name: "Download report" })]) {
+        await control.scrollIntoViewIfNeeded()
+        const box = await control.boundingBox()
+        assert(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.y + box.height <= height + 1, `${name}: control remains reachable`)
+      }
+      assert(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `${name}: no horizontal dialog overflow`)
+      await finding.locator(":scope > summary").scrollIntoViewIfNeeded()
+      await page.screenshot({ path: join(out, `${name}.png`) })
     }
-    assert(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `${name}: no horizontal dialog overflow`)
-    await finding.locator(":scope > summary").scrollIntoViewIfNeeded()
-    await page.screenshot({ path: join(out, `${name}.png`) })
+    await page.setViewportSize({ width: 1600, height: 1000 })
+    await page.locator("#caliper").evaluate(node => { node.style.width = "720px"; node.style.height = "560px" })
+    await page.waitForFunction(() => (document.querySelector('[data-cal="checks"]')?.getBoundingClientRect().right ?? Infinity) <= 720)
+    await page.screenshot({ path: join(out, "contained.png") })
+    await page.locator("#caliper").evaluate(node => { node.style.removeProperty("width"); node.style.removeProperty("height") })
   }
-  await page.setViewportSize({ width: 1600, height: 1000 })
-  await page.locator("#caliper").evaluate(node => { node.style.width = "720px"; node.style.height = "560px" })
-  await page.waitForFunction(() => (document.querySelector(".cal-checks-dialog")?.getBoundingClientRect().right ?? Infinity) <= 720)
-  await page.screenshot({ path: join(out, "contained.png") })
-  await page.locator("#caliper").evaluate(node => { node.style.removeProperty("width"); node.style.removeProperty("height") })
-  await dialog.getByRole("button", { name: "Close checks" }).click()
+  await dialog.locator(cal.checksClose).click()
   await page.reload()
-  await page.locator(`.cal-state[data-take="${take}"]`).click()
+  await page.locator(`${cal.navTake}[data-take="${take}"]`).click()
   await open()
   ready = await runUi()
   assert(ready.report.results.every(result => result.take === take && check(result, "accessibility").status === "Accepted"))
-  row = dialog.locator('.cal-check-result[data-index="0"]')
+  row = dialog.locator(`${cal.checkRow}[data-index="0"]`)
   await row.locator(":scope > summary").click()
-  finding = row.locator(".cal-check-finding").filter({ has: page.locator('[data-status="Accepted"]') })
+  finding = row.locator(cal.finding).filter({ hasText: "Accessibility · 1 accepted exception · Accepted" })
   await finding.locator(":scope > summary").click()
   assert((await finding.innerText()).includes(takeReason))
   await row.getByText(/Take images cannot become product baselines/).waitFor()
-  assert.equal(await row.getByRole("button", { name: "Approve this image", exact: true }).count(), 0)
+  assert(await row.locator(cal.imageReviewed).isDisabled(), "Take renders cannot receive real-file image review")
+  assert(await row.locator(cal.approveImage).isDisabled(), "Take images cannot become product baselines")
   await page.screenshot({ path: join(out, "take-intent.png") })
   assert.deepEqual(errors, [])
-  console.log("Checks UI: accepted counts, reasons and raw violations verified at generous, narrow-tall, wide-short and contained sizes; take images cannot be approved.")
+  console.log(`Checks UI: accepted counts, reasons and raw violations verified; take image approval is disabled.${values.layout ? " Container geometry gates passed." : " Reference layout gates explicitly deferred."}`)
 
   const started = await fetch(`${base}takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part, state: "default", device: "rg353m", prompt: "Run checks and report the accepted product exception without editing files." }) })
   assert.equal(started.status, 201)

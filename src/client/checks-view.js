@@ -34,6 +34,7 @@ function summarizeFindings(checks) {
   const notRun = checks.filter(check => check.status === "NotRun").length
   const accepted = checks.filter(check => check.status === "Accepted").length
   const exceptions = checks.reduce((count, check) => count + (check.accepted?.length ?? 0), 0)
+  /** @type {CheckResult['status']} */
   const status = failed ? "Failed" : inconclusive ? "Inconclusive" : review ? "Review" : notRun ? "NotRun" : accepted ? "Accepted" : checks.length ? "Passed" : "NotRun"
   const primary = failed ? `${failed} failed` : inconclusive ? `${inconclusive} inconclusive` : review ? `${review} to review` : notRun ? `${notRun} not run` : accepted ? "Accepted" : checks.length ? "Checks passed" : "Not checked"
   const label = exceptions ? `${primary} · ${exceptionCountLabel(exceptions)}` : primary

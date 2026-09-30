@@ -25,9 +25,15 @@
   "files": [
     "src",
     "bin",
-    "skills"
+    "skills",
+    "dist/chrome"
   ],
   "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "node scripts/build-chrome.mjs",
+    "prepack": "bun run build",
+    "tool:install": "node scripts/chrome-tool.mjs",
+    "verify:chrome-delivery": "node scripts/verify-chrome-delivery.mjs",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "verify:browser": "node scripts/verify-browser.mjs",
