@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client"
 import { useSyncExternalStore } from "react"
-import Chrome from "../ui/Chrome"
+import Darkroom from "../ui/Darkroom"
 import { createChromeApp } from "./runtime"
 import { validateResponse } from "./wire"
 
@@ -25,7 +25,7 @@ const app = createChromeApp({
 })
 function App() {
   const view = useSyncExternalStore(app.subscribe, app.getSnapshot)
-  return <Chrome view={view} actions={app.actions} />
+  return <Darkroom view={view} actions={app.actions} />
 }
 const host = document.getElementById("caliper")
 if (!host) throw new Error("Caliper's mounting element is missing.")

@@ -86,7 +86,7 @@ export function createChromeApp(input: RuntimeInput) {
   function save() { input.saveLocation?.(locationHash(state)) }
   function selected(next: AppState, plan: Plan = { _tag: "None" }) {
     generation++
-    set(reconcileSelection({ ...next, takeCreated: next.take ? next.takeCreated : null, plan, tools: { ...next.tools, navOpen: false, side: !next.take && next.tools.side === "record" ? "closed" : next.tools.side } }))
+    set(reconcileSelection({ ...next, takeCreated: next.take ? next.takeCreated : null, plan, tools: { ...next.tools, side: !next.take && next.tools.side === "record" ? "closed" : next.tools.side } }))
     save(); knobs.refresh()
   }
   function selectState(ref: StateRef) {
@@ -235,7 +235,7 @@ export function createChromeApp(input: RuntimeInput) {
       set({ ...state, tools, checksOpen: tool === "checks" ? true : state.checksOpen, calibrationOpen: tool === "calibrate" ? !state.calibrationOpen : state.calibrationOpen })
       if (tool === "checks") checks.open()
     },
-    onNavOpen: navOpen => set({ ...state, tools: { ...state.tools, navOpen } }), onFilter: filter => set({ ...state, filter }),
+    onNavOpen: navOpen => { remember("nav-open", String(navOpen)); set({ ...state, tools: { ...state.tools, navOpen } }) }, onFilter: filter => set({ ...state, filter }),
     onPart: file => { if (state.project?.parts.some(part => part.file === file)) selected({ ...state, part: file, shown: { _tag: "All" }, context: null, contextNote: "", take: null, expanded: new Map(state.expanded).set(file, true) }) },
     onPartExpanded: (file, open) => set({ ...state, expanded: new Map(state.expanded).set(file, open) }), onState: selectState,
     onCompare: ref => { if (stateExists(state.project?.parts ?? [], ref)) selected({ ...state, part: ref.part, shown: { _tag: "Takes", export: ref.state }, context: state.part === ref.part ? state.context : null, contextNote: "", take: null, expanded: new Map(state.expanded).set(ref.part, true) }) }, onTake: selectTake,

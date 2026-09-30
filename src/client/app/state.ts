@@ -51,7 +51,8 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     context: saved.has("contextPart") ? { part: saved.get("contextPart") ?? "", state: saved.get("contextState") ?? "default" } : null,
     contextNote: "", take: saved.get("take"), takeCreated: Number.isFinite(created) && created >= 0 ? created : null, filter: "", expanded: new Map(),
     device: DEVICES.find(device => device.id === selectedDevice) ?? DEVICES[0]!, pxPerMm: Number.isFinite(px) && px > 0 ? px : DEFAULT_PX_PER_MM, calibrated: Number.isFinite(px) && px > 0,
-    tools: { active, navOpen: false, codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
+    // navOpen is the docked parts column, a remembered preference. The UI owns the small-screen drawer.
+    tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
   }
 }

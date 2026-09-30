@@ -13,6 +13,9 @@ export default defineConfig({
     emptyOutDir: true,
     manifest: true,
     target: "es2022",
+    // Library mode otherwise writes one stylesheet the manifest does not list,
+    // and chromeDelivery serves only manifest files: the chrome would load bare.
+    cssCodeSplit: true,
     lib: { entry: `${root}src/client/app/entry.tsx`, formats: ["es"], fileName: () => "chrome.js" },
     rollupOptions: {
       output: {

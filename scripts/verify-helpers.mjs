@@ -7,13 +7,78 @@ import { CAL, calSelector } from "../src/client/ui/hooks.ts"
 export const cal = /** @type {Readonly<{ [K in keyof typeof CAL]: string }>} */ (Object.freeze(Object.fromEntries(Object.entries(CAL).map(([key, hook]) => [key, calSelector(hook)]))))
 
 /**
+ * Bring a control into reach the way a person would, one tap at a time, and
+ * return it. In the Darkroom chrome a control can sit behind one tap: in the
+ * parts drawer, in the More tools menu, or on a sheet that another sheet
+ * covers. Each step is a normal click on a visible control. A control that no
+ * step reaches fails the gate: nothing may become unreachable (decision 22).
+ *
+ * The reference renderer keeps its native <details> path below.
+ * @param {import("playwright-core").Page} page
+ * @param {import("playwright-core").Locator} control
+ * @returns {Promise<import("playwright-core").Locator>}
+ */
+export async function reveal(page, control) {
+  if (await page.locator(".dr-root").count()) return revealDarkroom(page, control)
+  return revealReference(page, control)
+}
+
+/** @param {import("playwright-core").Page} page */
+const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+
+/**
+ * @param {import("playwright-core").Page} page
+ * @param {import("playwright-core").Locator} control
+ */
+async function revealDarkroom(page, control) {
+  const root = page.locator(".dr-root")
+  const tried = new Set()
+  for (let step = 0; step < 6; step++) {
+    await settle(page)
+    const target = control.first()
+    if (await target.isVisible()) {
+      await target.scrollIntoViewIfNeeded()
+      return target
+    }
+    const attached = await target.count() > 0
+    const where = attached ? await target.evaluate(node => ({
+      nav: node.closest(".dr-parts, .dr-parts__panel, [data-cal=\"parts\"]") !== null,
+      side: node.closest(".dr-side")?.hasAttribute("hidden") ?? false,
+      sideKind: node.closest(".dr-side")?.querySelector("[data-cal=\"knobs\"]") ? "knobs" : "takes",
+      code: node.closest(".dr-code")?.hasAttribute("hidden") ?? false,
+      bar: node.closest(".dr-bar")?.hasAttribute("hidden") ?? false,
+      menu: node.closest("[role=menu]") !== null,
+    })) : null
+    const drawerOpen = await root.getAttribute("data-drawer") === "open"
+    /** @type {import("playwright-core").Locator | null} */
+    let tap = null
+    if (!attached || where?.nav) {
+      // A missing control is most often in the closed parts drawer or column.
+      const parts = page.locator(`${cal.navToggle}[aria-expanded="false"]`)
+      if (!tried.has("parts") && await parts.count()) { tap = parts.first(); tried.add("parts") }
+      else if (!tried.has("more")) { tap = page.getByRole("button", { name: "More tools" }); tried.add("more") }
+    } else if (drawerOpen) {
+      await page.keyboard.press("Escape"); continue
+    } else if (where?.side) tap = page.locator(`${cal.tool}[data-tool="${where.sideKind}"]`)
+    else if (where?.code) tap = page.locator(`${cal.tool}[data-tool="code"]`)
+    else if (where?.bar) tap = page.locator(`${cal.tool}[data-tool="preview"]`)
+    if (tap && !(await tap.first().isVisible()) && !tried.has("more")) { tried.add("more"); tap = page.getByRole("button", { name: "More tools" }) }
+    if (!tap || !(await tap.first().isVisible())) break
+    await tap.first().click()
+  }
+  await control.first().waitFor({ state: "visible", timeout: 2_000 })
+  await control.first().scrollIntoViewIfNeeded()
+  return control.first()
+}
+
+/**
  * Open native disclosures from outside in using their normal browser controls.
  * This proves reference-renderer reachability, not production overflow/layout.
  * @param {import("playwright-core").Page} page
  * @param {import("playwright-core").Locator} control
  * @returns {Promise<import("playwright-core").Locator>}
  */
-export async function reveal(page, control) {
+async function revealReference(page, control) {
   await control.waitFor({ state: "attached" })
   const summaries = await control.evaluate(node => {
     const details = []

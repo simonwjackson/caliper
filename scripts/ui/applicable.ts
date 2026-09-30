@@ -20,9 +20,8 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
   // Navigation (the drawer is opened before hooks are read on small sizes).
   {
     add(CAL.nav, CAL.filter, CAL.setup)
-    if (view.navigation.parts.length) add(CAL.partExpand)
+    if (view.navigation.parts.length) add(CAL.partExpand, CAL.part)
     for (const part of view.navigation.parts.filter(item => item.expanded)) {
-      add(CAL.part)
       if (part.states.length) add(CAL.state)
       if (part.states.some(state => state.takes.length)) add(CAL.compare, CAL.navTake)
     }

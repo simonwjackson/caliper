@@ -3,6 +3,11 @@
  * goes as data attributes on `.dr-root`; this file places the regions from
  * them. The page never scrolls; each region scrolls inside itself.
  */
+/* The chrome's page: the root fills the window, and the page itself never scrolls. */
+html:has(> body > #caliper > .dr-root), body:has(> #caliper > .dr-root), #caliper:has(> .dr-root) { height: 100%; margin: 0; overflow: hidden; }
+body:has(> #caliper > .dr-root) { background: #121316; }
+@media (prefers-color-scheme: light) { body:has(> #caliper > .dr-root:not([data-scheme="dark"])) { background: #DDDEE2; } }
+
 .dr-root {
   --dr-free-l: var(--dr-gutter);
   --dr-free-r: var(--dr-gutter);

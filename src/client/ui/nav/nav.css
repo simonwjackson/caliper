@@ -17,19 +17,19 @@
 .dr-parts__empty { padding: .6rem .85rem; color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
 .dr-layer__name { margin: .6rem .85rem .2rem; font-size: 11px; font-weight: 600; color: var(--dr-ink-3); letter-spacing: .02em; }
 .dr-layer__parts { list-style: none; padding: 0; }
-.dr-part__row { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .32rem .85rem .32rem .75rem; border: 0; background: none; text-align: left; color: var(--dr-ink); }
+.dr-part__row { display: flex; align-items: stretch; width: 100%; color: var(--dr-ink); }
 .dr-part__row:hover { background: color-mix(in srgb, var(--dr-card-2) 60%, transparent); }
-.dr-part__caret { width: 10px; color: var(--dr-ink-3); font-size: 9px; flex: none; }
-.dr-part__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-part__caret { flex: none; width: 1.6rem; padding: 0 0 0 .75rem; border: 0; background: none; color: var(--dr-ink-3); font-size: 9px; text-align: left; }
+.dr-part__name { flex: 1; min-width: 0; display: flex; align-items: center; gap: .5rem; padding: .32rem .85rem .32rem .1rem; border: 0; background: none; color: inherit; text-align: left; }
+.dr-part__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dr-part__count { color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
-.dr-part[data-open] > .dr-part__row .dr-part__name { font-weight: 600; }
+.dr-part[data-open] .dr-part__label, .dr-part__name[aria-current="true"] .dr-part__label { font-weight: 600; }
 
 .dr-states { list-style: none; margin: 0 .5rem .3rem .85rem; padding: .2rem 0; background: var(--dr-room); border-radius: 6px; }
 .dr-states__item { display: flex; align-items: center; gap: .4rem; width: calc(100% - .5rem); margin: 0 .25rem; padding: .28rem .6rem .28rem 1.2rem; border: 0; background: none; border-radius: 6px; color: var(--dr-ink-2); text-align: left; position: relative; }
 .dr-states__item:hover { color: var(--dr-ink); }
 .dr-states__item[aria-current="true"] { background: var(--dr-card-2); color: var(--dr-ink); font-weight: 500; }
 .dr-states__item[aria-current="true"]::before { content: ""; position: absolute; left: .55rem; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: var(--dr-accent); }
-.dr-states__all { color: var(--dr-ink-3); font-size: var(--dr-fs-1); }
 .dr-states__item > .dr-dot { margin-left: auto; }
 .dr-states__takes { display: grid; margin: .05rem .25rem .2rem 1.75rem; }
 .dr-states__take { display: flex; gap: .4rem; align-items: center; border: 0; background: none; padding: .15rem .35rem; border-radius: 4px; text-align: left; font-size: 11px; color: var(--dr-ink-3); min-width: 0; }

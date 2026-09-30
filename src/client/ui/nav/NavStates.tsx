@@ -16,10 +16,7 @@ function badgeTone(badge: Badge | undefined): string | null {
  * words are in the title and the accessible name.
  */
 export function NavStates({ id, part, actions, picked }: { readonly id: string; readonly part: NavPart; readonly actions: ChromeActions; readonly picked: () => void }) {
-  const all = part.selected && !part.states.some(state => state.selected)
   return <ul id={id} className="dr-states" aria-label={`${part.name} states`}>
-    <li><button type="button" className="dr-states__item dr-states__all" data-cal={CAL.part} data-part={part.file} aria-current={all || undefined}
-      title={part.file} onClick={() => { actions.onPart(part.file); picked() }}>All {part.states.length} {part.states.length === 1 ? "state" : "states"}</button></li>
     {part.states.map(state => {
       const tone = badgeTone(state.badge)
       return <li key={state.ref.state} className="dr-states__group">
