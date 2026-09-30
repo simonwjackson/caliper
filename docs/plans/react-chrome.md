@@ -280,7 +280,7 @@ common file and no frozen contract file.
 | `18a32bf` | Serve `Darkroom` from the app entry. The build listed no stylesheet in its manifest, so the chrome loaded bare; `cssCodeSplit` fixes it. The page gave the root no height. The docked parts column started closed and closed on every selection; it is now a remembered preference. The part's own "select all states" control existed only while unfolded. |
 | `d4ee49c` | Run every public gate with its layout assertions on. Checks became modal inside Caliper's own box, so an embedded chrome keeps it contained. A covered code or knobs sheet comes to the front on its tool instead of closing. Accessible names the gates rely on: preview scenario, knob labels, knob numbers as spinbuttons, frame titles, one literals live region. `reveal()` reaches Darkroom controls through the parts drawer, the New take menu, More tools and folded groups. |
 | `fdcdbc8` | On a cold dependency cache, Vite's first bundle took 9 to 39 s here, past the 10 s frame watchdog. A frame page now waits for it, at most 60 s. The tool installs its own chrome bundle. |
-| `1504766` | Re-pin the recovery tool from `8d23556` (DOM chrome) to `fdcdbc8` (Darkroom). |
+| `1504766`, then this record's commit | Re-pin the recovery tool from `8d23556` (DOM chrome) to `fdcdbc8`, then to `0fa0cdb`, which adds the fixes found by opening Caliper in itself (`71333c5`). |
 
 Evidence at `d4ee49c`/`b19e815` on one build: typecheck; `bun test` 541 pass,
 0 fail; `verify-chrome-core.mjs` 21 of 21 gates with layout on;
