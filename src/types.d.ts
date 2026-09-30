@@ -157,10 +157,10 @@ export type Resolve = (specifier: string, importer: string) => Promise<string | 
 export type ReasoningLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 
 /**
- * The agent that makes takes. It runs inside the Vite dev server and talks to
- * an endpoint that speaks the OpenAI API. The API key never goes in
- * vite.config: Caliper reads it from the environment variable `apiKeyEnv`,
- * which may also be set in the project's `.env.local`.
+ * The agent that makes takes. It runs in the Caliper app (decision 37), which
+ * reads these settings from `~/.config/caliper/config.json` as `"agent"`. It
+ * talks to an endpoint that speaks the OpenAI API. The API key never goes in
+ * the settings: the app reads it from its own environment variable `apiKeyEnv`.
  */
 export type AgentOptions = {
   /** The model id the endpoint knows, for example "claude-opus-5-5". */
@@ -181,8 +181,8 @@ export type AgentOptions = {
    * Agent Skills (SKILL.md folders, https://agentskills.io) for the agent.
    * Caliper always looks in `.agents/skills/` of the project and its parent
    * folders up to the Git root, then in `~/.agents/skills/`. A list adds
-   * folders: a folder of skills or one skill's folder, relative to the
-   * project root or starting with `~/`. The object form also chooses skills
+   * folders: a folder of skills or one skill's folder, absolute or starting
+   * with `~/`. The object form also chooses skills
    * by name. `false` turns skills off.
    */
   readonly skills?: false | readonly string[] | SkillOptions
@@ -388,8 +388,6 @@ export type KnobSource =
   | { readonly _tag: "Refused", readonly reason: string }
 
 export type CaliperOptions = {
-  /** The agent that makes takes. Leave it out to use Caliper as a viewer only. */
-  readonly agent?: AgentOptions
   /**
    * Knob hints by custom property name, for CSS a project cannot annotate.
    * A doc comment above the declaration wins over these.

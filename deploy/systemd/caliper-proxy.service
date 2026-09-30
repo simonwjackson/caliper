@@ -1,0 +1,16 @@
+[Unit]
+Description=Caliper app on the tailnet: https://caliper.hummingbird-lake.ts.net
+After=network-online.target caliper.service
+Requires=caliper.service
+
+[Service]
+Type=simple
+# caliper-tsnet is a tsnet node named "caliper" that terminates TLS and forwards
+# to one upstream. The app needs nothing more: it serves every project on one port.
+ExecStart=%h/.local/bin/caliper-tsnet --name caliper --state %h/.config/caliper-tsnet --upstream http://127.0.0.1:3132
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=25
+
+[Install]
+WantedBy=default.target

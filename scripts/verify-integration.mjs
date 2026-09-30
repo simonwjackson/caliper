@@ -10,6 +10,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { installRouting, projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
 import { cal, deferLayout, reveal, waitTakes } from "./verify-helpers.mjs"
@@ -38,10 +39,13 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, ar
 let server
 /** @type {string[]} */
 const errors = []
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
-  server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "warn", plugins: [caliper({ wrap: false, ...(values.live ? { agent: { model: "claude-opus-5-5", reasoning: "medium" } } : {}) })], server: { host: "127.0.0.1", port: 0 } })
+  server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "warn", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
+  app = await startApp(values.live ? { agent: { model: "claude-opus-5-5", reasoning: "medium" } } : {})
+  const url = await projectBase(app, root)
   assert(url)
   const base = `${url}__caliper/`
   /** @param {string} path @param {object} [body] */
@@ -130,6 +134,7 @@ try {
   // Exercise original and alternate real interaction, before claiming review.
   for (const [preview, proposalTake] of [[{ part: ask.part, state: "default" }, take], [checked.proposal.preview, take]]) {
     const frame = await browser.newPage()
+    await installRouting(frame, /** @type {NonNullable<typeof app>} */ (app))
     await frame.goto(`${base}frame?part=${encodeURIComponent(preview.part)}&state=${encodeURIComponent(preview.state)}&take=${proposalTake}`)
     const chip = frame.getByRole("button", { name: "Chip 0", exact: true })
     await chip.click()
@@ -162,6 +167,8 @@ try {
     return !snapshot.takes.some(item => item.take === take)
   }, take)
   assert(store.record(source), "source experiment stays available")
+  // The app reports the removal as the plugin makes it; give the disk a moment to agree.
+  for (let tries = 0; tries < 50 && store.record(take) !== null; tries++) await new Promise(done => setTimeout(done, 100))
   assert.equal(store.record(take), null)
   // Apply publishes take removal before Vite's source watcher republishes parts.
   // Verify discovery of the real alternate before opening its product frame.
@@ -171,10 +178,12 @@ try {
     return project.parts.some(part => part.file === preview.part && part.states.some(state => state.export === preview.state))
   }, checked.proposal.preview)
   const final = await browser.newPage()
+  await installRouting(final, app)
   await final.goto(`${base}frame?part=${encodeURIComponent(checked.proposal.preview.part)}&state=${encodeURIComponent(checked.proposal.preview.state)}`)
   await final.getByRole("button", { name: "Chip 0", exact: true }).click()
   await final.getByRole("button", { name: "Chip 1", exact: true }).waitFor()
   const original = await browser.newPage()
+  await installRouting(original, app)
   await original.goto(`${base}frame?part=${encodeURIComponent(ask.part)}`)
   assert.equal(await original.getByRole("button").evaluate(element => getComputedStyle(element).color), "rgb(0, 0, 255)")
   assert.deepEqual(errors, [])
@@ -189,6 +198,6 @@ try {
   throw error
 } finally {
   await browser.close()
-  await server?.close()
+  await app?.close(); await server?.close()
   rmSync(root, { recursive: true, force: true })
 }

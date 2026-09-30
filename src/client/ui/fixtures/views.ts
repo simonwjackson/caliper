@@ -161,6 +161,11 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
     selection: { _tag: "State", subject: DEFAULT, preview: DEFAULT, label: "Default" },
     navigation: {
       project: "@korri/pico", filter: "", countLabel: "52 parts", emptyMessage: "",
+      projects: { _tag: "Choices", choices: [
+        { id: "2e5778d2b4c4", name: "@korri/pico", current: true, problem: "" },
+        { id: "8d404a4ae70c", name: "@simonwjackson/caliper", current: false, problem: "" },
+        { id: "08fdb36dffb7", name: "amaze-next", current: false, problem: "protocol 0, this app speaks 1" },
+      ] },
       parts: [
         part("Game Detail", PART, "page", 5, { selected: true, expanded: true, states: gameDetailStates(family.takes.map(item => item.take), selected), note: "The game's page" }),
         part("Home", "src/pages/PicoHome.page.part.tsx", "page", 4), part("Find", "src/pages/PicoFind.page.part.tsx", "page", 12),

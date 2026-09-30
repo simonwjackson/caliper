@@ -49,8 +49,14 @@ export type SetupRow = {
   readonly label: string; readonly status: "Derived" | "Overridden" | "Failed"
   readonly values: readonly string[]; readonly provenance: string; readonly problems: readonly string[]
 }
+/** A project the Caliper app can show (decision 37). `problem` says why it cannot open; empty when it can. */
+export type ProjectChoice = { readonly id: string; readonly name: string; readonly current: boolean; readonly problem: string }
+/** The project switcher. Hidden while no other project is running. */
+export type ProjectsView =
+  | { readonly _tag: "Hidden" }
+  | { readonly _tag: "Choices"; readonly choices: readonly ProjectChoice[] }
 export type NavigationView = {
-  readonly project: string; readonly filter: string; readonly countLabel: string; readonly emptyMessage: string
+  readonly project: string; readonly projects: ProjectsView; readonly filter: string; readonly countLabel: string; readonly emptyMessage: string
   readonly parts: readonly NavPart[]; readonly scenario: ScenarioView
   readonly unavailable: readonly { readonly subject: StateRef; readonly label: string; readonly takes: readonly NavTake[] }[]
   readonly setup: readonly SetupRow[]; readonly setupProblems: readonly string[]
@@ -352,6 +358,8 @@ export type ChromeView = {
  * No fetch, storage, CSSOM discovery or server imports below this seam.
  */
 export type ChromeActions = {
+  /** Open another project in this tab. Other tabs keep their own project. */
+  readonly onProject: (id: string) => void
   readonly onTool: (tool: Tool) => void
   readonly onNavOpen: (open: boolean) => void
   readonly onFilter: (value: string) => void

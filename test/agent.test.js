@@ -40,7 +40,7 @@ describe("resolveAgent", () => {
     })
     expect(status).toEqual({
       _tag: "Ready", model: "m", baseUrl: "http://localhost:11434/v1", reasoning: "high", api: "chat-completions",
-      baseUrlFrom: "vite.config", keyFrom: "CALIPER_AGENT_API_KEY",
+      baseUrlFrom: "~/.config/caliper/config.json", keyFrom: "CALIPER_AGENT_API_KEY",
     })
     expect(JSON.stringify(status)).not.toContain("secret-key")
     expect(connection?.apiKey).toBe("secret-key")

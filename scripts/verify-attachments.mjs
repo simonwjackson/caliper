@@ -22,6 +22,7 @@ import { deflateSync } from "node:zlib"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { cal, deferLayout, reveal, waitTakes } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: { modules: { type: "string" }, keep: { type: "boolean" } } })
@@ -99,11 +100,12 @@ process.env.CALIPER_VERIFY_KEY = "local"
 
 const server = await createServer({
   root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent",
-  plugins: [caliper({ agent: { model: "scripted", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKeyEnv: "CALIPER_VERIFY_KEY", reasoning: "off" } })],
+  plugins: [caliper()],
   server: { host: "127.0.0.1", port: 0 },
 })
 await server.listen()
-const url = server.resolvedUrls?.local[0] ?? ""
+const app = await startApp({ agent: { model: "scripted", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKeyEnv: "CALIPER_VERIFY_KEY", reasoning: "off" } })
+const url = await projectBase(app, root)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 /** @type {string[]} */
 const passed = []
@@ -277,6 +279,7 @@ try {
   console.log(`\n${passed.length} behavioral checks passed; layout NOT PROVEN. Screenshots: ${SHOTS}`)
 } finally {
   await browser.close()
+  await app.close()
   await server.close()
   model.close()
   if (!values.keep) rmSync(root, { recursive: true, force: true })

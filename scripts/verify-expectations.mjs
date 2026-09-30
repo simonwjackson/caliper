@@ -13,6 +13,7 @@ import { parseArgs, promisify } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
@@ -101,7 +102,9 @@ await once(model, "listening")
 const modelAddress = model.address()
 assert(modelAddress && typeof modelAddress !== "string")
 write(".env.local", "CALIPER_INTENT_TEST_KEY=local-test-only\n")
-const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false, agent: { model: "intent-model", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_INTENT_TEST_KEY", reasoning: "off" } })], server: { host: "127.0.0.1", port: 0 } })
+// The Caliper app reads the key from its own environment, not the project's .env files.
+process.env.CALIPER_INTENT_TEST_KEY = "local-test-only"
+const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 /** @type {string[]} */
@@ -109,14 +112,19 @@ const errors = []
 page.on("pageerror", error => errors.push(error.message))
 const cli = fileURLToPath(new URL("../bin/caliper-render.mjs", import.meta.url))
 const runFile = promisify(execFile)
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
+  app = await startApp({ agent: { model: "intent-model", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_INTENT_TEST_KEY", reasoning: "off" } })
+  const url = await projectBase(/** @type {Awaited<ReturnType<typeof startApp>>} */ (app), root)
   assert(url)
+  // caliper-render reads the dev server itself (decision 14), not the app.
+  const vite = server.resolvedUrls?.local[0] ?? ""
   const base = `${url}__caliper/`
   /** @param {string[]} args @returns {Promise<Awaited<ReturnType<typeof import('../src/render/checks.js').checkJobs>>>} */
   const run = async args => {
-    const { stdout } = await runFile(process.execPath, [cli, "--url", url, "--out", out, "--check", ...args], { maxBuffer: 16_000_000, timeout: 120_000 })
+    const { stdout } = await runFile(process.execPath, [cli, "--url", vite, "--out", out, "--check", ...args], { maxBuffer: 16_000_000, timeout: 120_000 })
     return JSON.parse(stdout)
   }
   /** @param {import('../src/render/check-contract.js').CheckReport['results'][number]} result @param {string} name */
@@ -258,6 +266,7 @@ try {
 } finally {
   await browser.close()
   if (server.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
+  await app?.close()
   await server.close()
   model.closeAllConnections()
   await new Promise((resolve, reject) => model.close(error => error ? reject(error) : resolve(undefined)))

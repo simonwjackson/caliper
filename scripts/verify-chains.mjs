@@ -14,6 +14,7 @@ import { build } from "esbuild"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
+import { installRouting, projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
@@ -34,7 +35,7 @@ put(badgePart, 'export default function Part() { return <span className="chip">B
 symlinkSync(resolve(checkout, "node_modules"), join(root, "node_modules"), "dir")
 await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx")], bundle: true, format: "esm", jsx: "automatic", outfile: join(root, "public/markup-harness.js"), alias: { "caliper-markup-renderer": join(checkout, `src/client/ui/${renderer}.tsx`) }, loader: { ".ttf": "file", ".png": "file" }, assetNames: "[name]", publicPath: "/", define: { "process.env.NODE_ENV": '"development"' }, logLevel: "silent" })
 const styles = existsSync(join(root, "public/markup-harness.css")) ? '<link rel="stylesheet" href="/markup-harness.css">' : ""
-put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="/__caliper/"><title>Chains harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
+put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="__caliper/"><title>Chains harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
 console.log(`Renderer: ${renderer}`)
 
 // Records as Send writes them: warmer from warm, warmest from warmer. badge is a Badge
@@ -53,12 +54,11 @@ const warmest = store.fork(warmer, { ...ask, name: "Warmest chip", parent: ident
 store.write(warmest, "src/chip.css", css("#f00"))
 const chainId = `${warm}@${identity(warm).created}`
 
+const app = await startApp()
 async function startVite() {
   const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper({ wrap: false })] })
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
-  if (!url) throw new Error("The subject did not start.")
-  return { server, url }
+  return { server, url: await projectBase(app, root) }
 }
 
 /** @type {Array<{ name: string, ok: boolean, detail: string }>} */
@@ -94,6 +94,7 @@ async function until(page, predicate, what, timeout = 15_000) {
 }
 /** @param {import("playwright-core").Page} page @param {string} part @param {string | null} take */
 async function open(page, part, take) {
+  await installRouting(page, app)
   await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&device=rg353m${take ? `&take=${take}` : ""}`, vite.url).href)
   await until(page, `view => view?.canvas._tag === "Frames" && view.canvas.mode === "Takes" && view.canvas.chains.length > 0`, "the Takes canvas with chains", 30_000)
 }
@@ -175,6 +176,7 @@ try {
 } finally {
   writeFileSync(join(evidence, "summary.json"), JSON.stringify(results, null, 2))
   await browser.close()
+  await app.close()
   await vite.server.close()
   if (!keep) rmSync(root, { recursive: true, force: true })
   else console.log(`Subject kept: ${root}`)

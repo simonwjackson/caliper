@@ -23,6 +23,8 @@ import { cal, deferLayout, reveal, waitFrames } from "./verify-helpers.mjs"
 const { values: args } = parseArgs({
   options: {
     url: { type: "string" },
+    // caliper-render reads the dev server itself (decision 14); --url is the project in the Caliper app.
+    vite: { type: "string" },
     root: { type: "string" },
     out: { type: "string", default: "/tmp/caliper-verify" },
   },
@@ -31,7 +33,7 @@ if (!args.url || !args.root) throw new Error("Pass --url and --root.")
 const executablePath = process.env.CHROMIUM
 if (!executablePath) throw new Error("Set CHROMIUM to a Chromium executable.")
 
-const base = new URL("/__caliper/", args.url).href
+const base = new URL("__caliper/", args.url).href
 const out = args.out ?? "/tmp/caliper-verify"
 mkdirSync(out, { recursive: true })
 /** @type {import("../src/types").Project} */
@@ -227,7 +229,7 @@ try {
     await probeStates.locator(`${cal.state}[data-part="${probe}"][data-state="Wide"]`).waitFor({ timeout: 5000 })
     const cli = spawnSync(process.execPath, [
       join(dirname(fileURLToPath(import.meta.url)), "../bin/caliper-render.mjs"),
-      "--url", args.url, "--part", probe, "--state", "*", "--out", join(out, "render"),
+      "--url", args.vite ?? args.url, "--part", probe, "--state", "*", "--out", join(out, "render"),
     ], { encoding: "utf8", env: process.env })
     assert.equal(cli.status, 1, `caliper-render exits 1 when a frame fails: ${cli.stderr}`)
     /** @type {{ results: Array<{ state: string, frame: string, png: string, problems: Array<{ title: string, detail: string }>, console: string[], spill: { right: number, elements: Array<{ element: string }> } | null, viewport: { width: number } }> }} */

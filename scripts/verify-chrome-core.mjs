@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 
 const checkout = fileURLToPath(new URL("../", import.meta.url))
 const modules = join(checkout, "node_modules")
@@ -46,19 +47,23 @@ await new Promise(resolve => model.listen(0, "127.0.0.1", () => resolve(undefine
 const modelAddress = model.address()
 if (!modelAddress || typeof modelAddress === "string") throw new Error("The local endpoint did not start.")
 process.env.CALIPER_CORE_VERIFY_KEY = "local"
-const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", plugins: [caliper({ wrap: false, agent: { model: "scripted", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_CORE_VERIFY_KEY", reasoning: "off", skills: false } })], server: { host: "127.0.0.1", port: 0 } })
+const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
 await server.listen()
-const url = server.resolvedUrls?.local[0]
-if (!url) throw new Error("The subject did not start.")
+const vite = server.resolvedUrls?.local[0]
+if (!vite) throw new Error("The subject did not start.")
+// The Caliper app in front of the subject (decision 37). Child scripts reach it by URL; they start their own when they start their own subject.
+const app = await startApp({ port: 0, host: "127.0.0.1", agent: { model: "scripted", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_CORE_VERIFY_KEY", reasoning: "off", skills: false } })
+const url = await projectBase(app, root)
 /** @type {Array<[string, string[]]>} */
 const specs = [
-  ["browser", ["--url", url, "--root", root]],
+  ["browser", ["--url", url, "--vite", vite, "--root", root]],
   ["code", ["--url", url, "--root", root, "--part", "src/Chip.part.tsx"]],
   ["takes", ["--url", url, "--part", "src/Chip.part.tsx", "--prompt", "Use three directions", "--takes", "3"]],
   ...["attachments", "css-loading", "scenarios", "checks", "checks-ui", "expectations", "frame-commit", "authored-checks", "authored-agent-cli", "authored-ui", "authored-release", "knobs", "pwa"].map(name => /** @type {[string, string[]]} */ ([name, ["--modules", modules, ...(["checks-ui", "authored-ui", "authored-release", "expectations"].includes(name) ? ["--layout"] : [])]])),
   ["integration", ["--modules", modules]],
   ["authored-regressions", ["--modules", modules]],
   ["knobs-product", ["--root", root, "--part", "src/Chip.part.tsx"]],
+  ["central", []],
   ...["fast-saves", "authored-package"].map(name => /** @type {[string, string[]]} */ ([name, []])),
 ]
 console.log(`Reference gate evidence: ${evidence}`)
@@ -80,6 +85,7 @@ try {
   }
   if (summary.some(result => result.code !== 0)) process.exitCode = 1
 } finally {
+  await app.close()
   await server.close()
   model.closeAllConnections()
   await new Promise(resolve => model.close(() => resolve(undefined)))

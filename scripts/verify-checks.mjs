@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url"
 import { parseArgs, promisify } from "node:util"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { checkJobs } from "../src/render/checks.js"
 import { createTakeStore } from "../src/takes/store.js"
 
@@ -72,13 +73,20 @@ await once(model, "listening")
 const modelAddress = model.address()
 assert(modelAddress && typeof modelAddress !== "string")
 write(".env.local", "CALIPER_CHECKS_TEST_KEY=local-test-only\n")
-const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false, agent: { model: "checks-model", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_CHECKS_TEST_KEY", reasoning: "off" } })], server: { host: "127.0.0.1", port: 0 } })
+// The Caliper app reads the key from its own environment, not the project's .env files.
+process.env.CALIPER_CHECKS_TEST_KEY = "local-test-only"
+const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
+  app = await startApp({ agent: { model: "checks-model", baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`, apiKeyEnv: "CALIPER_CHECKS_TEST_KEY", reasoning: "off" } })
+  const url = await projectBase(/** @type {Awaited<ReturnType<typeof startApp>>} */ (app), root)
   assert(url)
-  const request = ["--url", url, "--part", part, "--out", out, "--baselines", baselines, "--check"]
-  const all = await run(["--url", url, "--part", "*", "--state", "*", "--device", "*", "--out", out, "--check"])
+  // caliper-render reads the dev server itself (decision 14), not the app.
+  const vite = server.resolvedUrls?.local[0] ?? ""
+  const request = ["--url", vite, "--part", part, "--out", out, "--baselines", baselines, "--check"]
+  const all = await run(["--url", vite, "--part", "*", "--state", "*", "--device", "*", "--out", out, "--check"])
   /** @type {import('../src/render/check-contract.js').CheckReport} */
   const report = all.report
   assert.equal(report.results.length, 18)
@@ -120,7 +128,7 @@ try {
   assert.equal(response.status, 200, await response.text())
   assert.equal(store.record(take), null, "reports do not gate ordinary Replace")
   assert(readFileSync(join(root, part), "utf8").includes('width: 60'))
-  const accepted = await run(["--url", url, "--part", part, "--out", join(out, "accepted")])
+  const accepted = await run(["--url", vite, "--part", part, "--out", join(out, "accepted")])
   assert.equal(accepted.results[0].frame, "Rendered", "accepted files render without a take overlay")
 
   // Exercise the production HTTP -> engine -> render tool -> checks path.
@@ -145,6 +153,7 @@ try {
   console.log(`Verified baseline approval, repeat matching, take comparison, agent findings, and unchanged Replace. Reports: ${out}`)
 } finally {
   if (server.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
+  await app?.close()
   await server.close()
   model.closeAllConnections()
   await new Promise((resolve, reject) => model.close(error => error ? reject(error) : resolve(undefined)))

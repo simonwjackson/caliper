@@ -12,6 +12,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { cal, reveal } from "./verify-helpers.mjs"
 
@@ -92,6 +93,8 @@ async function waitInjection(page, file, present) {
   }, { file, present })
 }
 const store = createTakeStore(root)
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   server = await serve()
   let url = origin(server)
@@ -176,7 +179,9 @@ try {
   assert.equal(await value(legacyTake, ".badge", "color"), "rgb(21, 22, 23)")
   assert.equal(await value(overridden, ".badge", "color"), "rgb(11, 12, 13)")
   const chrome = await browser.newPage()
-  await chrome.goto(`${url}__caliper/`)
+  // Frames above load straight from the dev server; the chrome is the Caliper app's (decision 37).
+  app = await startApp()
+  await chrome.goto(`${await projectBase(app, root)}__caliper/`)
   await chrome.locator(cal.setup).waitFor()
   await reveal(chrome, chrome.locator(cal.setup).getByText(/^src\/legacy.css/))
   assert.match(await chrome.locator(cal.setup).innerText(), /Set by caliper\(\{ css \}\) in vite.config/)
@@ -184,6 +189,7 @@ try {
   console.log("PASS: explicit globals, existing global CSS import chains, tagged global overrides and Setup provenance")
 } finally {
   await browser.close()
+  await app?.close()
   await server?.close()
   rmSync(root, { recursive: true, force: true })
 }

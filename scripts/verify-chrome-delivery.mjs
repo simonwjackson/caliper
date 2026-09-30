@@ -10,6 +10,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { chromium } from "playwright-core"
 import { TOOL_REVISION, toolDirectory, verifiedToolDirectory } from "../src/build/tool.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 
 assert(process.env.CHROMIUM, "nix develop must provide CHROMIUM")
 const packageRoot = fileURLToPath(new URL("../", import.meta.url))
@@ -31,6 +32,8 @@ let activeServer
 let browser
 /** @type {import('playwright-core').Page | undefined} */
 let activePage
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 
 /** @param {string} path @param {string} text */
 function write(path, text) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text) }
@@ -120,6 +123,8 @@ try {
   assert(editor, "CodeMirror/editorAppearance must have a lazy editor chunk")
   const editorFile = /** @type {{file:string}} */ (editor).file
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
+  // The Caliper app serves the chrome (decision 37); each dev server registers with it.
+  app = await startApp()
 
   for (const mode of ["linked", "packed"]) {
     const root = mkdtempSync(join(tmpdir(), `caliper-chrome-${mode}-`))
@@ -163,7 +168,8 @@ try {
     page.on("pageerror", error => errors.push(error.message))
     page.on("console", message => { if (message.type() === "error") errors.push(`${message.text()} ${message.location().url}`) })
     page.on("response", response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
-    await page.goto(new URL("__caliper/", ready.url).href)
+    const base = await projectBase(app, root)
+    await page.goto(new URL("__caliper/", base).href)
     await page.locator('[data-cal="chrome"]').waitFor()
     const frameHost = page.locator('iframe[data-cal="frame"]').first()
     await frameHost.waitFor()
@@ -217,7 +223,8 @@ try {
   const ready = await start(packageRoot, "self-host", true)
   assert.equal(ready.root, packageRoot.replace(/\/$/, ""))
   assert.equal(ready.plugin, join(pinned, "src/plugin.js"))
-  const project = await json(ready.url, "/__caliper/project.json")
+  const base = await projectBase(app, packageRoot)
+  const project = await json(base, "/__caliper/project.json")
   const subjectPart = "src/client/app/Reference.page.part.tsx"
   const chromePart = project.parts.find((/** @type {{file:string}} */ candidate) => candidate.file === subjectPart)
   assert(chromePart, `The approved temporary reference subject ${subjectPart} must exist`)
@@ -229,7 +236,7 @@ try {
   page.on("pageerror", error => selfHostErrors.push(error.message))
   page.on("console", message => { if (message.type() === "error") selfHostErrors.push(`${message.text()} ${message.location().url}`) })
   // Open the real pinned tool page (the Darkroom chrome), not only an isolated subject frame.
-  await page.goto(new URL(`__caliper/#part=${encodeURIComponent(subjectPart)}&state=default`, ready.url).href)
+  await page.goto(new URL(`__caliper/#part=${encodeURIComponent(subjectPart)}&state=default`, base).href)
   const subjectFrame = page.frameLocator('iframe[src*="Reference.page.part.tsx"][src*="state=default"]')
   // A cold subject waits for Vite's first dependency bundle (up to 60 s) before the frame loads.
   await subjectFrame.locator('[data-cal="chrome"]').waitFor({ timeout: 90_000 })
@@ -258,9 +265,9 @@ try {
     stateEvidence.push({ state, screenshot })
   }
   assert.deepEqual(selfHostErrors, [], "The real reference subject and pinned tool have no browser errors")
-  const sourceResponse = await json(ready.url, `/__caliper/code/file?file=${encodeURIComponent(chromePart.file)}`)
+  const sourceResponse = await json(base, `/__caliper/code/file?file=${encodeURIComponent(chromePart.file)}`)
   assert.equal(sourceResponse.content, readFileSync(join(packageRoot, chromePart.file), "utf8"), "Tool must read the real subject file")
-  const refusal = await page.request.post(new URL("__caliper/code/file", ready.url).href, { headers: { origin: new URL(ready.url).origin }, data: { file: join(pinned, "src/plugin.js"), content: "export {}" } })
+  const refusal = await page.request.post(new URL("__caliper/code/file", base).href, { headers: { origin: new URL(base).origin }, data: { file: join(pinned, "src/plugin.js"), content: "export {}" } })
   assert.equal(refusal.status(), 400, "Subject write API must reject the independent tool path")
   assert.equal(readFileSync(join(pinned, "src/plugin.js"), "utf8"), pinBefore)
   verifiedToolDirectory()
@@ -283,5 +290,5 @@ try {
   console.error(`FAIL chrome delivery; evidence: ${evidence}`)
   throw error
 } finally {
-  try { await browser?.close() } finally { await stop(); for (const root of consumers) rmSync(root, { recursive: true, force: true }) }
+  try { await browser?.close(); await app?.close() } finally { await stop(); for (const root of consumers) rmSync(root, { recursive: true, force: true }) }
 }

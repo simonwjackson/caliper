@@ -19,6 +19,9 @@ export const cal = /** @type {Readonly<{ [K in keyof typeof CAL]: string }>} */ 
  * @returns {Promise<import("playwright-core").Locator>}
  */
 export async function reveal(page, control) {
+  // The Caliper app's chrome starts after its routing worker controls the page,
+  // which can be after the page's load event (decision 37).
+  await page.locator(cal.root).first().waitFor({ state: "attached", timeout: 30_000 })
   if (await page.locator(".dr-root").count()) return revealDarkroom(page, control)
   return revealReference(page, control)
 }

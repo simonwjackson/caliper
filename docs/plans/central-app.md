@@ -1,7 +1,8 @@
 # Central app and headless plugin
 
-Status: planned on 2026-09-30. Nothing is built. The routing spike in
-`spikes/central-routing/` passed 15 of 15 checks in Chromium 149, over HTTP and
+Status: phases 0 to 5 built on 2026-09-30, in one branch; phase 6 (deploy) in
+the build record at the end. The routing spike in
+`spikes/central-routing/` (now removed; `scripts/verify-central.mjs` replaces it) passed 15 of 15 checks in Chromium 149, over HTTP and
 over HTTPS through `caliper-tsnet` (`2f330a0`, results in `2122c55`). Decision 37
 in `docs/decisions.md` records the choice and its costs. This file holds the
 split of work, the wire, the phases and the gates.
@@ -158,3 +159,26 @@ drifting from the code.
 - Whether shared `localStorage` between products causes trouble in practice.
   A fix would need a separate origin for each project, which decision 37 rules
   out for now.
+
+## Build record
+
+Built on 2026-09-30 in one branch, not phase by phase: the phases share the
+wire, and a half-moved agent has no working state to land. Decision 37's
+"Built" section lists the choices made while building.
+
+| Phase | Result | Evidence |
+|---|---|---|
+| 0 | `src/central/registry.js` (entry, `PROTOCOL = 1`), `src/host/wire.js` (the host calls). No separate schema module: the registry reader and the host dispatcher check their own input. | `test/central.test.js`: registry modes, dead-server cleanup, ids, tokens, duplicate and protocol views, wire encoding. |
+| 1 | The plugin registers, serves `hello`, sets the HMR path, refuses `server.hmr` settings and `agent`, and takes writes only with its token. The same-origin rule was not kept for an interim; it goes in the same change. | `test/central.test.js`: 401 without the token, the fence through `host` (`..`, absolute path, symlink), unknown calls refused. |
+| 2 | `bin/caliper.mjs` and `src/central/server.js`: routing, the service worker, the chrome at `/__caliper/p/<id>/<base>__caliper/`. The spike moved to `scripts/verify-central.mjs`. | `scripts/verify-central.mjs`: 15 of 15 checks with the real chrome and plugin. |
+| 3 | The Project menu in the parts panel (`CAL.project`, `onProject`), and the project list at `/__caliper/`. Not drawn as a mockup first: it is one labelled select in the style of the Preview row. | `scripts/ui/verify.mjs`: 317 gates, 111 hooks. The switcher check in `verify-central.mjs`. |
+| 4 | The agent runs in a worker thread per project; its store, marks, integration, parts and project skills are calls to the plugin. Settings in `~/.config/caliper/config.json`. | `verify-central.mjs` makes a take through `host`. All 672 unit tests and every browser gate below run the agent through the app. |
+| 5 | The plugin serves no chrome, assets or install files; `/__caliper/` on it answers 404 and names the app. README, self-hosting `vite.config.js`, `bun run tool:app`, the `caliper-render` skill. | `test/pages.test.js`, `test/chrome-delivery.test.js`; `scripts/verify-pwa.mjs` against the app. |
+
+Gates run on the branch: `bun test` (all pass), `tsc`, `verify-chrome-core.mjs`
+(22 gates), `verify-chains`, `verify-markup`, `verify-references`,
+`ui/verify-served-typeahead`, `verify-chrome-contract` (19 scenarios, 111
+hooks), `ui/verify.mjs`. Not run: `verify-markup-model` and
+`verify-references-model` (a paid model), and `verify-chrome-delivery`'s
+self-host step, which needs the pinned tool moved to this build.
+

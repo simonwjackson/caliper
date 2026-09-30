@@ -11,6 +11,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
 import { planRenders } from "../src/render/plan.js"
@@ -62,9 +63,12 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, ar
 const errors = []
 /** @type {import("playwright-core").Page | undefined} */
 let debugPage
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   await server.listen()
-  const origin = server.resolvedUrls?.local[0]
+  app = await startApp()
+  const origin = await projectBase(app, root)
   assert(origin)
   const base = `${origin}__caliper/`
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })
@@ -166,7 +170,8 @@ try {
     assert.equal(plan._tag,"Planned")
     return plan._tag === "Planned" ? plan.jobs : []
   })
-  const results = await renderJobs({ url:origin,jobs,out:join(out,"renders"),executablePath:process.env.CHROMIUM })
+  // Renders read the dev server itself (decision 14), not the app.
+  const results = await renderJobs({ url: server.resolvedUrls?.local[0] ?? "",jobs,out:join(out,"renders"),executablePath:process.env.CHROMIUM })
   assert.equal(results.length, refs.length)
   assert(results.every(result => result.frame === "Rendered" && result.console.length === 0))
 
@@ -245,6 +250,6 @@ try {
   throw error
 } finally {
   await browser.close()
-  await server.close()
+  await app?.close(); await server.close()
   rmSync(root,{ recursive:true,force:true })
 }

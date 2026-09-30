@@ -4,8 +4,12 @@ import Darkroom from "../ui/Darkroom"
 import { createChromeApp } from "./runtime"
 import { validateResponse } from "./wire"
 
+// The Caliper app serves this chrome at /__caliper/p/<id>/<base>__caliper/ (decision 37).
+const projectId = /^\/__caliper\/p\/([0-9a-f]{12})\//.exec(location.pathname)?.[1]
+const chromeUrls = new Map<string, string>()
 const app = createChromeApp({
   hash: location.hash, storage: localStorage, origin: location.origin,
+  ...(projectId ? { project: { id: projectId, open: (id: string) => { const url = chromeUrls.get(id); if (url) location.assign(url) } } } : {}),
   saveLocation: hash => history.replaceState(null, "", hash), confirm: text => window.confirm(text),
   request: async <T,>(path: string, data?: object): Promise<T> => {
     const response = await fetch(path.replace(/^\//, ""), data === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) })
@@ -46,6 +50,14 @@ events.addEventListener("marks", receive(app.receiveMarks))
 // The stream skips the draft when marks.json is broken; this read reports why.
 void app.loadMarks()
 events.addEventListener("error", () => app.unreachable())
+const projects = projectId ? new EventSource("/__caliper/api/projects/events") : null
+projects?.addEventListener("projects", event => {
+  try {
+    const value = JSON.parse((event as MessageEvent<string>).data)
+    for (const project of value?.projects ?? []) if (typeof project?.id === "string" && typeof project?.chrome === "string") chromeUrls.set(project.id, project.chrome)
+    app.receiveProjects(value)
+  } catch { /* the list stays as it was */ }
+})
 const report = (event: MessageEvent<unknown>) => app.receiveFrame(event)
 window.addEventListener("message", report)
-window.addEventListener("pagehide", () => { events.close(); window.removeEventListener("message", report); root.unmount(); app.dispose() }, { once: true })
+window.addEventListener("pagehide", () => { events.close(); projects?.close(); window.removeEventListener("message", report); root.unmount(); app.dispose() }, { once: true })

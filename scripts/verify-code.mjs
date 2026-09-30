@@ -44,7 +44,7 @@ if (!executablePath) throw new Error("Set CHROMIUM to a Chromium executable.")
 const out = /** @type {string} */ (args.out)
 const part = /** @type {string} */ (args.part)
 mkdirSync(out, { recursive: true })
-const base = new URL("/__caliper/", args.url).href
+const base = new URL("__caliper/", args.url).href
 // A comment is valid on its own line in TypeScript, JavaScript and CSS.
 const MARK = "/* caliper verify */"
 

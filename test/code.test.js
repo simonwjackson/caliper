@@ -128,13 +128,12 @@ describe("the code API", () => {
     const eager = new Set(entry ? [entry] : [])
     for (const key of eager) for (const imported of manifest[key]?.imports ?? []) eager.add(imported)
     expect(eager.has("src/client/code-editor.js")).toBe(false)
-    await withProject({ files }, async ({ get }) => {
+    await withProject({ files }, async ({ get, url: base }) => {
       const html = await (await get("/__caliper/")).text()
-      expect(html).toContain(`src="/__caliper/assets/${delivery.entry}"`)
+      expect(html).toContain(`"/__caliper/assets/${delivery.entry}"`)
       expect(html).not.toContain("importmap")
       expect(html).not.toContain(editor?.file ?? "missing editor")
-      const url = `/__caliper/assets/${editor?.file}`
-      const response = await get(url)
+      const response = await fetch(new URL(`/__caliper/assets/${editor?.file}`, base))
       expect(response.status).toBe(200)
       expect(response.headers.get("content-type")).toContain("text/javascript")
       expect(response.headers.get("cache-control")).toBe("no-store")
@@ -149,13 +148,14 @@ describe("the code API", () => {
     const manifest = JSON.parse(readFileSync(join(CALIPER, "dist/chrome/.vite/manifest.json"), "utf8"))
     const resources = new Set(Object.values(manifest).flatMap(chunk => [chunk.file, ...(chunk.css ?? []), ...(chunk.assets ?? [])]))
     for (const chunk of Object.values(manifest)) for (const key of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) expect(manifest[key]).toBeDefined()
-    await withProject({ files }, async ({ get }) => {
+    await withProject({ files }, async ({ get, url }) => {
       for (const name of resources) {
-        const response = await get(`/__caliper/assets/${name}`)
+        const response = await fetch(new URL(`/__caliper/assets/${name}`, url))
         expect({ name, status: response.status }).toEqual({ name, status: 200 })
         expect(Buffer.from(await response.arrayBuffer()).equals(readFileSync(join(CALIPER, "dist/chrome", name)))).toBe(true)
       }
-      for (const path of ["/__caliper/client/chrome.js", "/__caliper/client/code-editor.js", "/__caliper/modules/@codemirror/view@6.43.13/dist/index.js", "/__caliper/assets/.vite/manifest.json"]) expect((await get(path)).status).toBe(404)
+      for (const path of ["/__caliper/client/chrome.js", "/__caliper/client/code-editor.js", "/__caliper/modules/@codemirror/view@6.43.13/dist/index.js"]) expect((await get(path)).status).toBe(404)
+      expect((await fetch(new URL("/__caliper/assets/.vite/manifest.json", url))).status).toBe(404)
       // Only the product-frame bootstrap still uses the consumer's Vite.
       expect((await get("/__caliper/client/frame.js")).status).toBe(200)
     })

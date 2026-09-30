@@ -26,10 +26,12 @@ export type RuntimeInput = {
   origin?: string
   imageData?: (file: File) => Promise<{ data: string; url: string }>
   revokeImage?: (url: string) => void
+  /** This tab's project in the Caliper app, and how to open another one. */
+  project?: { id: string; open: (id: string) => void }
 }
 /** Explicit effect wiring. No rendering, element selection or appearance lives here. */
 export function createChromeApp(input: RuntimeInput) {
-  let state = createAppState(input.hash, input.storage)
+  let state = { ...createAppState(input.hash, input.storage), projectId: input.project?.id ?? null }
   let snapshot: ChromeView
   const subscribers = new Set<() => void>()
   const frames = new Map<string, HTMLIFrameElement>()
@@ -269,6 +271,7 @@ export function createChromeApp(input: RuntimeInput) {
       set({ ...state, tools, checksOpen: tool === "checks" ? true : state.checksOpen, calibrationOpen: tool === "calibrate" ? !state.calibrationOpen : state.calibrationOpen })
       if (tool === "checks") checks.open()
     },
+    onProject: id => { if (id !== state.projectId && state.projects.some(project => project.id === id && project.problem === "")) input.project?.open(id) },
     onNavOpen: navOpen => { remember("nav-open", String(navOpen)); set({ ...state, tools: { ...state.tools, navOpen } }) }, onFilter: filter => set({ ...state, filter }),
     onPart: file => { if (state.project?.parts.some(part => part.file === file)) selected({ ...state, part: file, shown: { _tag: "All" }, context: null, contextNote: "", take: null, expanded: new Map(state.expanded).set(file, true) }) },
     onPartExpanded: (file, open) => set({ ...state, expanded: new Map(state.expanded).set(file, open) }), onState: selectState,
@@ -382,6 +385,15 @@ export function createChromeApp(input: RuntimeInput) {
   return {
     actions, getSnapshot: () => snapshot, subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener) } },
     receiveProject, receiveTakes, receiveCode, receiveFrame, receiveMarks: (value: unknown) => markup.receive(value), loadMarks: () => markup.reload(), receiveChecks: (value: unknown) => checks.receive(parseWire(ChecksViewSchema, value)),
+    receiveProjects: (value: unknown) => {
+      const list = (value as { projects?: unknown } | null)?.projects
+      if (!Array.isArray(list)) return
+      const projects = list.flatMap(item => {
+        const { id, name, status, problem } = (item ?? {}) as Record<string, unknown>
+        return typeof id === "string" && typeof name === "string" ? [{ id, name, problem: status === "Ready" ? "" : typeof problem === "string" ? problem : "It cannot open." }] : []
+      })
+      set({ ...state, projects })
+    },
     unreachable: (reason = "Vite is not reachable.") => set({ ...state, connection: { _tag: "Unreachable", reason } }),
     dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); markup.dispose() },
   }

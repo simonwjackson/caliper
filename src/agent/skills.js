@@ -18,8 +18,10 @@ import { Type } from "typebox"
  *
  * @typedef {import("../types").SkillSummary} SkillSummary
  * @typedef {import("../types").SkillsStatus} SkillsStatus
- * @typedef {SkillSummary & { readonly file: string, readonly dir: string, readonly modelInvocable: boolean }} Skill
- *   `file` is the absolute path of SKILL.md; `dir` is its folder.
+ * @typedef {{ readonly content: () => string, readonly read: (path: string) => string }} SkillReader
+ * @typedef {SkillSummary & { readonly file: string, readonly dir: string, readonly modelInvocable: boolean, readonly remote?: SkillReader }} Skill
+ *   `file` is the absolute path of SKILL.md; `dir` is its folder. A project
+ *   skill in the central app has `remote`: its plugin reads the files.
  * @typedef {{ readonly skills: readonly Skill[], readonly problems: readonly string[] }} SkillCatalog
  * @typedef {import("@earendil-works/pi-agent-core").AgentTool} AgentTool
  */
@@ -38,24 +40,27 @@ const DESCRIPTION_LIMIT = 1024
  * Find every skill the take agent may use. Reads the file system; never
  * throws. Problems are for the user, not the model.
  *
- * @param {{ root: string, home: string, option: unknown }} input
- *   `option` is `agent.skills` from vite.config: undefined, false, a list of
- *   folders, or `{ folders, include, exclude }`.
+ * @param {{ root: string, home: string, option: unknown, project?: SkillCatalog }} input
+ *   `option` is `agent.skills` from the central app's settings: undefined,
+ *   false, a list of folders, or `{ folders, include, exclude }`. `project`
+ *   holds the project's skills as its plugin found them; without it, Caliper
+ *   reads the project's folders itself.
  * @returns {SkillCatalog}
  */
-export function discoverSkills({ root, home, option }) {
+export function discoverSkills({ root, home, option, project }) {
   if (option === false) return { skills: [], problems: [] }
   /** @type {string[]} */
-  const problems = []
+  const problems = [...(project?.problems ?? [])]
   const settings = skillSettings(option, problems)
+  /** @type {Map<string, Skill>} */
+  const found = new Map()
+  for (const skill of project?.skills ?? []) if (!found.has(skill.name)) found.set(skill.name, skill)
   /** @type {Array<{ dir: string, scope: SkillSummary["scope"], required: boolean }>} */
   const sources = [
-    ...projectFolders(root).map(dir => ({ dir: join(dir, SKILLS_DIR), scope: /** @type {const} */ ("project"), required: false })),
+    ...(project ? [] : projectFolders(root)).map(dir => ({ dir: join(dir, SKILLS_DIR), scope: /** @type {const} */ ("project"), required: false })),
     ...configured(settings.folders, root, home).map(dir => ({ dir, scope: /** @type {const} */ ("configured"), required: true })),
     { dir: join(home, SKILLS_DIR), scope: "user", required: false },
   ]
-  /** @type {Map<string, Skill>} */
-  const found = new Map()
   const seenDirs = new Set()
   for (const source of sources) {
     const real = realOrNull(source.dir)
@@ -78,6 +83,40 @@ export function discoverSkills({ root, home, option }) {
   }
   return { skills: filtered([...found.values()], settings, problems), problems }
 }
+
+/**
+ * The skills in `.agents/skills/` of the project root and its parents up to
+ * the Git root. The plugin serves these to the central app.
+ *
+ * @param {{ root: string, home: string }} input
+ * @returns {SkillCatalog}
+ */
+export function discoverProjectSkills({ root, home }) {
+  /** @type {string[]} */
+  const problems = []
+  /** @type {Map<string, Skill>} */
+  const found = new Map()
+  const seenDirs = new Set()
+  for (const folder of projectFolders(root)) {
+    const real = realOrNull(join(folder, SKILLS_DIR))
+    if (real === null || seenDirs.has(real)) continue
+    seenDirs.add(real)
+    for (const file of skillFiles(real)) {
+      const skill = readSkill(file, "project", root, home, problems)
+      if (skill === null) continue
+      const earlier = found.get(skill.name)
+      if (earlier) problems.push(`Skill "${skill.name}" in ${skill.location} is hidden by the one in ${earlier.location}.`)
+      else found.set(skill.name, skill)
+    }
+  }
+  return { skills: [...found.values()], problems }
+}
+
+/** A skill's instructions as the model receives them. @param {Skill} skill */
+export const skillText = skill => skillContent(skill)
+
+/** A file inside a skill's folder. @param {Skill} skill @param {string} path */
+export const readSkillFile = (skill, path) => skill.remote ? skill.remote.read(path) : readInside(skill.dir, path)
 
 /**
  * `agent.skills` in one shape. A list is shorthand for `{ folders }`.
@@ -228,7 +267,7 @@ export function skillSession(catalog) {
       const { name, path } = /** @type {{ name: string, path: string }} */ (params)
       const skill = byName.get(name)
       if (skill === undefined) throw new Error(`There is no skill named "${name}".`)
-      const content = readInside(skill.dir, path)
+      const content = readSkillFile(skill, path)
       const clipped = content.length > READ_LIMIT ? `${content.slice(0, READ_LIMIT)}\n[... clipped at ${READ_LIMIT} characters]` : content
       return { content: [text(clipped)], details: { name, path } }
     },
@@ -246,6 +285,7 @@ export function skillSession(catalog) {
  * @param {Skill} skill
  */
 function skillContent(skill) {
+  if (skill.remote) return skill.remote.content()
   const body = splitFrontMatter(readFileSync(skill.file, "utf8")).body
   const files = resources(skill.dir)
   const listing = files.length === 0 ? "" : `\n\n<skill_resources>\n${files.map(file => `<file>${xml(file)}</file>`).join("\n")}${files.length === RESOURCE_LIMIT ? "\n<!-- the list stops here; there can be more files -->" : ""}\n</skill_resources>`

@@ -5,10 +5,18 @@ import { caliper } from "../src/plugin.js"
 import { basename, dirname, join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer as createPortReservation } from "node:net"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { startCentral } from "../src/central/server.js"
+import { projectId } from "../src/central/registry.js"
 
 if (process.versions.bun) throw new Error("Vite fixture hosting requires real Node.")
 /** @type {import('vite').ViteDevServer | undefined} */
 let server
+/** @type {Awaited<ReturnType<typeof startCentral>> | undefined} */
+let app
+// Each fixture host has its own registry, so fixtures never see this machine's servers.
+process.env.CALIPER_REGISTRY = mkdtempSync(join(tmpdir(), "caliper-test-registry-"))
 let closing = false
 /** @param {number} [code] */
 async function close(code = 0) {
@@ -16,6 +24,7 @@ async function close(code = 0) {
   closing = true
   try {
     if (server?.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
+    await app?.close()
     await server?.close()
   } finally {
     if (process.connected) process.disconnect()
@@ -30,7 +39,9 @@ process.on("message", async value => {
     if (value.type === "close") { await close(); return }
     if (value.type !== "start" || server || !("root" in value) || typeof value.root !== "string" || !("base" in value) || typeof value.base !== "string") throw new Error("Invalid fixture start.")
     const root = value.root
-    const options = "options" in value ? /** @type {import('../src/types').CaliperOptions | undefined} */ (value.options) : undefined
+    const given = "options" in value ? /** @type {(import('../src/types').CaliperOptions & { agent?: import('../src/types').AgentOptions }) | undefined} */ (value.options) : undefined
+    // The Caliper app owns the agent (decision 37); the plugin takes the rest.
+    const { agent, ...options } = given ?? {}
     // Vite interprets port 0 as its default, which reuses the previous fixture's
     // origin and Bun's keep-alive pool. Give each host an OS-assigned port.
     const reservation = createPortReservation()
@@ -52,9 +63,15 @@ process.on("message", async value => {
       if (Date.now() >= deadline) throw new Error("Vite did not watch the fixture files before startup.")
       await sleep(10)
     }
-    const url = server.resolvedUrls?.local[0]
-    if (!url) throw new Error("Vite did not publish a local address.")
-    process.send?.({ type: "ready", url })
+    const viteUrl = server.resolvedUrls?.local[0]
+    if (!viteUrl) throw new Error("Vite did not publish a local address.")
+    const state = mkdtempSync(join(tmpdir(), "caliper-test-app-"))
+    app = await startCentral({ port: 0, registry: process.env.CALIPER_REGISTRY, stateDir: state, settings: join(state, "none.json"), agent })
+    const id = projectId(root)
+    let url = app.projectUrl(id)
+    for (const end = Date.now() + 5000; url === null && Date.now() < end; url = app.projectUrl(id)) await sleep(10)
+    if (url === null) throw new Error("The dev server did not register with the Caliper app.")
+    process.send?.({ type: "ready", url, viteUrl })
   } catch (error) {
     process.send?.({ type: "error", message: error instanceof Error ? error.message : String(error) })
     await close(1)

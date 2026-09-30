@@ -44,7 +44,7 @@ if (!executablePath) throw new Error("Set CHROMIUM to a Chromium executable.")
 const out = /** @type {string} */ (args.out)
 mkdirSync(out, { recursive: true })
 const count = Number(args.takes)
-const base = new URL("/__caliper/", args.url).href
+const base = new URL("__caliper/", args.url).href
 
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 /** @type {string[]} */

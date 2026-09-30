@@ -45,21 +45,21 @@ export const MAX_TURNS = 40
  * and conversation; they run at the same time without sharing state.
  *
  * @param {{
- *   store: TakeStore,
+ *   store: TakeStore & { batch?: <T>(read: () => T) => T },
  *   engine: () => Engine,
  *   renderFor: (take: string, ask: TakeAsk) => RenderTake,
  *   onChange: () => void,
  *   skills?: () => SkillCatalog,
+ *   integration?: ReturnType<typeof createIntegrationReview>,
  * }} input
  *   `engine` is called when a take starts, so a missing connection fails that
  *   take, not the server. `onChange` fires on every visible change. `skills`
  *   is read when a take's agent starts, so a new or changed skill reaches the
  *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(store) }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
-  const integration = createIntegrationReview(store)
   /** @type {Map<string, AbortController>} */
   const controllers = new Map()
   /** @type {Map<string, Promise<void>>} */
@@ -168,12 +168,24 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     const entry = live.get(take) ?? { agent: null, run: { _tag: "Idle" }, log: [], edited: new Set() }
     if (entry.run._tag === "Running") throw new Error(`Take ${take}'s agent is working. Stop it before you edit by hand.`)
     const inside = content === store.original(file) ? (store.reset(take, file), file) : store.write(take, file, content)
+    noteHandEdit(take, inside)
+    return store.files(take)
+  }
+
+  /**
+   * Remember an edit by hand that someone else wrote, such as a knob in the
+   * project's plugin, so the agent's next prompt names the file.
+   *
+   * @param {string} take
+   * @param {string} inside root-relative
+   */
+  const noteHandEdit = (take, inside) => {
+    const entry = live.get(take) ?? { agent: null, run: { _tag: "Idle" }, log: [], edited: new Set() }
     entry.edited.add(inside)
     const last = entry.log.at(-1)
     if (last?._tag !== "Edit" || last.file !== inside) entry.log.push({ _tag: "Edit", file: inside })
     live.set(take, entry)
     onChange()
-    return store.files(take)
   }
 
   /** @param {string} take */
@@ -221,7 +233,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   }
 
   /** @returns {TakeView[]} */
-  const views = () => store.list().flatMap(take => {
+  const views = () => (store.batch ?? (read => read()))(() => store.list().flatMap(take => {
     const record = store.record(take)
     if (record === null) return []
     const state = live.get(take)
@@ -244,7 +256,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       images: record.images ?? [],
       log: state?.log ?? [],
     }]
-  })
+  }))
 
   /**
    * @param {string} take
@@ -370,7 +382,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     return files
   }
 
-  return { start, fork, create, startMarkup, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, fork, create, startMarkup, editByHand, noteHandEdit, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**

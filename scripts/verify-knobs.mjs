@@ -9,6 +9,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
@@ -53,7 +54,8 @@ for (const [file, code] of Object.entries(files)) write(file, code)
 symlinkSync(resolve(values.modules), join(root, "node_modules"), "dir")
 const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: "theme" })], server: { host: "127.0.0.1", port: 0 } })
 await server.listen()
-const url = server.resolvedUrls?.local[0] ?? ""
+const app = await startApp()
+const url = await projectBase(app, root)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 /** @type {string[]} */
@@ -247,6 +249,6 @@ try {
   assert.deepEqual(errors, [], "the chrome threw no errors")
   console.log(`\n${passed.length} behavior checks passed. Screenshots: ${SHOTS}`)
 } finally {
-  await browser.close(); await server.close()
+  await browser.close(); await app.close(); await server.close()
   if (!values.keep) rmSync(root, { recursive: true, force: true }); else console.log(`Kept ${root}`)
 }

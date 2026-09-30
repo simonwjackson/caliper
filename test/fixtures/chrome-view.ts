@@ -29,6 +29,7 @@ export function readyView(): ChromeView {
     connection: { _tag: "Ready" }, selection: { _tag: "State", subject, preview, label: "Button · Default in Page · Menu open" },
     navigation: {
       project: "Caliper", filter: "", countLabel: "2 parts", emptyMessage: "",
+      projects: { _tag: "Choices", choices: [{ id: "aaaaaaaaaaaa", name: "Caliper", current: true, problem: "" }, { id: "bbbbbbbbbbbb", name: "Pico", current: false, problem: "" }] },
       parts: [{ file: subject.part, name: "Button", note: "A composed preview", layer: "atom", layerSite: "filename suffix", selected: true, expanded: true,
         states: [{ ref: subject, label: "Default", site: subject.part, selected: true, comparing: true, badge: { status: "Review", label: "Needs review", detail: "Named coverage only" }, takes: [{ id: "6", label: "Quiet button", selected: true }] }] }],
       scenario: { _tag: "Selected", subject, editingLabel: "Editing Button · Default", choices: [{ key: "isolated", label: "Isolated", context: null }, { key: "page", label: "Page · Menu open", context: preview }], chosen: "page", note: "",

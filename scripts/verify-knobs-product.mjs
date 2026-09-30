@@ -9,6 +9,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: {
@@ -28,7 +29,8 @@ for (const dir of extras) cpSync(dir, join(work, relative(base, dir)), { recursi
 symlinkSync(join(source, "node_modules"), join(root, "node_modules"), "dir")
 const server = await createServer({ root, cacheDir: join(root, ".vite-knobs"), configFile: false, logLevel: "silent", plugins: [caliper()], server: { host: "127.0.0.1", port: 0 } })
 await server.listen()
-const url = server.resolvedUrls?.local[0] ?? ""
+const app = await startApp()
+const url = await projectBase(app, root)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 try {
   const page = await browser.newPage({ viewport: { width: Number(values.width ?? 1600), height: Number(values.height ?? 1000) } })
@@ -173,4 +175,4 @@ try {
   await page.screenshot({ path: "/tmp/caliper-verify-knobs-product.png" })
   assert.deepEqual(errors, [], "the chrome threw no errors")
   console.log("\nScreenshot: /tmp/caliper-verify-knobs-product.png")
-} finally { await browser.close(); await server.close(); rmSync(work, { recursive: true, force: true }) }
+} finally { await browser.close(); await app.close(); await server.close(); rmSync(work, { recursive: true, force: true }) }

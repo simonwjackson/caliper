@@ -30,8 +30,15 @@ export function PartsPanel({ view, actions, drawer, onClose }: PartsPanelProps) 
   return <div ref={box} className="dr-parts" data-place={drawer ? "drawer" : "docked"} role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined} aria-label={drawer ? "Parts" : undefined}>
     <Panel hook={CAL.nav} label="Parts" title={nav.project} sub={nav.countLabel} onClose={onClose} closeLabel="Close parts">
       <div className="dr-parts__body">
-        <input className="dr-parts__filter" data-cal={CAL.filter} type="search" placeholder="Filter parts" aria-label="Filter parts" value={nav.filter}
-          onChange={event => actions.onFilter(event.currentTarget.value)} />
+        <div className="dr-parts__head">
+          {nav.projects._tag === "Choices" && <label className="dr-parts__project">Project
+            <select data-cal={CAL.project} value={nav.projects.choices.find(choice => choice.current)?.id ?? ""} onChange={event => actions.onProject(event.currentTarget.value)}>
+              {nav.projects.choices.map(choice => <option key={choice.id} value={choice.id} disabled={choice.problem !== ""}>{choice.problem ? `${choice.name} (${choice.problem})` : choice.name}</option>)}
+            </select>
+          </label>}
+          <input className="dr-parts__filter" data-cal={CAL.filter} type="search" placeholder="Filter parts" aria-label="Filter parts" value={nav.filter}
+            onChange={event => actions.onFilter(event.currentTarget.value)} />
+        </div>
         {scenario._tag === "Selected" && <section className="dr-parts__scenario" aria-label="Scenario context">
           <label className="dr-parts__preview">Preview
             <select data-cal={CAL.context} aria-label="Preview scenario" value={scenario.chosen} onChange={event => actions.onContext(event.currentTarget.value)}>

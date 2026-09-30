@@ -132,6 +132,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       const ready = view.markup._tag === "Ready" && view.markup.revision === revision && view.markup.send._tag !== "Sending" && view.markup.send.availability._tag === "Enabled"
       if (ready) markup(marks => ({ state: { editor: null, send: { _tag: "Sending", label: `Sending ${marks.length} ${marks.length === 1 ? "mark" : "marks"}` } } }))
     }),
+    onProject: record("onProject"),
     onTool: record("onTool", active => update(tool(active))),
     onNavOpen: record("onNavOpen", navOpen => update({ ...view, tools: { ...view.tools, navOpen } })),
     onFilter: record("onFilter", filter => update({ ...view, navigation: { ...view.navigation, filter } })),

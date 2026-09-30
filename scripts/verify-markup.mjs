@@ -15,6 +15,7 @@ import { build } from "esbuild"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
+import { installRouting, projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
@@ -45,7 +46,7 @@ put(part, 'import { Chip } from "./Chip"\nexport default function Part() { retur
 symlinkSync(resolve(checkout, "node_modules"), join(root, "node_modules"), "dir")
 await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx")], bundle: true, format: "esm", jsx: "automatic", outfile: join(root, "public/markup-harness.js"), alias: { "caliper-markup-renderer": join(checkout, `src/client/ui/${renderer}.tsx`) }, loader: { ".ttf": "file", ".png": "file" }, assetNames: "[name]", publicPath: "/", define: { "process.env.NODE_ENV": '"development"' }, logLevel: "silent" })
 const styles = existsSync(join(root, "public/markup-harness.css")) ? '<link rel="stylesheet" href="/markup-harness.css">' : ""
-put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="/__caliper/"><title>Markup harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
+put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="__caliper/"><title>Markup harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
 console.log(`Renderer: ${renderer}`)
 
 const store = createTakeStore(root)
@@ -74,13 +75,12 @@ const address = model.address()
 if (!address || typeof address === "string") throw new Error("The local model endpoint did not start.")
 process.env.CALIPER_MARKUP_VERIFY_KEY = "local"
 
+const app = await startApp({ agent: { model: "scripted", baseUrl: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (address).port}/v1`, apiKeyEnv: "CALIPER_MARKUP_VERIFY_KEY", reasoning: "off", skills: false } })
 async function startVite() {
   const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", server: { host: "127.0.0.1", port: 0 },
-    plugins: [caliper({ wrap: false, agent: { model: "scripted", baseUrl: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (address).port}/v1`, apiKeyEnv: "CALIPER_MARKUP_VERIFY_KEY", reasoning: "off", skills: false } })] })
+    plugins: [caliper({ wrap: false })] })
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
-  if (!url) throw new Error("The subject did not start.")
-  return { server, url }
+  return { server, url: await projectBase(app, root) }
 }
 
 /** @type {Array<{ name: string, ok: boolean, detail: string }>} */
@@ -123,6 +123,7 @@ async function until(page, predicate, what, timeout = 15_000) {
 const frameOf = (page, take) => page.frameLocator(`iframe[data-take="${take}"]`)
 /** @param {import("playwright-core").Page} page */
 async function open(page) {
+  await installRouting(page, app)
   await page.goto(new URL(`markup-harness.html${hash}`, vite.url).href)
   await until(page, `view => view?.markup?._tag === "Ready" && view.canvas._tag === "Frames" && view.canvas.frames.length === 4 && view.canvas.frames.every(frame => frame.verdict._tag === "Rendered")`, "four rendered frames and a loaded draft", 30_000)
 }
@@ -308,6 +309,7 @@ try {
 } finally {
   writeFileSync(join(evidence, "summary.json"), JSON.stringify(results, null, 2))
   await browser.close()
+  await app.close()
   await vite.server.close()
   model.close()
   if (!keep) rmSync(root, { recursive: true, force: true })

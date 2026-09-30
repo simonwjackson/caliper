@@ -60,6 +60,9 @@ function Navigation({ view, actions }: ChromeProps) {
   const nav = view.navigation
   return <aside data-cal={CAL.nav} aria-label="Parts">
     <h2>{nav.project}</h2><p>{nav.countLabel}</p>
+    {nav.projects._tag === "Choices" && <select data-cal={CAL.project} aria-label="Project" value={nav.projects.choices.find(choice => choice.current)?.id ?? ""} onChange={event => actions.onProject(event.currentTarget.value)}>
+      {nav.projects.choices.map(choice => <option key={choice.id} value={choice.id} disabled={choice.problem !== ""}>{choice.problem ? `${choice.name}: ${choice.problem}` : choice.name}</option>)}
+    </select>}
     <input data-cal={CAL.filter} type="search" aria-label="Filter parts" value={nav.filter} onChange={event => actions.onFilter(event.currentTarget.value)} />
     {nav.scenario._tag === "Selected" && <section aria-label="Scenario context">
       <p>{nav.scenario.editingLabel}</p>

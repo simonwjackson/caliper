@@ -11,9 +11,15 @@ export const FRAME_WATCHDOG_MS = 10_000
  *
  * All chrome dependencies are bundled by Caliper, outside the consumer's Vite.
  *
- * @param {{ entryUrl: string, cssUrls: string[], pwaUrl: string, themeColor: string }} input
+ * @param {{ entryUrl: string, cssUrls: string[], pwaUrl: string, themeColor: string, serviceWorker?: string }} input
+ *   `serviceWorker` is the URL of the Caliper app's routing worker. The page
+ *   registers it and waits until it controls the page before the chrome
+ *   starts, because the frames' requests only reach their project through it.
  */
-export function chromePage({ entryUrl, cssUrls, pwaUrl, themeColor }) {
+export function chromePage({ entryUrl, cssUrls, pwaUrl, themeColor, serviceWorker }) {
+  const start = serviceWorker === undefined
+    ? `<script type="module" src="${escapeHtml(entryUrl)}"></script>`
+    : `<script type="module">${routedStart(entryUrl, serviceWorker)}</script>`
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -32,13 +38,45 @@ export function chromePage({ entryUrl, cssUrls, pwaUrl, themeColor }) {
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Caliper" />
     ${cssUrls.map(url => `<link rel="stylesheet" href="${escapeHtml(url)}" />`).join("\n    ")}
-    <script type="module" src="${escapeHtml(entryUrl)}"></script>
+    ${start}
   </head>
   <body>
     <div id="caliper" class="cal-root"></div>
   </body>
 </html>
 `
+}
+
+/**
+ * Start the chrome once the routing service worker controls the page. A hard
+ * reload bypasses the worker for the page, so the page reloads once, normally.
+ *
+ * @param {string} entryUrl
+ * @param {string} serviceWorker
+ */
+function routedStart(entryUrl, serviceWorker) {
+  const entry = JSON.stringify(entryUrl).replaceAll("<", "\\u003c")
+  const worker = JSON.stringify(serviceWorker).replaceAll("<", "\\u003c")
+  return `
+      const fail = text => { const panel = document.createElement("p"); panel.className = "cal-boot-problem"; panel.setAttribute("role", "alert"); panel.textContent = text; document.body.append(panel) }
+      const start = async () => {
+        const workers = navigator.serviceWorker
+        if (!workers) return fail("This browser has no service workers. Caliper needs one to reach a project's dev server. Use a secure origin, such as localhost or HTTPS.")
+        const existing = await workers.getRegistration("/")
+        if (existing && existing.active && !workers.controller && !sessionStorage.getItem("caliper:reloaded")) {
+          sessionStorage.setItem("caliper:reloaded", "1")
+          return location.reload()
+        }
+        sessionStorage.removeItem("caliper:reloaded")
+        await workers.register(${worker}, { scope: "/" })
+        await workers.ready
+        if (!workers.controller) await new Promise(done => { workers.addEventListener("controllerchange", done, { once: true }); setTimeout(done, 5000) })
+        if (!workers.controller) return fail("Caliper's service worker does not control this page. Reload the page.")
+        document.documentElement.dataset.calRouted = "true"
+        await import(${entry})
+      }
+      start().catch(error => fail(\`Caliper could not start: \${error instanceof Error ? error.message : String(error)}\`))
+    `
 }
 
 /**

@@ -191,19 +191,35 @@ export function createIntegrationReview(store) {
       ? /** @type {Checks} */ ({ _tag: "NotRun" }) : integration.checks
     return { ...current, checks }
   }
-  /** @param {string} take @param {() => Promise<string>} verify @returns {Promise<Review>} */
-  const check = async (take, verify) => {
+  /**
+   * The first half of `check`: hold the take and clear its old result. A
+   * central app that verifies over the network calls the two halves itself.
+   *
+   * @param {string} take @returns {string} the revision under check
+   */
+  const beginCheck = take => {
     idle(take)
     const before = review(take)
     const initial = state(take)
     if (initial._tag !== "Review") throw new Error("The proposal is no longer in review.")
     store.update(take, { integration: { ...initial, checks: { _tag: "NotRun" }, checkedRevision: undefined } })
     checking.add(take)
+    return before.revision
+  }
+  /**
+   * The second half of `check`: record the verifier's summary or failure and release the take.
+   *
+   * @param {string} take @param {string} revision from `beginCheck`
+   * @param {{ summary: unknown } | { error: string }} outcome
+   * @returns {Review}
+   */
+  const finishCheck = (take, revision, outcome) => {
     try {
-      const summary = await verify()
+      if ("error" in outcome) throw new Error(outcome.error)
+      const summary = outcome.summary
       if (typeof summary !== "string" || summary.trim() === "") throw new Error("Verification returned no summary.")
       const after = review(take)
-      if (before.revision !== after.revision) throw new Error("The proposal changed during verification. Resubmit and check again.")
+      if (revision !== after.revision) throw new Error("The proposal changed during verification. Resubmit and check again.")
       const integration = state(take)
       if (integration._tag !== "Review") throw new Error("The proposal is no longer in review.")
       store.update(take, { integration: { ...integration, checks: { _tag: "Passed", summary }, checkedRevision: after.revision } })
@@ -216,6 +232,14 @@ export function createIntegrationReview(store) {
       checking.delete(take)
     }
     return review(take)
+  }
+  /** @param {string} take @param {() => Promise<string>} verify @returns {Promise<Review>} */
+  const check = async (take, verify) => {
+    const revision = beginCheck(take)
+    /** @type {{ summary: unknown } | { error: string }} */
+    let outcome
+    try { outcome = { summary: await verify() } } catch (error) { outcome = { error: reason(error) } }
+    return finishCheck(take, revision, outcome)
   }
   /** @param {string} take @param {string} revision @param {boolean} behaviorReviewed @returns {string[]} */
   const apply = (take, revision, behaviorReviewed) => {
@@ -260,5 +284,5 @@ export function createIntegrationReview(store) {
       ? { _tag: /** @type {const} */ ("Preparing"), sourceTake: integration.sourceTake }
       : { _tag: /** @type {const} */ ("Review"), sourceTake: integration.sourceTake, proposal: validate(integration.proposal) }
   }
-  return { begin, submit, review, check, apply, summary }
+  return { begin, submit, review, check, beginCheck, finishCheck, apply, summary }
 }

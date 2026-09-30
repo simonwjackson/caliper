@@ -14,6 +14,7 @@ import { join } from "node:path"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
@@ -35,9 +36,10 @@ const store = createTakeStore(root)
 const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => /** @type {string} */ (store.create({ part, state: "default", device: "rg353m", prompt })))
 store.write(two, css, `${readFileSync(join(root, css), "utf8")}\n.pico-card-kicker { color: ${RED} }\n`)
 
-const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "warn", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper({ agent: { model, reasoning: "medium" } })] })
+const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "warn", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper()] })
 await server.listen()
-const url = server.resolvedUrls?.local[0]
+const app = await startApp({ agent: { model, reasoning: "medium" } })
+const url = await projectBase(app, root)
 if (!url) throw new Error("The subject did not start.")
 const api = async (/** @type {string} */ path) => (await fetch(new URL(`__caliper/${path}`, url))).json()
 
@@ -133,6 +135,7 @@ try {
   await page.screenshot({ path: join(evidence, "failure.png") }).catch(() => undefined)
 } finally {
   await browser.close()
+  await app?.close()
   await server.close()
   if (!keep) rmSync(root, { recursive: true, force: true })
   else log(`Subject kept: ${root}`)

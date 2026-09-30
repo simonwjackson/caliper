@@ -11,7 +11,8 @@ for each state and device, and writes a PNG for each. Run `caliper-render --help
 ## The loop
 
 1. Find the dev server. The project's `vite` must run with `caliper()`. Its terminal prints
-   `➜  Caliper: http://…/__caliper/`. The origin of that URL is `--url`. If no server runs, start the
+   `➜  Local: http://…/`; that origin is `--url`, not the Caliper app's URL. The file for the project
+   in `~/.local/state/caliper/servers/` holds the same URL as `url`. If no server runs, start the
    project's dev script in the background, and stop it when you finish.
 2. Find the part: `caliper-render --url <origin> --list`. A part is a `*.part.tsx` file. Each exported
    component whose name starts with an upper-case letter is a **state**. The default export is `default`.

@@ -8,6 +8,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
@@ -41,9 +42,13 @@ const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })
 /** @type {string[]} */
 const errors = []
 page.on("pageerror", error => errors.push(error.message))
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
+let mainClosed = false
 try {
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
+  app = await startApp()
+  const url = await projectBase(app, root)
   assert(url)
   const base = `${url}__caliper/`
   const getView = async () => /** @type {import('../src/checks/contract.js').ChecksView} */ (await (await fetch(`${base}checks`)).json())
@@ -179,13 +184,16 @@ try {
   // A missing browser is a visible failure, not an endless spinner or an empty pass.
   const executable = process.env.CHROMIUM
   delete process.env.CHROMIUM
+  // Two dev servers of one root are a duplicate the app does not route (decision 37); stop the first.
+  await server.close()
+  mainClosed = true
   let unavailable
   try {
     unavailable = await createServer({ root, cacheDir: join(root, ".vite-unavailable"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
   } finally { process.env.CHROMIUM = executable }
   try {
     await unavailable.listen()
-    await page.goto(`${unavailable.resolvedUrls?.local[0]}__caliper/#part=${encodeURIComponent(part)}&state=default`)
+    await page.goto(`${await projectBase(/** @type {NonNullable<typeof app>} */ (app), root)}__caliper/#part=${encodeURIComponent(part)}&state=default`)
     await page.locator(`${cal.state}[data-state="default"]`).waitFor()
     await open()
     await dialog.getByRole("button", { name: "Check selected preview", exact: true }).click()
@@ -194,7 +202,7 @@ try {
     await page.screenshot({ path: join(out, "setup-failure.png") })
   } catch (error) {
     await page.screenshot({ path: join(out, "setup-failure-debug.png") })
-    writeFileSync(join(out, "setup-failure-debug.txt"), JSON.stringify({ errors, body: await page.locator("body").innerText(), view: await (await fetch(`${unavailable.resolvedUrls?.local[0]}__caliper/checks`)).json() }, null, 2))
+    writeFileSync(join(out, "setup-failure-debug.txt"), JSON.stringify({ errors, body: await page.locator("body").innerText(), view: await (await fetch(`${base}checks`)).json() }, null, 2))
     throw error
   } finally { await page.goto("about:blank"); await unavailable.close() }
   console.log(`Verified checks UI, saved-image approval, stale status, reload, take reports, unchanged Replace${reference ? "; layout and focus gates deferred for the unstyled reference" : ", and six container layouts"}. Screenshots: ${out}`)
@@ -204,6 +212,6 @@ try {
   throw error
 } finally {
   await browser.close()
-  await server.close()
+  await app?.close(); if (!mainClosed) await server.close()
   rmSync(root, { recursive: true, force: true })
 }

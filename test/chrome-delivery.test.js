@@ -37,16 +37,18 @@ describe("isolated chrome delivery", () => {
     }
   })
 
-  test("serves manifest-listed bundles under the Vite base and preserves frame/PWA routes", async () => {
+  test("the app serves manifest-listed bundles; the project keeps frame routes under its Vite base", async () => {
     const delivery = chromeDelivery()
-    await withProject({ files, base: "/preview/" }, async ({ get }) => {
+    await withProject({ files, base: "/preview/" }, async ({ get, url }) => {
+      const app = (/** @type {string} */ path) => fetch(new URL(path, url))
       const html = await (await get("/__caliper/")).text()
-      expect(html).toContain(`/preview/__caliper/assets/${delivery.entry}`)
+      expect(html).toContain(`/__caliper/assets/${delivery.entry}`)
       expect(html).not.toContain("/@vite/client")
-      const entry = await get(`/__caliper/assets/${delivery.entry}`)
+      const entry = await app(`/__caliper/assets/${delivery.entry}`)
       expect(entry.status).toBe(200)
       expect(entry.headers.get("content-type")).toContain("text/javascript")
-      for (const path of ["/__caliper/assets/plugin.js", "/__caliper/assets/.vite/manifest.json", "/__caliper/client/chrome.js", "/__caliper/modules/react@19/index.js"]) expect((await get(path)).status).toBe(404)
+      for (const path of ["/__caliper/assets/plugin.js", "/__caliper/assets/.vite/manifest.json"]) expect((await app(path)).status).toBe(404)
+      for (const path of ["/__caliper/client/chrome.js", "/__caliper/modules/react@19/index.js"]) expect((await get(path)).status).toBe(404)
       expect(delivery.read("../src/plugin.js")).toBeNull()
       expect(delivery.read(".vite/manifest.json")).toBeNull()
       const frame = await (await get("/__caliper/frame?part=src/Chip.part.tsx")).text()
@@ -55,7 +57,7 @@ describe("isolated chrome delivery", () => {
       expect(frame).toContain('href="/preview/__caliper/client/frame.css"')
       expect(frame).not.toContain("/preview/preview/")
       expect(frame).toContain("caliper:react")
-      expect((await get("/__caliper/manifest.webmanifest")).status).toBe(200)
+      expect((await app("/__caliper/manifest.webmanifest")).status).toBe(200)
     })
   })
 

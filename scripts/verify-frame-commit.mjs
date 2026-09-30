@@ -8,6 +8,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { installRouting, projectBase, startApp } from "./caliper-app.mjs"
 import { FRAME_WATCHDOG_MS } from "../src/pages.js"
 import { cal, waitFrames } from "./verify-helpers.mjs"
 
@@ -53,9 +54,12 @@ export function BecomesEmpty() {
 symlinkSync(resolve(values.modules), join(root, "node_modules"), "dir")
 const server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "silent", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
+  app = await startApp()
+  const url = await projectBase(app, root)
   assert(url)
   const failures = []
   for (const [state, expected, text] of [
@@ -73,6 +77,7 @@ try {
     const context = await browser.newContext()
     const page = await context.newPage()
     try {
+      await installRouting(page, /** @type {NonNullable<typeof app>} */ (app))
       await page.goto(`${url}__caliper/frame?part=src/Commit.part.tsx&state=${state}`)
       if (text) await page.getByRole("button", { name: text, exact: true }).waitFor()
       if (state === "LaterContent") await page.waitForFunction(() => document.documentElement.dataset.caliperState === "Rendered")
@@ -111,6 +116,6 @@ try {
 } finally {
   await browser.close()
   if (server.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
-  await server.close()
+  await app?.close(); await server.close()
   rmSync(root, { recursive: true, force: true })
 }

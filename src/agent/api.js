@@ -54,11 +54,17 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  *   onChange: () => void,
  *   onMarks?: (draft: import("../takes/marks-contract.js").Draft) => void,
  *   skills?: () => SkillCatalog,
+ *   host?: Host,
  * }} input
  *   `skills` finds the skills each new agent, the planner and the chrome see.
- *   `onMarks` hears every new draft of marks.
+ *   `onMarks` hears every new draft of marks. `host` replaces the reads of
+ *   the project's disk, for the Caliper app, whose agent reaches the project
+ *   only through its plugin.
  */
-export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, onMarks = () => {}, skills = () => ({ skills: [], problems: [] }) }) {
+export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, onMarks = () => {}, skills = () => ({ skills: [], problems: [] }), host = {} }) {
+  const discover = host.parts ?? (overrides => discoverParts(store.root, overrides))
+  const readProjectFile = host.readFile ?? (file => readFileSync(join(store.root, file), "utf8"))
+  const baselines = host.baselines ?? join(store.root, ".caliper", "baselines")
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
   const shutdown = new AbortController()
   /** @type {Set<Promise<unknown>>} */
@@ -72,19 +78,19 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     finally { rendering.delete(pending) }
   }
   const engine = () => {
-    if (connection === null) throw new Error(status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.")
+    if (connection === null) throw new Error(status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add \"agent\": { \"model\": ... } to ~/.config/caliper/config.json.")
     return connectEngine(connection)
   }
 
   /** @param {string} take */
-  const proposedParts = take => discoverParts(store.root, new Map(
+  const proposedParts = take => discover(new Map(
     store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]),
   ))
 
   /** Both replacement and alternate proposals preserve their subject and context. @param {string} take */
   const validateProposedContext = take => {
     const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
-    const baseline = discoverParts(store.root)
+    const baseline = discover()
     validateTakeContext(baseline, record)
     const proposed = proposedParts(take)
     validateTakeContext(proposed, record)
@@ -112,6 +118,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
 
   const agents = createTakeAgents({
     store,
+    ...(host.integration ? { integration: host.integration } : {}),
     engine,
     renderFor: (take, ask) => async request => {
       const original = await project()
@@ -126,7 +133,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return trackRender(async () => {
         signal.throwIfAborted()
         if (!request.checks) return renderJobs(input)
-        const checked = await checkJobs({ ...input, project: original.name, baselines: join(store.root, ".caliper", "baselines") })
+        const checked = await checkJobs({ ...input, project: original.name, baselines })
         const run = "run" in checked.report ? checked.report.run : undefined
         if (checked.results.length === 0) throw new Error(`Checks produced no complete visual results. Run: ${JSON.stringify(run)}. Report: ${checked.reportPath}`)
         return checked.results.map(result => ({ ...result, checkReport: checked.reportPath, ...(run === undefined ? {} : { checkRun: run }) }))
@@ -138,7 +145,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
 
   const markup = createMarkupApi({
     store,
-    marks: createMarkStore(store.root),
+    marks: host.marks ?? createMarkStore(store.root),
     agents,
     project,
     validateTake: validateTakeContext,
@@ -149,7 +156,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `marks-${Date.now()}`), executablePath: chromium, signal: shutdown.signal }))
     },
     onDraft: onMarks,
-    agentProblem: () => connection === null ? (status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.") : null,
+    agentProblem: () => connection === null ? (status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add \"agent\": { \"model\": ... } to ~/.config/caliper/config.json.") : null,
   })
 
   /** Checks hold a take still until they finish, including follow-up and discard. */
@@ -198,7 +205,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     const connected = engine()
     /** @type {import("./planner.js").Content[]} */
     const context = [...new Set([ask.part, ask.context?.part].filter(file => file !== undefined))].map(file => ({
-      type: "text", text: `<file path="${file}">\n${readFileSync(join(store.root, file), "utf8")}\n</file>`,
+      type: "text", text: `<file path="${file}">\n${readProjectFile(file)}\n</file>`,
     }))
     const preview = ask.context ?? ask
     try {
@@ -257,7 +264,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       }
       if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
       if (action === "alternate") {
-        validateTakeContext(discoverParts(store.root), /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
+        validateTakeContext(discover(), /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
         json(response, 201, { take: agents.alternate(take) })
       } else if (action === "review") {
         agents.assertIdle(take)
@@ -363,12 +370,28 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
    * @param {string} content
    */
   const editByHand = (take, file, content) => {
-    if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
+    assertEditable(take)
     agents.editByHand(take, file, content)
   }
 
-  return { handle, snapshot, marks: markup.draft, close, editByHand }
+  /** Refuse an edit by hand while the take's agent works or its integration is checked. @param {string} take */
+  const assertEditable = take => {
+    if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
+    agents.assertIdle(take)
+  }
+
+  return { handle, snapshot, marks: markup.draft, close, editByHand, assertEditable, noteHandEdit: agents.noteHandEdit }
 }
+
+/**
+ * @typedef {{
+ *   parts?: (overrides?: Map<string, string>) => import("../types").Part[],
+ *   readFile?: (file: string) => string,
+ *   marks?: import("../takes/marks.js").MarkStore,
+ *   integration?: ReturnType<typeof import("../takes/integration.js").createIntegrationReview>,
+ *   baselines?: string,
+ * }} Host
+ */
 
 /**
  * Validate a persisted or requested subject and its composed preview against the current project.

@@ -68,6 +68,14 @@ function setupRow<T>(label: string, value: Derivation<T>, show: (value: T) => st
   return value._tag === "Failed" ? { label, status: "Failed", values: [], provenance: value.hint, problems: [value.reason] }
     : { label, status: value._tag, values: show(value.value), provenance: value._tag === "Derived" ? `Found at ${value.source.file}:${value.source.line}: ${value.via}` : `Set by caliper({ ${value.option} }) in vite.config`, problems: [] }
 }
+/** The switcher shows while another project runs; this tab's project stays listed even when its server is away. */
+function projectsView(state: AppState): NavigationView["projects"] {
+  const others = state.projects.filter(project => project.id !== state.projectId)
+  if (state.projectId === null || others.length === 0) return { _tag: "Hidden" }
+  const current = state.projects.find(project => project.id === state.projectId) ?? { id: state.projectId, name: state.project?.name ?? "This project", problem: "" }
+  return { _tag: "Choices", choices: [current, ...others].map(project => ({ ...project, current: project.id === state.projectId, problem: project.id === state.projectId ? "" : project.problem }))
+    .sort((left, right) => left.name.localeCompare(right.name)) }
+}
 function navigation(state: AppState, regions: Regions): NavigationView {
   const parts = state.project?.parts ?? []
   const subject = subjectRef(state), preview = previewRef(state)
@@ -88,7 +96,7 @@ function navigation(state: AppState, regions: Regions): NavigationView {
   const contextKey = (ref: StateRef | null) => ref ? JSON.stringify([ref.part, ref.state]) : "isolated"
   const project = state.project
   return {
-    project: project?.name ?? "Caliper", filter: state.filter,
+    project: project?.name ?? "Caliper", projects: projectsView(state), filter: state.filter,
     countLabel: state.connection._tag === "Unreachable" ? "Vite is not reachable" : needle ? `${shown.length} of ${parts.length}` : `${parts.length} parts`,
     emptyMessage: !project ? state.connection._tag === "Connecting" ? "Connecting to Vite…" : "Vite is not reachable." : parts.length === 0 ? "No *.part.tsx files found. A part file default-exports a component that renders with no props." : shown.length === 0 ? `No part matches “${state.filter}”.` : "",
     parts: shown.map(part => ({ file: part.file, name: part.name, note: part.note ?? "", layer: part.layer, layerSite: part.layerSource ? `${part.layer} · ${part.layerSource.file}:${part.layerSource.line}` : part.layer ? `${part.layer} · filename suffix in ${part.file}` : `Unclassified · ${part.file}`,

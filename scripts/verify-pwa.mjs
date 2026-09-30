@@ -1,6 +1,6 @@
 #!/usr/bin/env -S nix shell nixpkgs#nodejs --command node
 // @ts-check
-/** Check the installed chrome on a real product Vite server, with and without a Vite base. */
+/** Check the installed chrome in the Caliper app (decision 37), for a product with and without a Vite base. */
 import assert from "node:assert/strict"
 import { chromium } from "playwright-core"
 import { withProject, manifest as projectManifest } from "../test/project-server.js"
@@ -22,14 +22,17 @@ const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "
 try {
   for (const base of ["/", "/preview/"]) {
     await withProject({ files, base }, async ({ url }) => {
-      const prefix = `${base}__caliper/`
-      const address = new URL(prefix.slice(1), new URL(url).origin + "/").href
+      // The install belongs to the app, at its own /__caliper/, whatever the product's base.
+      const prefix = "/__caliper/"
+      const address = new URL(prefix, url).href
+      const chrome = new URL("__caliper/", url).href
+      if (!new URL(url).pathname.endsWith(base)) throw new Error(`The project's base ${url} does not end in ${base}.`)
       const page = await browser.newPage({ viewport: { width: 412, height: 620 }, isMobile: true, hasTouch: true })
       /** @type {string[]} */
       const errors = []
       page.on("pageerror", error => errors.push(error.message))
       try {
-        const response = await page.goto(address, { waitUntil: "load" })
+        const response = await page.goto(chrome, { waitUntil: "load" })
         assert.equal(response?.status(), 200)
         await page.locator(cal.root).waitFor({ timeout: 20_000 })
         const meta = await page.evaluate(() => ({
@@ -80,8 +83,8 @@ try {
         assert.deepEqual(appManifest.errors, [])
         assert.deepEqual(installability.installabilityErrors.filter(error => error.errorId !== "in-incognito"), [])
         deferLayout([`${base}: overscroll-behavior none`, `${base}: safe-area body padding 32px 12px 20px 8px, root left≥8/top≥32 and bar top≥32/right≤width−12 at 412×620 and 320×480`])
-        assert.equal((await (await fetch(new URL(`${base}manifest.webmanifest`, new URL(url).origin))).json()).name, "Product")
-        assert.equal(await (await fetch(new URL(`${base}icon-192.png`, new URL(url).origin))).text(), "product-icon")
+        assert.equal((await (await fetch(new URL("manifest.webmanifest", url))).json()).name, "Product")
+        assert.equal(await (await fetch(new URL("icon-192.png", url))).text(), "product-icon")
         assert.deepEqual(errors, [])
         process.stdout.write(`${base}: manifest, assets, installability, product isolation passed; safe-area layout NOT PROVEN\n`)
       } finally {

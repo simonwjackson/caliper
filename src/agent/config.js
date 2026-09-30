@@ -18,6 +18,9 @@ import { join } from "node:path"
  */
 
 export const DEFAULT_KEY_ENV = "CALIPER_AGENT_API_KEY"
+/** Where the Caliper app keeps its settings, relative to the XDG config folder. */
+export const CONFIG_FILE = "caliper/config.json"
+const SETTINGS = `~/.config/${CONFIG_FILE}`
 /** An optional local fallback: the CLIProxyAPI settings of a pi install. */
 export const PI_PROXY_FILE = ".pi/agent/cliproxyapi.json"
 const REASONING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -35,10 +38,10 @@ const REASONING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
  */
 export function resolveAgent({ option, env, home }) {
   if (option === undefined) {
-    return off("Add agent: { model } to caliper() in vite.config to make takes with an AI agent.")
+    return off(`Add "agent": { "model": ... } to ${SETTINGS} to make takes with an AI agent.`)
   }
   if (typeof option.model !== "string" || option.model.trim() === "") {
-    return failed("caliper({ agent }) has no model.", 'Set agent.model to a model id the endpoint knows, for example "claude-opus-5-5".')
+    return failed(`The agent in ${SETTINGS} has no model.`, 'Set agent.model to a model id the endpoint knows, for example "claude-opus-5-5".')
   }
   const reasoning = option.reasoning ?? "medium"
   if (!REASONING.includes(reasoning)) {
@@ -53,12 +56,12 @@ export function resolveAgent({ option, env, home }) {
 
   /** @type {{ url: string, from: string } | null} */
   const base = option.baseUrl !== undefined
-    ? { url: trimSlash(option.baseUrl), from: "vite.config" }
+    ? { url: trimSlash(option.baseUrl), from: SETTINGS }
     : proxy !== null
       ? { url: proxy.baseUrl, from: `~/${PI_PROXY_FILE}` }
       : null
   if (base === null) {
-    return failed("caliper({ agent }) has no baseUrl.", 'Set agent.baseUrl to an OpenAI-compatible endpoint, with its /v1, for example "http://localhost:11434/v1".')
+    return failed(`The agent in ${SETTINGS} has no baseUrl.`, 'Set agent.baseUrl to an OpenAI-compatible endpoint, with its /v1, for example "http://localhost:11434/v1".')
   }
   if (!/^https?:\/\//.test(base.url)) {
     return failed(`agent.baseUrl "${base.url}" is not an http or https URL.`, "Set agent.baseUrl to the endpoint's full URL.")
@@ -72,7 +75,7 @@ export function resolveAgent({ option, env, home }) {
       ? { key: proxy.apiKey, from: `~/${PI_PROXY_FILE}` }
       : null
   if (key === null) {
-    return failed(`No API key for ${base.url}.`, `Set ${keyEnv} in the shell that starts Vite, or in the project's .env.local. Never put the key in vite.config.`)
+    return failed(`No API key for ${base.url}.`, `Set ${keyEnv} in the environment of the Caliper app. Never put the key in ${SETTINGS}.`)
   }
 
   return {

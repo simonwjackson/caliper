@@ -10,6 +10,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
+import { projectBase, startApp } from "./caliper-app.mjs"
 import { cal, deferLayout, reveal } from "./verify-helpers.mjs"
 
 const { values } = parseArgs({ options: { reference: { type: "boolean", default: true }, layout: { type: "boolean", default: false }, modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-ui" } } })
@@ -71,10 +72,12 @@ const errors = []
 page.on("pageerror", error => errors.push(error.message))
 /** @type {Record<string, unknown>} */
 const evidence = {}
+/** @type {Awaited<ReturnType<typeof startApp>> | undefined} */
+let app
 try {
   await server.listen()
-  const url = server.resolvedUrls?.local[0]
-  assert(url)
+  app = await startApp()
+  const url = await projectBase(app, root)
   const base = `${url}__caliper/`
   const dialog = page.getByRole("dialog", { name: "Checks", exact: true })
   const runButton = dialog.getByRole("button", { name: "Check selected preview", exact: true })
@@ -251,6 +254,7 @@ try {
   throw error
 } finally {
   await browser.close()
+  await app?.close()
   if (server.httpServer && "closeAllConnections" in server.httpServer) server.httpServer.closeAllConnections()
   await server.close()
   rmSync(root, { recursive: true, force: true })

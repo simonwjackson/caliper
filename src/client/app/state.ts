@@ -40,7 +40,11 @@ export type AppState = {
   chainsOpen: ReadonlySet<string>
   /** Chains whose pair shows the parent when it does not fit (planner choice 19). Remembered. */
   chainSolo: ReadonlySet<string>
+  /** This tab's project in the Caliper app, and every project the app lists (decision 37). */
+  projectId: string | null
+  projects: readonly ProjectListing[]
 }
+export type ProjectListing = { id: string; name: string; problem: string }
 /** Chain ids are `take@created` of the chain's first take; a damaged preference reads as none. */
 function savedChainSolo(storage: Preferences): ReadonlySet<string> {
   try {
@@ -68,7 +72,7 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     // navOpen is the docked parts column, a remembered preference. The UI owns the small-screen drawer.
     tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
-    chainsOpen: new Set(), chainSolo: savedChainSolo(storage),
+    chainsOpen: new Set(), chainSolo: savedChainSolo(storage), projectId: null, projects: [],
   }
 }
 export function clampShare(value: number) { return Math.min(0.8, Math.max(0.2, value)) }

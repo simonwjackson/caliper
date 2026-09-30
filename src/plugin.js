@@ -2,24 +2,25 @@
 import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { homedir } from "node:os"
-import { isAbsolute, join, relative, resolve as resolvePath } from "node:path"
+import { basename, isAbsolute, join, relative, resolve as resolvePath } from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadEnv, mergeConfig } from "vite"
 import { deriveProject } from "./derive/project.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
-import { createTakesApi } from "./agent/api.js"
 import { codeChange, createCodeApi } from "./code/api.js"
 import { createKnobsApi } from "./knobs/api.js"
 import { createChecksApi } from "./checks/api.js"
 import { createSourceRevision } from "./checks/source-revision.js"
 import { checkSource } from "./authored/source.js"
 import { authoredCheckDelivery } from "./authored/delivery.js"
-import { chromeDelivery } from "./build/chrome.js"
 import { listeningOrigin } from "./server-origin.js"
 import { reportLateChanges } from "./late-changes.js"
-import { resolveAgent } from "./agent/config.js"
-import { discoverSkills } from "./agent/skills.js"
-import { chromePage, framePage } from "./pages.js"
+import { framePage } from "./pages.js"
+import { json } from "./http.js"
+import { createHostApi } from "./host/api.js"
+import { createMarkStore } from "./takes/marks.js"
+import { createIntegrationReview } from "./takes/integration.js"
+import { newToken, projectId, PROTOCOL, registryDir, tokenMatches, writeEntry } from "./central/registry.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
 import { takeParts } from "./takes/parts.js"
@@ -37,18 +38,8 @@ import { takeParts } from "./takes/parts.js"
 export const CALIPER_PATH = "/__caliper"
 
 const CLIENT_DIR = fileURLToPath(new URL("./client/", import.meta.url))
-const PWA_DIR = fileURLToPath(new URL("./pwa/", import.meta.url))
-const PWA_FILES = new Map([
-  ["manifest.webmanifest", "application/manifest+json"],
-  ["favicon.svg", "image/svg+xml"],
-  ["favicon-16.png", "image/png"],
-  ["favicon-32.png", "image/png"],
-  ["apple-touch-icon.png", "image/png"],
-  ["icon-192.png", "image/png"],
-  ["icon-512.png", "image/png"],
-  ["icon-maskable-192.png", "image/png"],
-  ["icon-maskable-512.png", "image/png"],
-])
+/** The Vite settings that would move the HMR socket off the path the central app routes. */
+const HMR_SETTINGS = ["path", "port", "clientPort", "server", "host"]
 // Only the product-frame bootstrap goes through the consumer's Vite.
 const CLIENT_FILES = new Map([
   ["frame.js", "text/javascript"],
@@ -58,21 +49,27 @@ const REACT_MODULE = "virtual:caliper/react"
 const RESOLVED_REACT_MODULE = "\0caliper:react"
 /** The project's React packages the frame loads, pre-bundled so the first load does not reload. */
 const REACT_PACKAGES = ["react", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"]
+/** Registry files to remove when the process exits without closing Vite. */
+const LEAVING = new Set()
+process.once("exit", () => { for (const leave of LEAVING) leave() })
 const REFRESH_DELAY_MS = 80
 /** The longest a frame page waits for Vite's first dependency bundle. */
 const OPTIMIZE_WAIT_MS = 60_000
-const TAKES_DELAY_MS = 100
 
 /**
  * Caliper: see the project's own UI parts at true physical device size.
  *
- * Add it to the project's vite.config and open `/__caliper/` on the dev
- * server. It runs only under `vite dev`, never in a build.
+ * Add it to the project's vite.config and open the Caliper app. The plugin
+ * announces the dev server in the registry; the app finds it there. It runs
+ * only under `vite dev`, never in a build.
  *
  * @param {CaliperOptions} [options] overrides, only for when a derivation fails
  * @returns {Plugin}
  */
 export function caliper(options = {}) {
+  if (options !== null && typeof options === "object" && "agent" in options) {
+    throw new Error("caliper({ agent }) is gone: the Caliper app owns the agent now. Move the agent settings to ~/.config/caliper/config.json as { \"agent\": { \"model\": ... } } and remove agent from vite.config.")
+  }
   /** @type {string} */
   let root = process.cwd()
   let cacheDir = join(root, "node_modules/.vite")
@@ -89,6 +86,11 @@ export function caliper(options = {}) {
 
     config(userConfig) {
       root = resolvePath(userConfig.root ?? process.cwd())
+      const hmr = userConfig.server?.hmr
+      const own = hmr !== null && typeof hmr === "object" ? HMR_SETTINGS.filter(key => /** @type {Record<string, unknown>} */ (hmr)[key] !== undefined) : []
+      if (own.length > 0) {
+        throw new Error(`Caliper routes Vite's HMR socket through the Caliper app, so it cannot use server.hmr.${own.join(", server.hmr.")} from vite.config. Remove ${own.length === 1 ? "that setting" : "those settings"} while Caliper is in the plugins.`)
+      }
       const parts = discoverParts(root).map(part => part.file)
       const require = createRequire(join(root, "package.json"))
       const react = REACT_PACKAGES.filter(name => canResolve(require, name))
@@ -100,6 +102,8 @@ export function caliper(options = {}) {
         // A knob maps a rule the browser holds to its source file through
         // the served CSS's sourcemap (decision 23). Served CSS gets larger.
         css: { devSourcemap: true },
+        // The socket path names the project, so the Caliper app can route it (decision 37).
+        ...(hmr === false ? {} : { server: { hmr: { path: `__caliper/hmr/${projectId(root)}` } } }),
       }, checkDelivery.config())
     },
 
@@ -168,12 +172,28 @@ export function caliper(options = {}) {
         session.handle(url, request, response).catch(next)
       })
 
+      /** @type {() => void} */
+      let unregister = () => {}
+      server.httpServer?.once("listening", () => {
+        const url = listeningOrigin(server)
+        if (url === null) return
+        try {
+          unregister = writeEntry(registryDir(), {
+            protocol: PROTOCOL, id: session.id, pid: process.pid, root, name: projectName(root),
+            url: `${url}/`, base: server.config.base, token: session.token, started: new Date().toISOString(),
+          })
+        } catch (error) {
+          server.config.logger.error(`Caliper could not register this dev server: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      })
+      const leave = () => { unregister(); unregister = () => {}; LEAVING.delete(leave) }
+      server.httpServer?.once("close", leave)
+      LEAVING.add(leave)
+
       const printUrls = server.printUrls.bind(server)
       server.printUrls = () => {
         printUrls()
-        for (const url of server.resolvedUrls?.local ?? []) {
-          server.config.logger.info(`  \u279c  Caliper: ${new URL(`${CALIPER_PATH.slice(1)}/`, url).href}`)
-        }
+        server.config.logger.info(`  \u279c  Caliper: open the Caliper app; this server is project ${session.id}`)
       }
     },
   }
@@ -265,48 +285,30 @@ function createSession(server, root, options, env, overlay) {
   server.watcher.on("add", codeChanged)
   server.watcher.on("unlink", codeChanged)
 
-  const themeColor = JSON.parse(readFileSync(join(PWA_DIR, "manifest.webmanifest"), "utf8")).theme_color
-  // Resolve the bundle on demand: frame-only APIs still work before a linked
-  // checkout's first build, and a missing chrome build has a visible response.
-  const chromeHtml = () => {
-    const delivery = chromeDelivery()
-    const assets = `${base}${CALIPER_PATH}/assets`
-    return chromePage({ entryUrl: `${assets}/${delivery.entry}`, cssUrls: delivery.css.map(file => `${assets}/${file}`), pwaUrl: `${base}${CALIPER_PATH}`, themeColor })
-  }
-
-  const agent = resolveAgent({ option: options.agent, env, home: homedir() })
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let takesTimer
-  /** Tell every open chrome about the takes, at most once per TAKES_DELAY_MS while an agent streams. */
-  const takesChanged = () => {
-    if (closed) return
-    takesTimer ??= setTimeout(() => {
-      takesTimer = undefined
-      const data = JSON.stringify(takes.snapshot())
-      for (const stream of streams) stream.write(`event: takes\ndata: ${data}\n\n`)
-    }, TAKES_DELAY_MS)
-  }
+  const id = projectId(root)
+  const token = newToken()
   server.httpServer?.once("close", () => { void close() })
   // Vite's watcher drops a second save within 50 ms. Every writer hits it: an
   // agent, the code pane, a knob and the user's own editor.
   const stopLateChanges = reportLateChanges(server.watcher)
   const code = createCodeApi({ store, project: async () => (await load()).project, resolve })
-  const takes = createTakesApi({
-    store,
-    status: agent.status,
-    connection: agent.connection,
-    project: async () => (await load()).project,
-    serverUrl: () => listeningOrigin(server),
-    chromium: env.CHROMIUM,
-    onChange: takesChanged,
-    onMarks: draft => {
-      const data = JSON.stringify(draft)
-      for (const stream of streams) stream.write(`event: marks\ndata: ${data}\n\n`)
-    },
-    skills: () => discoverSkills({ root, home: homedir(), option: options.agent?.skills }),
-  })
+  const host = createHostApi({ store, marks: createMarkStore(root), integration: createIntegrationReview(store), root, home: homedir() })
 
-  const knobs = createKnobsApi({ store, writeTake: takes.editByHand, options: options.knobs })
+  /**
+   * A knob's write into a take is an edit by hand. The Caliper app's agent
+   * hears of it on the event stream, so its next prompt names the file.
+   *
+   * @param {string} take @param {string} file @param {string} content
+   */
+  const writeTake = (take, file, content) => {
+    if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
+    let inside = file
+    if (content === store.original(file)) store.reset(take, file)
+    else inside = store.write(take, file, content)
+    const data = JSON.stringify({ take, file: inside })
+    for (const stream of streams) stream.write(`event: edit\ndata: ${data}\n\n`)
+  }
+  const knobs = createKnobsApi({ store, writeTake, options: options.knobs })
 
   const checks = createChecksApi({
     store,
@@ -335,30 +337,22 @@ function createSession(server, root, options, env, overlay) {
    */
   const handle = async (url, request, response) => {
     const path = url.pathname.slice(CALIPER_PATH.length)
-    if (await takes.handle(path, request, response)) return undefined
+    // Reads stay open, as Vite's own modules are. Every write needs this
+    // server's token, which only the registry file holds (decision 37).
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      if (!tokenMatches(request.headers.authorization, token)) {
+        return json(response, 401, { error: "Caliper's dev server takes writes only from the Caliper app. Open this project there." })
+      }
+      // The token proves the Caliper app, which checked the page's origin itself.
+      delete request.headers.origin
+    }
+    if (path === "/hello") return json(response, 200, { protocol: PROTOCOL, id, name: projectName(root), root })
+    if (path === "/host") return host.handle(request, response)
     if (await code.handle(path, url, request, response)) return undefined
     if (await knobs.handle(path, request, response)) return undefined
     if (await checks.handle(path, url, request, response)) return undefined
-    if (path.startsWith("/assets/")) {
-      try {
-        const served = chromeDelivery().read(path.slice("/assets/".length))
-        if (served === null) return send(response, 404, "text/plain", "Caliper has no such chrome resource.")
-        response.writeHead(200, { "content-type": `${served.type}; charset=utf-8`, "cache-control": "no-store" })
-        return response.end(served.body)
-      } catch (error) {
-        return send(response, 503, "text/plain", error instanceof Error ? error.message : String(error))
-      }
-    }
-    if (path === "") return redirect(response, `${base}${CALIPER_PATH}/`)
-    if (path === "/") {
-      try { return send(response, 200, "text/html", chromeHtml()) }
-      catch (error) { return send(response, 503, "text/plain", error instanceof Error ? error.message : String(error)) }
-    }
-    const pwaFile = path.slice(1)
-    const pwaType = PWA_FILES.get(pwaFile)
-    if (pwaType !== undefined) {
-      response.writeHead(200, { "content-type": pwaType, "cache-control": "no-store" })
-      return response.end(readFileSync(join(PWA_DIR, pwaFile)))
+    if (path === "" || path === "/") {
+      return send(response, 404, "text/plain", `Caliper's chrome is not on the dev server any more. Open the Caliper app (bin/caliper.mjs); it lists this server as project ${id}.`)
     }
     if (["/project.json", "/check-source", "/check-revision"].includes(path)) {
       const take = url.searchParams.get("take") ?? undefined
@@ -497,10 +491,7 @@ function createSession(server, root, options, env, overlay) {
       connection: "keep-alive",
     })
     response.write(`event: project\ndata: ${json}\n\n`)
-    response.write(`event: takes\ndata: ${JSON.stringify(takes.snapshot())}\n\n`)
     response.write(`event: checks\ndata: ${JSON.stringify(checks.snapshot())}\n\n`)
-    // A broken marks.json must not close the stream; the chrome reads the reason from marks.json.
-    try { response.write(`event: marks\ndata: ${JSON.stringify(takes.marks())}\n\n`) } catch {}
     streams.add(response)
     response.on("close", () => streams.delete(response))
   }
@@ -508,7 +499,6 @@ function createSession(server, root, options, env, overlay) {
   const close = async () => {
     closed = true
     clearTimeout(refreshTimer)
-    clearTimeout(takesTimer)
     for (const stream of streams) stream.end()
     streams.clear()
     for (const event of ["change", "add", "unlink", "addDir", "unlinkDir"]) {
@@ -517,13 +507,26 @@ function createSession(server, root, options, env, overlay) {
     }
     sourceRevision.close()
     stopLateChanges()
-    await Promise.all([checks.close(), takes.close()])
+    await checks.close()
     // Vite awaits closeBundle before a test or caller removes the project root.
     // Await a derivation already in flight as well as cancelling queued work.
     await current?.catch(() => {})
   }
 
-  return { handle, close }
+  return { handle, close, id, token }
+}
+
+/**
+ * The project's name: `name` in its package.json, else its folder's name.
+ *
+ * @param {string} root
+ */
+function projectName(root) {
+  try {
+    const name = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).name
+    if (typeof name === "string" && name.trim() !== "") return name.trim()
+  } catch { /* no readable package.json */ }
+  return basename(root)
 }
 
 /**
@@ -557,15 +560,6 @@ function sendClientFile(name, response) {
 function send(response, status, type, body) {
   response.writeHead(status, { "content-type": `${type}; charset=utf-8`, "cache-control": "no-store" })
   response.end(body)
-}
-
-/**
- * @param {ServerResponse} response
- * @param {string} location
- */
-function redirect(response, location) {
-  response.writeHead(302, { location })
-  response.end()
 }
 
 /**

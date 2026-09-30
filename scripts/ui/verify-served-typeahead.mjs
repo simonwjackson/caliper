@@ -18,6 +18,7 @@ import { build } from "esbuild"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 import { caliper } from "../../src/plugin.js"
+import { installRouting, projectBase, startApp } from "../caliper-app.mjs"
 import { createTakeStore } from "../../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
@@ -39,13 +40,14 @@ await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx"
   alias: { "caliper-markup-renderer": join(checkout, "src/client/ui/Darkroom.tsx") }, loader: { ".ttf": "file", ".png": "file" }, assetNames: "[name]", publicPath: "/",
   define: { "process.env.NODE_ENV": '"development"' }, logLevel: "silent" })
 const styles = existsSync(join(root, "public/markup-harness.css")) ? '<link rel="stylesheet" href="/markup-harness.css">' : ""
-put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="/__caliper/"><title>Type-ahead harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
+put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="__caliper/"><title>Type-ahead harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
 const store = createTakeStore(root)
 const [one, two] = ["Warm it", "Space it"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
 const vite = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper({ wrap: false })] })
 await vite.listen()
-const url = vite.resolvedUrls?.local[0]
-if (!url) throw new Error("The subject did not start.")
+// The Caliper app serves takes and marks (decision 37); the harness runs under the project's path in it.
+const app = await startApp()
+const url = await projectBase(app, root)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 /** @type {string[]} */
 const passed = []
@@ -58,6 +60,7 @@ try {
   /** @type {string[]} */
   const errors = []
   page.on("pageerror", error => errors.push(error.message))
+  await installRouting(page, app)
   await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&take=${one}&device=rg353m`, url).href)
   /** @param {string} predicate a function of the ChromeView, as source */
   const until = (predicate, timeout = 20_000) => page.waitForFunction(`(${predicate})(window.caliperHarness?.snapshot())`, undefined, { timeout, polling: 50 })
@@ -112,6 +115,7 @@ try {
   failed.push(`harness: ${error instanceof Error ? error.stack : String(error)}`)
 } finally {
   await browser.close()
+  await app.close()
   await vite.close()
   rmSync(root, { recursive: true, force: true })
 }

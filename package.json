@@ -20,6 +20,7 @@
     }
   },
   "bin": {
+    "caliper": "./bin/caliper.mjs",
     "caliper-render": "./bin/caliper-render.mjs"
   },
   "files": [
@@ -33,6 +34,8 @@
     "build": "node scripts/build-chrome.mjs",
     "prepack": "bun run build",
     "tool:install": "node scripts/chrome-tool.mjs",
+    "tool:app": "node scripts/tool-app.mjs",
+    "app": "node bin/caliper.mjs",
     "verify:chrome-delivery": "node scripts/verify-chrome-delivery.mjs",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

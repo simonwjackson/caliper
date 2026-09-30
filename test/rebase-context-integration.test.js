@@ -38,7 +38,7 @@ const proposal = {
 }
 
 /** @param {string} url @param {string} take @param {string} action @param {unknown} [body] */
-const post = (url, take, action, body = {}) => fetch(new URL(`/__caliper/takes/${take}/${action}`, url), {
+const post = (url, take, action, body = {}) => fetch(new URL(`__caliper/takes/${take}/${action}`, url), {
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
 })
 

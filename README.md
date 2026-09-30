@@ -1,11 +1,15 @@
 # Caliper
 
-Caliper is a dev-only Vite plugin. It shows a project's own UI parts at their
-true physical size on a target device.
+Caliper shows a project's own UI parts at their true physical size on a
+target device. It has two pieces (decision 37):
 
-You add one line to the project's `vite.config`. Caliper then reads the
-project's source to find the parts, the global CSS and the app's outer shell.
-It does not run the app to do this.
+- **The plugin**, `caliper()`, a dev-only Vite plugin. You add one line to the
+  project's `vite.config`. It reads the project's source to find the parts, the
+  global CSS and the app's outer shell, and it serves the frames. It does not
+  run the app to do this. It has no agent and no AI settings.
+- **The Caliper app**, `bin/caliper.mjs`. One process on one port serves the
+  chrome for every project whose dev server runs the plugin, with a project
+  switcher. It owns the agent and its settings. It never starts a project.
 
 ## Use it
 
@@ -29,9 +33,19 @@ It does not run the app to do this.
    export default defineConfig({ plugins: [caliper()] })
    ```
 
-3. Run `vite` in the project and open `/__caliper/` on the dev server.
+3. Start the Caliper app once, and keep it running:
 
-4. Select **Calibrate** once for each monitor. Set the browser zoom to 100%,
+   ```sh
+   cd /path/to/caliper && nix develop -c node bin/caliper.mjs   # --port 3132 --host 127.0.0.1
+   ```
+
+4. Run `vite` in the project. The plugin announces the dev server in
+   `~/.local/state/caliper/servers/`, and the app lists it at
+   `http://127.0.0.1:3132/__caliper/`. Open it there. Each tab shows one
+   project; open two tabs for two projects. The **Project** menu at the top of
+   the parts panel opens another running project in the same tab.
+
+5. Select **Calibrate** once for each monitor. Set the browser zoom to 100%,
    hold a credit card to the screen and change px per mm until the outline
    matches the card. The reference uses a number field, not a slider.
 
@@ -46,17 +60,49 @@ chrome. The unstyled reference (`src/client/ui/Chrome.tsx`) stays as the
 contract's executable spec. See
 [`docs/plans/react-chrome.md`](docs/plans/react-chrome.md) for the merge record.
 
+## How the app reaches a project
+
+Everything goes through the app's one port. A project's dev server keeps the
+port Vite gives it; the app reads it from the registry for each request.
+
+| Path on the app | What it is |
+|---|---|
+| `/__caliper/` | The list of running projects. |
+| `/__caliper/p/<id>/<path>` | `<path>` on the project's dev server. The chrome is `<base>__caliper/` under it. `<id>` is the first 12 hex digits of the SHA-256 of the project root. |
+| `<base>__caliper/hmr/<id>` | The project's Vite HMR socket. The plugin sets `server.hmr.path` to this. |
+| `/__caliper/sw.js` | The routing service worker. |
+
+The service worker sends each frame's requests, such as `/@vite/client` or
+`/src/App.tsx`, to its project, and keeps the URL the frame asked for. It
+caches nothing. A hard reload bypasses it; the chrome then reloads once,
+normally. Frames share the chrome's origin, so all products share
+`localStorage`, IndexedDB and cookies. A product's own WebSocket is not
+routed, and a project that sets its own `server.hmr` path, port, client port,
+host or server is refused with a message. Two dev servers of one root are
+shown as a problem and not routed. Only Chromium is tested.
+
+Writes need a token. Each dev server makes one at start and keeps it only in
+its registry file (mode `0600`). The app adds it when it forwards a write, so
+the token never reaches a browser. The app refuses a write whose page is on
+another origin. Anything that reaches the app's port can use every project
+through it; the app listens on `127.0.0.1` unless you pass `--host`.
+
+The app knows nothing about TLS or Tailscale. To reach it from another
+device, put a TLS proxy in front of its one port. On `zao` that is
+`caliper-tsnet` at `https://caliper.hummingbird-lake.ts.net`; see `deploy/`.
+
 ## Install the dev chrome
 
-Open `/__caliper/` on a secure origin (localhost or HTTPS) and use the browser's
+Open the app on a secure origin (localhost or HTTPS) and use the browser's
 Install action. The install opens Caliper in fullscreen, with standalone and
 minimal-UI fallbacks. Android gets regular and maskable icons; iOS gets a home-screen
 icon and viewport metadata. Safe-area placement still needs the styled UI. The manifest,
-icons and install scope stay under `/__caliper/`, including when Vite uses a base
-path. They do not replace the product's own manifest or icons.
+icons and install scope are the app's `/__caliper/`, whatever a project's Vite
+base is. They do not replace the product's own manifest or icons.
 
-This is still a dev tool. Keep the project's Vite server running while using the
-installed app. Caliper has no service worker and does not work offline. To rebuild
+This is still a dev tool. Keep the app and the project's Vite server running
+while using the installed app. The service worker only routes; Caliper does not
+work offline. To rebuild
 its icons after changing chrome colors, run `nix develop -c node scripts/gen-icons.mjs`
 in this checkout. Run `nix develop -c node scripts/verify-pwa.mjs` to check the
 install metadata and browser installability on a test product. The reference
@@ -221,26 +267,40 @@ writes edited copies of project files into `.caliper/takes/<n>/`, at the same
 relative paths. The real files do not change until you accept the take.
 Caliper shows the original next to each take, in one Vite server.
 
-Turn the agent on in `vite.config`:
+The agent runs in the Caliper app, for every project. Projects carry no AI
+settings; `caliper({ agent })` is an error. Turn the agent on in the app's
+settings, `~/.config/caliper/config.json` (`$XDG_CONFIG_HOME`, or the file
+`CALIPER_CONFIG` names):
 
-```ts
-caliper({
-  agent: {
-    model: "claude-opus-5-5",
-    baseUrl: "https://my-proxy.example/v1", // any endpoint that speaks the OpenAI API
-    reasoning: "medium",                    // off, minimal, low, medium, high, xhigh, max
-    api: "chat-completions",                // or "responses"
-  },
-})
+```json
+{
+  "agent": {
+    "model": "claude-opus-5-5",
+    "baseUrl": "https://my-proxy.example/v1",
+    "reasoning": "medium",
+    "api": "chat-completions"
+  }
+}
 ```
 
-The API key never goes in `vite.config`. Set `CALIPER_AGENT_API_KEY` in the
-shell that starts Vite, or in the project's `.env.local`. `apiKeyEnv` names a
+`baseUrl` is any endpoint that speaks the OpenAI API; `reasoning` is one of
+off, minimal, low, medium, high, xhigh, max; `api` is `chat-completions` or
+`responses`. The app reads the file when it starts a project's agent, so
+restart the app after you change it.
+
+The API key never goes in the file; the app refuses a file that holds one. Set
+`CALIPER_AGENT_API_KEY` in the environment of the app. `apiKeyEnv` names a
 different variable. Without a `baseUrl`, Caliper uses the base URL and key in
 `~/.pi/agent/cliproxyapi.json`, if that file exists; it sends that key to no
 other endpoint. Caliper needs no `pi` binary.
 
-The agent needs `CHROMIUM` to see its work. The Takes panel shows the model,
+The agent reaches a project only through its plugin: each file read, write
+and edit is one call to `POST <base>__caliper/host` on the dev server, with
+the server's token. The plugin runs the call against its own take store, so
+its fence decides what the agent can write. The app's agent renders the
+project's dev server directly, and needs `CHROMIUM` in the app's environment
+to see its work. Checks still run in the plugin, so the shell that starts
+Vite needs `CHROMIUM` too. The Takes panel shows the model,
 the reasoning level and where the base URL and key came from, or what is
 missing.
 
@@ -291,8 +351,10 @@ before copying files and rejects new declaration errors, not unrelated existing
 ones. Existing takes without a context remain isolated.
 
 `.caliper/` holds a `.gitignore` that ignores the whole folder. A take's
-conversation lives only in the dev server: after a restart, the take's files
-remain, and its next prompt starts a new conversation.
+conversation lives only in the Caliper app: after the app restarts, the take's
+files remain, and its next prompt starts a new conversation. A restart of the
+project's dev server keeps the conversation; the agent's file calls fail
+until the server is back.
 
 ### Attach reference images
 
@@ -327,30 +389,35 @@ name wins:
 
 1. `.agents/skills/` in the project root, then in each parent folder up to the
    Git root, so a monorepo can share skills.
-2. Each folder that `agent.skills` adds, in order.
+2. Each folder that `agent.skills` in the app's settings adds, in order.
 3. `~/.agents/skills/`.
+
+The plugin finds and reads the project's skills; the app reads the others.
 
 A home folder often holds skills for coding work that do not help a take. Choose
 the skills by name:
 
-```ts
-caliper({
-  agent: {
-    model: "claude-opus-5-5",
-    skills: {
-      include: ["intrinsic-design", "frontend-design"], // only these; default: all found
-      exclude: [],                                       // never these
-      folders: ["./design/skills"],                      // more folders: of skills, or one skill's
-    },
-  },
-})
+```json
+{
+  "agent": {
+    "model": "claude-opus-5-5",
+    "skills": {
+      "include": ["intrinsic-design", "frontend-design"],
+      "exclude": [],
+      "folders": ["~/design/skills"]
+    }
+  }
+}
 ```
+
+`include` keeps only these skills (default: all found), `exclude` drops these,
+and `folders` adds folders of skills, or one skill's folder.
 
 `skills: ["./design/skills"]` is short for `{ folders: [...] }`, and
 `skills: false` turns skills off. A name in `include` or `exclude` that matches
 no skill shows as a problem, since it is usually a typo. A filtered skill is
 gone: the agent does not see it, and `/name` cannot load it. Folders are
-relative to the project root, or start with `~/`.
+absolute or start with `~/`. The settings apply to every project.
 
 Caliper does not read `~/.pi/agent/skills/` or `.claude/skills/` unless you add
 them: those folders belong to other clients, and hold skills that expect a
@@ -924,23 +991,28 @@ report, not that all behavior is safe.
 - A take cannot show a change that goes through a conditional CSS `@import`
   (`layer`, `media`, `supports`), Sass, Less or Tailwind's source scan. Not
   yet tested.
-- The agent works in the dev server process. Its render browser starts for
-  each render, which costs about a second.
+- The agent works in the Caliper app, one worker thread per project. Its
+  render browser starts for each render, which costs about a second. Each
+  file call to the plugin is one HTTP round trip on the machine.
+- The app and every dev server must run on one machine: the registry is a
+  local folder.
 
 ## Develop
 
 The app state in `src/client/app/` drives the Darkroom renderer through the
 contract in [`docs/plans/react-chrome.md`](docs/plans/react-chrome.md).
 Caliper builds React/React DOM and lazy CodeMirror chunks into
-`dist/chrome`; the consumer's Vite serves them under `/__caliper/assets/`
-without resolving their dependencies. Product frames still use the consumer's
+`dist/chrome`; the Caliper app serves them under `/__caliper/assets/`, and
+the consumer's Vite never resolves them. Product frames still use the consumer's
 React. A linked checkout needs `bun run build` after chrome changes. `bun pack`
 builds the artifacts through `prepack`. Consumer production builds omit Caliper.
 
 Self-hosting uses a separate recovery tool, pinned to one commit
 (`TOOL_REVISION` in `src/build/tool.js`), not this checkout's plugin. Install
 it with `nix develop -c bun run tool:install`, then run
-`nix develop -c bun run dev` and open `/__caliper/`. The tool shows the chrome's
+`nix develop -c bun run dev` and the tool's own Caliper app with
+`nix develop -c bun run tool:app` (port 3133), and open this checkout from it.
+The tool shows the chrome's
 own parts (the bar, the canvas, the side panel and the rest) as this
 checkout's source, and its take agent edits them. Its archive, source and lock
 hashes are checked before startup, and the install builds its own chrome
@@ -949,6 +1021,12 @@ bundle. To restore a missing or changed copy, run
 this checkout, never the tool you use to undo it. The pin moves only by hand:
 commit the change, run `scripts/tool-pin-hashes.mjs <commit>`, put the four
 values in `src/build/tool.js`, and install with `--repair`.
+
+`nix develop -c node scripts/verify-central.mjs` checks the app with the real
+chrome and plugin: two projects on ports Vite picks, tabs on each, HMR, web
+workers, a stopped service worker, a hard reload, a restart on a new port, the
+switcher, the token and one take through the host endpoint. `--via <url>`
+runs it through a TLS proxy.
 
 Run the unchanged contract gate with
 `nix develop -c bun run verify:chrome-contract`. Run live public gates on

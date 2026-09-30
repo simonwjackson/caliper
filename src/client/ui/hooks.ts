@@ -1,6 +1,6 @@
 /** Fixed behavioral hooks. UI classes, hierarchy and layout remain Opus-owned. */
 export const CAL = Object.freeze({
-  root: "chrome", connection: "connection", tool: "tool", nav: "parts", navToggle: "parts-toggle",
+  root: "chrome", connection: "connection", tool: "tool", nav: "parts", navToggle: "parts-toggle", project: "project-switch",
   filter: "parts-filter", part: "part", partExpand: "part-expand", state: "state", compare: "compare-takes", navTake: "nav-take",
   context: "scenario-context", subject: "scenario-subject", whole: "scenario-whole", unavailable: "unavailable-states", setup: "setup",
   canvas: "canvas", frame: "frame", frameSelect: "frame-select", frameProblem: "frame-problem", caption: "caption", device: "device",
