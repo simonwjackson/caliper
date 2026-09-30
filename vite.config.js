@@ -9,5 +9,8 @@ const { caliper } = await import(pathToFileURL(`${tool}/src/plugin.js`).href)
 export default defineConfig({
   root: fileURLToPath(new URL("./", import.meta.url)),
   esbuild: { jsx: "automatic" },
-  plugins: [caliper({ entry: "src/client/ui/Chrome.tsx", css: [], wrap: false })],
+  // The take agent edits the chrome's own parts; it uses the CLIProxyAPI URL and key in ~/.pi/agent/cliproxyapi.json.
+  plugins: [caliper({ entry: "src/client/ui/Chrome.tsx", css: [], wrap: false, agent: { model: "claude-opus-5-5", reasoning: "medium" } })],
+  // Vite answers 403 for host names it does not know. These are this machine's tailnet names.
+  server: { allowedHosts: ["zao", "zao.hummingbird-lake.ts.net"] },
 })
