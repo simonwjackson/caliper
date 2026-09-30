@@ -280,13 +280,16 @@ common file and no frozen contract file.
 | `18a32bf` | Serve `Darkroom` from the app entry. The build listed no stylesheet in its manifest, so the chrome loaded bare; `cssCodeSplit` fixes it. The page gave the root no height. The docked parts column started closed and closed on every selection; it is now a remembered preference. The part's own "select all states" control existed only while unfolded. |
 | `d4ee49c` | Run every public gate with its layout assertions on. Checks became modal inside Caliper's own box, so an embedded chrome keeps it contained. A covered code or knobs sheet comes to the front on its tool instead of closing. Accessible names the gates rely on: preview scenario, knob labels, knob numbers as spinbuttons, frame titles, one literals live region. `reveal()` reaches Darkroom controls through the parts drawer, the New take menu, More tools and folded groups. |
 | `fdcdbc8` | On a cold dependency cache, Vite's first bundle took 9 to 39 s here, past the 10 s frame watchdog. A frame page now waits for it, at most 60 s. The tool installs its own chrome bundle. |
-| `1504766`, then this record's commit | Re-pin the recovery tool from `8d23556` (DOM chrome) to `fdcdbc8`, then to `0fa0cdb`, which adds the fixes found by opening Caliper in itself (`71333c5`). |
+| `1504766`, then this record's commit | Re-pin the recovery tool from `8d23556` (DOM chrome) to `fdcdbc8`, then to `e64a17a`, which adds the fixes found by opening Caliper in itself and Pico (`71333c5`, `e64a17a`). |
 
 Evidence at `d4ee49c`/`b19e815` on one build: typecheck; `bun test` 541 pass,
 0 fail; `verify-chrome-core.mjs` 21 of 21 gates with layout on;
 `scripts/ui/verify.mjs` 171 of 171; `verify:chrome-contract` 11 scenarios and 92
-hooks. After `1504766`: `verify:chrome-delivery` passes linked, packed and
-self-host through the new pin.
+hooks. At `8d470ba`: typecheck; `verify-chrome-core.mjs` 21 of 21;
+`verify:chrome-delivery` linked, packed and self-host through the pin;
+`verify:chrome-contract`; `bun test` 540 pass, 1 fail (see Open). At `e64a17a`:
+`scripts/ui/verify.mjs` 171 of 171 and the browser, scenarios and checks-ui
+gates again.
 
 Phase 3 gate: in a scratch subject copy, the pinned tool planned three takes of
 the composer bar with the real model (one strange direction), ran them, and
@@ -308,3 +311,8 @@ Open, not fixed here:
   a threshold's current size) are unanswered; the UI works around them.
 - The cold first bundle is slow on this machine under load; the wait hides it
   but does not shorten it.
+- `test/authored-execution.test.js` "named browser checks" times out at 60 s
+  on this machine now. It fails the same way at `d29f85d`, before any Run 1
+  work, and it passed in the full run at `b19e815`. Another session was
+  running VM tests and Rust builds (load average 17 to 29 on 16 cores). Cause
+  not found.
