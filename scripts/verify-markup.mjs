@@ -1,10 +1,11 @@
 #!/usr/bin/env -S nix develop -c node
-// Phase 4 core gate for take markup, with no paid model. A live subject, real
-// frames, the real app wiring and the unstyled reference renderer in
-// Chromium. The production Darkroom markup is the UI worker's; this gate does
-// not check layout. A deterministic local endpoint stands in for the model.
+// Phase 4 gate for take markup, with no paid model. A live subject, real
+// frames and the real app wiring in Chromium, drawn by the unstyled reference
+// renderer (default) or the production Darkroom (--darkroom). It checks
+// effects, not layout; scripts/ui/verify.mjs checks Darkroom layout. A
+// deterministic local endpoint stands in for the model.
 //
-// Usage: nix develop -c node scripts/verify-markup.mjs [--keep]
+// Usage: nix develop -c node scripts/verify-markup.mjs [--darkroom] [--keep]
 import { createServer as createHttpServer } from "node:http"
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,6 +19,7 @@ import { createTakeStore } from "../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
 const keep = process.argv.includes("--keep")
+const renderer = process.argv.includes("--darkroom") ? "Darkroom" : "Chrome"
 const checkout = fileURLToPath(new URL("../", import.meta.url))
 const root = mkdtempSync(join(tmpdir(), "caliper-markup-subject-"))
 const evidence = mkdtempSync(join(tmpdir(), "caliper-markup-evidence-"))
@@ -41,8 +43,10 @@ export function Chip() {
 put("src/Chip.tsx", chip("Menu"))
 put(part, 'import { Chip } from "./Chip"\nexport default function Part() { return <Chip /> }\n')
 symlinkSync(resolve(checkout, "node_modules"), join(root, "node_modules"), "dir")
-await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx")], bundle: true, format: "esm", jsx: "automatic", outfile: join(root, "public/markup-harness.js"), define: { "process.env.NODE_ENV": '"development"' }, logLevel: "silent" })
-put("public/markup-harness.html", '<!doctype html><html><head><meta charset="utf-8"><base href="/__caliper/"><title>Markup harness</title></head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>')
+await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx")], bundle: true, format: "esm", jsx: "automatic", outfile: join(root, "public/markup-harness.js"), alias: { "caliper-markup-renderer": join(checkout, `src/client/ui/${renderer}.tsx`) }, loader: { ".ttf": "file", ".png": "file" }, assetNames: "[name]", publicPath: "/", define: { "process.env.NODE_ENV": '"development"' }, logLevel: "silent" })
+const styles = existsSync(join(root, "public/markup-harness.css")) ? '<link rel="stylesheet" href="/markup-harness.css">' : ""
+put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="/__caliper/"><title>Markup harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
+console.log(`Renderer: ${renderer}`)
 
 const store = createTakeStore(root)
 const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
@@ -133,6 +137,26 @@ async function centre(page, take, selector) {
   assert(box, `${selector} in take ${take} has no box`)
   return { x: /** @type {{x:number,width:number}} */ (box).x + /** @type {{width:number}} */ (box).width / 2, y: /** @type {{y:number,height:number}} */ (box).y + /** @type {{height:number}} */ (box).height / 2 }
 }
+/**
+ * Clicks the part's element where no chrome covers it, as a user would. A pin
+ * or a region's tab can sit over part of the element; the rest must stay
+ * reachable.
+ * @param {import("playwright-core").Page} page @param {string} take @param {string} selector
+ */
+async function clickPart(page, take, selector) {
+  const target = frameOf(page, take).locator(selector).first()
+  await target.scrollIntoViewIfNeeded()
+  const box = await target.boundingBox()
+  assert(box, `${selector} in take ${take} has no box`)
+  const { x, y, width, height } = /** @type {{x:number,y:number,width:number,height:number}} */ (box)
+  const points = [0.5, 0.25, 0.75, 0.9].flatMap(fy => [0.5, 0.25, 0.75, 0.9].map(fx => ({ x: x + width * fx, y: y + height * fy })))
+  const free = await page.evaluate(({ points, take }) => points.find(point => {
+    const hit = document.elementFromPoint(point.x, point.y)
+    return hit instanceof HTMLIFrameElement && hit.dataset.take === take
+  }), { points, take })
+  assert(free, `every point of ${selector} in take ${take} is covered by the chrome`)
+  await page.mouse.click(/** @type {{x:number}} */ (free).x, /** @type {{y:number}} */ (free).y)
+}
 /** @param {import("playwright-core").Page} page @param {string} note */
 async function writeNote(page, note) {
   const field = page.locator('[data-cal="mark-note"]')
@@ -221,7 +245,7 @@ try {
     const current = await view(first)
     assert(current.markup._tag === "Ready" && current.markup.send._tag === "Idle" && current.markup.send.availability._tag === "Disabled" && current.markup.send.availability.reason.includes(`Re-place or remove ${two}A`), `Send: ${JSON.stringify(current.markup._tag === "Ready" && current.markup.send)}`)
     assert((await marks(first)).find(mark => mark.name === `${one}A`)?.note === "too heavy", "the note did not survive the reload")
-    await frameOf(first, /** @type {string} */ (two)).locator(".chip").click()
+    await clickPart(first, /** @type {string} */ (two), ".chip")
     await until(first, `view => view.markup.groups.flatMap(group => group.marks).every(mark => mark.location._tag === "Located")`, "every mark located")
   })
 
@@ -235,15 +259,18 @@ try {
   })
 
   await gate("a changed take turns its mark lost and blocks the whole Send", async () => {
-    await frameOf(first, /** @type {string} */ (two)).locator(".chip").click()
+    await clickPart(first, /** @type {string} */ (two), ".chip")
     await until(first, `view => view.markup._tag === "Ready" && view.markup.send.availability?._tag === "Enabled"`, "Send enabled")
     store.write(/** @type {string} */ (three), "src/Chip.tsx", chip("Open"))
     await until(first, `view => view.markup.groups.flatMap(group => group.marks).some(mark => mark.name === "${three}A" && mark.location._tag === "Lost")`, `${three}A lost`, 20_000)
     const current = await view(first)
     assert(current.markup._tag === "Ready" && current.markup.send._tag === "Idle" && current.markup.send.availability._tag === "Disabled", "Send stayed enabled")
-    const pin = await first.locator(`[data-cal="mark-pin"][data-frame-key*='"${three}"']`).textContent()
-    assert(pin?.includes("Lost"), `pin: ${pin}`)
-    const lostId = (await marks(first)).find(mark => mark.name === `${three}A`)?.id
+    const lost = (await marks(first)).find(mark => mark.name === `${three}A`)
+    const lostId = lost?.id
+    // The reference pin reads "A · Lost"; the Darkroom pin names the reason.
+    const pin = first.locator(`[data-cal="mark-pin"][data-mark-id="${lostId}"]`)
+    const label = `${await pin.textContent()} ${await pin.getAttribute("aria-label")}`
+    assert(lost?.location._tag === "Lost" && (label.includes("Lost") || label.includes(lost.location.reason)), `pin: ${label}`)
     await first.locator('[data-cal="draft-open"]').click()
     await first.locator(`[data-cal="mark-remove"][data-mark-id="${lostId}"]`).click()
     await until(first, `view => view.markup.send.availability?._tag === "Enabled" && view.markup.send.label === "Send · 2 new takes"`, "Send enabled for two takes")

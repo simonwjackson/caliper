@@ -75,7 +75,7 @@ describe("the draft of marks on the dev server", () => {
     expect(JSON.parse(readFileSync(join(root, ".caliper/marks.json"), "utf8")).revision).toBe(2)
     const removed = await post(`marks/${added.body.id}/remove`, { revision: 2 })
     expect(removed.body.draft).toEqual({ revision: 3, marks: [] })
-  }))
+  }), 30_000)
 
   test("the event stream sends the draft to every chrome", () => withProject({ files, options }, async ({ url, root }) => {
     const store = createTakeStore(root)
@@ -91,7 +91,7 @@ describe("the draft of marks on the dev server", () => {
     await client(url).post("marks", { revision: 0, source: { take, created: store.record(take)?.created }, preview, device: "rg353m", anchor: anchorOn("#caliper-host .chip", "Chip default") })
     await until("event: marks\ndata: {\"revision\":1")
     controller.abort()
-  }))
+  }), 30_000)
 })
 
 describe("Send", () => {

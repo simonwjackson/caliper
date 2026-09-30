@@ -1,10 +1,11 @@
-// The unstyled reference renderer on the real app wiring, served from a live
-// subject. Only the renderer differs from entry.tsx: the production Darkroom
-// markup belongs to the UI worker. Requests, the event stream and frame
-// documents are real.
+// A renderer on the real app wiring, served from a live subject. The gate
+// aliases `caliper-markup-renderer` to the unstyled reference renderer or to
+// the production Darkroom. Requests, the event stream and frame documents are
+// real.
 import { createRoot } from "react-dom/client"
 import { useSyncExternalStore } from "react"
-import Chrome from "../../src/client/ui/Chrome"
+// @ts-expect-error the gate's build aliases this to Chrome.tsx or Darkroom.tsx
+import Chrome from "caliper-markup-renderer"
 import { createChromeApp } from "../../src/client/app/runtime"
 import { validateResponse } from "../../src/client/app/wire"
 
