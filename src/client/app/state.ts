@@ -4,7 +4,9 @@ import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
 import type { FrameReport } from "./wire"
 
-export type Ask = StateRef & { device: string; prompt: string; context?: StateRef; images?: { name: string; mimeType: string; data: string }[] }
+export type Ask = StateRef & { device: string; prompt: string; context?: StateRef; images?: { name: string; mimeType: string; data: string }[]
+  /** Ids of marks on the original that go with the prompt (planner choice 14). They leave the draft once takes start. */
+  marks?: string[] }
 export type Submission = { rawPrompt: string; attachmentIds: readonly string[] }
 export type Plan =
   | { _tag: "None" }

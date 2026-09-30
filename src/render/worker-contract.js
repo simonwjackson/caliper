@@ -8,11 +8,11 @@ import { MarkAnchorSchema } from "../takes/marks-contract.js"
 const Text = Type.String()
 const Job = Type.Object({
   part: Text, state: Text, device: Text, take: Type.Optional(Text),
-  annotations: Type.Optional(Type.Array(Type.Object({ letter: Text, anchor: MarkAnchorSchema }))),
+  annotations: Type.Optional(Type.Array(Type.Object({ letter: Text, anchor: MarkAnchorSchema, crop: Type.Optional(Type.Boolean()) }))),
 })
 const Annotated = Type.Object({
   png: Text,
-  marks: Type.Array(Type.Object({ letter: Text, found: Type.Boolean(), visible: Type.Boolean() })),
+  marks: Type.Array(Type.Object({ letter: Text, found: Type.Boolean(), visible: Type.Boolean(), crop: Type.Optional(Text) })),
 })
 const fields = { url: Text, jobs: Type.Array(Job), out: Text, executablePath: Text }
 export const WorkerRequestSchema = Type.Union([

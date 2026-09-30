@@ -15,31 +15,51 @@
  *   One picture of the parent with marks drawn in. Letters: `drawn` are all
  *   the marks on it; `missing` were not found in the fresh render; `outside`
  *   lie outside the visible screen.
+ * @typedef {{ source: TakeIdentity, mark: Mark, crop: boolean }} Reference
+ *   A mark on another take, or on the original (take "0"), that a note of this
+ *   pass points to. `crop`: a picture of that take around the mark follows the
+ *   pictures, in the order the brief lists references.
  */
 
 /**
  * @param {{
  *   take: string,
- *   record: Omit<TakeRecord, "created"> & { parent: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] },
+ *   record: Omit<TakeRecord, "created"> & { parent?: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] },
  *   pictures: readonly Picture[],
  *   sources: ReadonlyArray<{ path: string, content: string }>,
+ *   references?: readonly Reference[],
  * }} input
+ *   A record with no `parent` is a take made from marks on the original: a copy of the real files.
  * @returns {string}
  */
-export function markupMessage({ take, record, pictures, sources }) {
-  const parent = record.parent.take
+export function markupMessage({ take, record, pictures, sources, references = [] }) {
+  const parent = record.parent?.take ?? "0"
+  const fromOriginal = record.parent === undefined
+  const copy = fromOriginal ? "the real files" : `take ${parent}`
   const { history } = record
+  const readable = [...new Set(references.filter(reference => reference.source.take !== "0").map(reference => reference.source.take))]
+  const crops = references.filter(reference => reference.crop)
   const sections = [
-    `You are take ${take}, a copy of take ${parent}. The user marked places on take ${parent} and wrote a note at each one. Work on the marks of this pass.`,
-    section("Lineage", lineage(take, history.lineage)),
-    section("First prompt", history.prompt === null ? `Not recorded. Take ${history.lineage[0]?.take ?? parent} was made before Caliper kept first prompts.` : quote(history.prompt)),
+    fromOriginal
+      ? `You are take ${take}, a new take made from the real files. The user marked places on the original and wrote a note at each one. Work on the marks of this pass.`
+      : `You are take ${take}, a copy of take ${parent}. The user marked places on take ${parent} and wrote a note at each one. Work on the marks of this pass.`,
+    section("Lineage", fromOriginal ? `Take ${take} starts from the real files. It has no parent take.` : lineage(take, history.lineage)),
+    section("First prompt", history.prompt === null ? fromOriginal ? "None. This take started from marks on the original." : `Not recorded. Take ${history.lineage[0]?.take ?? parent} was made before Caliper kept first prompts.` : quote(history.prompt)),
     ...(history.direction ? [section("Direction", `${history.direction.title}. ${history.direction.brief}`)] : []),
     ...history.passes.map(pass => section(`Marks on take ${pass.source.take} (an earlier pass)`, pass.marks.map(mark => markText(pass.source.take, mark)).join("\n"))),
-    section(`Marks on take ${parent} (this pass)`, record.marks.map(mark => markText(parent, mark)).join("\n")),
-    section("Pictures", pictures.map((picture, index) => pictureText(parent, picture, index)).join("\n")),
-    section("May write", `.caliper/takes/${take}, a copy of take ${parent}. Nowhere else. Take ${parent} does not change.`),
+    section(`Marks on ${fromOriginal ? "the original" : `take ${parent}`} (this pass)`, record.marks.map(mark => markText(parent, mark)).join("\n")),
+    ...(references.length ? [section("Marks the notes point to", [
+      ...references.map(reference => markText(reference.source.take, reference.mark)),
+      referenceAccess(readable),
+    ].join("\n"))] : []),
+    section("Pictures", [
+      ...pictures.map((picture, index) => pictureText(parent, picture, index)),
+      ...crops.map((reference, index) => `Picture ${pictures.length + index + 1}: ${reference.source.take === "0" ? "the real files" : `take ${reference.source.take}`} around ${reference.source.take}${reference.mark.letter}, with the marks drawn in.`),
+    ].join("\n")),
+    section("May write", `.caliper/takes/${take}, a copy of ${copy}. Nowhere else. ${fromOriginal ? "The real files do not change" : `Take ${parent} does not change`}${readable.length ? `, and neither ${readable.length === 1 ? "does" : "do"} ${readable.map(item => `take ${item}`).join(" or ")}` : ""}.`),
     section("How to work", [
       "- Each note says, in the user's words, what they like or dislike at that place. Keep what a note likes. Change what a note dislikes.",
+      ...(references.length ? ["- A note that names another mark (\"use 2A here\") asks you to bring what that mark shows into this take. Read that take's code, then write the change here."] : []),
       "- Marks of earlier passes are context. Do not undo what they asked for unless a mark of this pass asks for it.",
       `- The editing subject is ${record.part}, state "${record.state}". ${record.context ? `The preview is the composed scenario ${record.context.part}, state "${record.context.state}". Keep its real composition and fixture data flow.` : "The preview shows the subject in isolation."}`,
       "- The selector and text of a mark's element say where it was. Find that element in the source before you change it.",
@@ -48,6 +68,29 @@ export function markupMessage({ take, record, pictures, sources }) {
     ...sources.map(source => `<file path="${source.path}">\n${source.content}\n</file>`),
   ]
   return sections.join("\n\n")
+}
+
+/**
+ * Planner choice 14: marks on the original that go with a typed prompt, as text
+ * appended to it. The picture of the real files with the marks drawn in is
+ * attached to the prompt as an image.
+ * @param {readonly Mark[]} marks
+ * @returns {string}
+ */
+export function promptMarksText(marks) {
+  return [
+    "",
+    "## Marks on the original",
+    "The user marked places on the real files and wrote a note at each one. The attached picture named original-…-marks.png shows them. Keep what a note likes; change what a note dislikes.",
+    ...marks.map(mark => markText("0", mark)),
+  ].join("\n")
+}
+
+/** @param {readonly string[]} takes the referenced takes the agent may read */
+function referenceAccess(takes) {
+  const original = "Marks named 0A, 0B and so on are on the real files, which read_file reads by default."
+  if (!takes.length) return original
+  return `You may read ${takes.map(item => `take ${item}`).join(" and ")} with read_file and list_files and take: "${takes[0]}". You cannot write there. ${original}`
 }
 
 /** @param {string} title @param {string} body */

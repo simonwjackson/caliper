@@ -36,12 +36,16 @@ import { AcceptRecordSchema, MAX_ACCEPTED } from "./accepted-contract.js"
  *   What a take made from marks knows of its chain, as text. `lineage` runs from the chain's
  *   first take to the parent. `passes` are the earlier passes, oldest first; the take's own
  *   pass is its `marks`. A take keeps its own copy, so no discard or accept can break it.
- * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[], prompt?: string, parent?: TakeIdentity, chain?: TakeIdentity, history?: TakeHistory, marks?: Mark[] }} TakeRecord
+ * @typedef {{ source: TakeIdentity, marks: Mark[] }} MarkReference
+ *   Marks on another take, or on the original (take "0"), that this take's notes pointed to at Send.
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[], prompt?: string, parent?: TakeIdentity, chain?: TakeIdentity, history?: TakeHistory, marks?: Mark[], references?: MarkReference[] }} TakeRecord
  *   `part` and `state` identify the editing subject. Optional `context` identifies a declared
  *   composed preview. It does not restrict edits beyond the existing take-folder fence.
  *   Names, planner directions, and integration review metadata remain independent of that context.
  *   `prompt` is the first prompt. A take made from marks has `parent`, `chain` (the chain's first
- *   take), `history` and the `marks` it was sent, and no prompt of its own.
+ *   take), `history` and the `marks` it was sent, and no prompt of its own. `references` are the
+ *   marks its notes pointed to; the agent may read those takes (planner choice 13). A take made
+ *   from marks on the original has `marks` and `history` but no `parent` or `chain`.
  * @typedef {import("typebox").Static<typeof AcceptRecordSchema>} AcceptRecord
  *   One accept: the take, its subject, the real files it wrote, and when.
  */

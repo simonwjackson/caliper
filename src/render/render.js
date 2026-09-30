@@ -38,9 +38,10 @@ import { drawMarks, locateAnchor } from "../takes/anchor.js"
  *   failed request. `spill` is null when every element of the part lies
  *   inside the device's viewport.
  *
- * @typedef {{ png: string, marks: Array<{ letter: string, found: boolean, visible: boolean }> }} Annotated
+ * @typedef {{ png: string, marks: Array<{ letter: string, found: boolean, visible: boolean, crop?: string }> }} Annotated
  *   The second picture, with the job's annotations drawn in. `found`: the
  *   mark's element is in this render. `visible`: the mark lies inside the viewport.
+ *   `crop`: a picture of the page around the mark, with the marks drawn, when the job asked for it.
  *
  * @typedef {{
  *   left: number, top: number, right: number, bottom: number,
@@ -250,9 +251,20 @@ async function renderOne(session, url, job, out, audit, signal) {
   }
 }
 
+/** CSS px of page kept around a mark and its element in a crop, and the most a crop spans. */
+const CROP_PAD = 48
+const CROP_MAX = 480
+
+/** @param {{ x: number, y: number, width: number, height: number }} a @param {{ x: number, y: number, width: number, height: number }} b */
+function union(a, b) {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
+  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y }
+}
+
 /**
  * Find each mark in the rendered page, draw it, and save the second picture.
- * A mark that is not found is drawn where it was placed.
+ * A mark that is not found is drawn where it was placed. An annotation with
+ * `crop` also gets a picture of the page around it.
  *
  * @param {import("playwright-core").Page} page
  * @param {readonly import("./plan.js").Annotation[]} annotations
@@ -268,11 +280,31 @@ async function annotate(page, annotations, png, viewport) {
   const scroll = /** @type {{ x: number, y: number }} */ (await page.evaluate("({ x: scrollX, y: scrollY })"))
   await page.evaluate(`(${drawMarks})(document, ${JSON.stringify(drawn)})`)
   await page.screenshot({ path: png })
+  const page_ = /** @type {{ width: number, height: number }} */ (await page.evaluate("({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"))
+  /** @type {Array<string | undefined>} */
+  const crops = []
+  for (const [index, mark] of drawn.entries()) {
+    const annotation = annotations[index]
+    if (!annotation?.crop) { crops.push(undefined); continue }
+    // The mark and its element, with some context, in document px. A point on a wide
+    // element keeps the element in view; a crop never grows past CROP_MAX around the mark.
+    const element = /** @type {{ x: number, y: number, width: number, height: number } | null} */ (await page.evaluate(`(() => { const node = document.querySelector(${JSON.stringify(annotation.anchor.element.selector)}); if (!node) return null; const box = node.getBoundingClientRect(); return { x: box.x + scrollX, y: box.y + scrollY, width: box.width, height: box.height } })()`).catch(() => null))
+    const box = element ? union(mark.rect, element) : mark.rect
+    const centre = { x: mark.rect.x + mark.rect.width / 2, y: mark.rect.y + mark.rect.height / 2 }
+    const fromX = Math.max(box.x - CROP_PAD, centre.x - CROP_MAX / 2), toX = Math.min(box.x + box.width + CROP_PAD, centre.x + CROP_MAX / 2)
+    const fromY = Math.max(box.y - CROP_PAD, centre.y - CROP_MAX / 2), toY = Math.min(box.y + box.height + CROP_PAD, centre.y + CROP_MAX / 2)
+    const left = Math.max(0, Math.floor(fromX)), top = Math.max(0, Math.floor(fromY))
+    const width = Math.max(1, Math.min(page_.width - left, Math.ceil(toX - left))), height = Math.max(1, Math.min(page_.height - top, Math.ceil(toY - top)))
+    const path = png.replace(/\.png$/, `.crop-${index}.png`)
+    await page.screenshot({ path, fullPage: true, clip: { x: left, y: top, width, height } })
+    crops.push(path)
+  }
   return {
     png,
     marks: drawn.map((mark, index) => {
       const x = mark.rect.x - scroll.x, y = mark.rect.y - scroll.y
-      return { letter: mark.letter, found: located[index]?._tag === "Located", visible: x + mark.rect.width >= 0 && y + mark.rect.height >= 0 && x <= viewport.width && y <= viewport.height }
+      const crop = crops[index]
+      return { letter: mark.letter, found: located[index]?._tag === "Located", visible: x + mark.rect.width >= 0 && y + mark.rect.height >= 0 && x <= viewport.width && y <= viewport.height, ...(crop ? { crop } : {}) }
     }),
   }
 }

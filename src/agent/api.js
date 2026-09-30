@@ -18,6 +18,7 @@ import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { skillsStatus } from "./skills.js"
 import { MAX_IMAGES_BODY, readImages } from "./images.js"
+import { MAX_IMAGES } from "../client/images.js"
 import { createMarkupApi } from "./markup.js"
 import { createMarkStore } from "../takes/marks.js"
 import { Type } from "typebox"
@@ -298,7 +299,10 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
   const validAsk = async body => {
     const prompt = validPrompt(body)
     const target = await validTarget(body)
-    return { ...target, prompt, images: readImages(body) }
+    const images = readImages(body)
+    const marked = await markup.promptMarks(/** @type {Record<string, unknown>} */ (body ?? {}).marks, target)
+    if (images.length + marked.images.length > MAX_IMAGES) throw new Error(`A prompt can carry at most ${MAX_IMAGES} images, and the marks on the original add one.`)
+    return { ...target, prompt: `${prompt}${marked.text}`, images: [...images, ...marked.images] }
   }
 
   /**

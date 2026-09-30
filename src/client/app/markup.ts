@@ -60,6 +60,8 @@ export function createMarkupController(input: MarkupInput) {
 
   const ready = () => draft._tag === "Ready" ? draft.draft : null
   const nameOf = (mark: Mark) => `${mark.source.take}${mark.letter}`
+  /** The note as this chrome shows it: the open editor's text, which is saved before Send. */
+  const shownNote = (mark: Mark) => editor?.id === mark.id ? editor.note : mark.note
   const sameTake = (left: TakeIdentity, right: TakeIdentity) => left.take === right.take && left.created === right.created
   const takeOf = (source: TakeIdentity) => input.state().takes?.takes.find(take => sameTake(take, source)) ?? null
 
@@ -285,10 +287,9 @@ export function createMarkupController(input: MarkupInput) {
     const plan = planOf(marks, state)
     const names = marks.map(nameOf)
     const busy = sending ? disabled("Sending the draft.") : enabled
-    const noteOf = (mark: Mark) => editor?.id === mark.id ? editor.note : mark.note
     const markView = (mark: Mark): DraftMarkView => ({
       id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where(mark).rect, location: where(mark).location,
-      name: nameOf(mark), note: noteOf(mark), references: referencesIn(noteOf(mark), mark.source.take, names),
+      name: nameOf(mark), note: shownNote(mark), references: referencesIn(shownNote(mark), mark.source.take, names),
       previewLabel: refLabel(state, mark.preview), deviceLabel: deviceName(mark.device),
       edit: busy, remove: busy, replace: sending ? busy : isOriginal(mark.source) || takeOf(mark.source) ? enabled : disabled(`Take ${mark.source.take} is gone. Remove ${nameOf(mark)}.`),
     })
@@ -300,7 +301,7 @@ export function createMarkupController(input: MarkupInput) {
         return { _tag: "WithPrompt", label: `${listed(goingNames)} ${goingNames.length === 1 ? "goes" : "go"} with your prompt when you press New take. Send would make a take from the real files instead.` }
       }
       if (group.outcome._tag === "NewTake") return { _tag: "NewTake", label: isOriginal(group.source) ? "Send makes a new take from the real files." : `Send makes a new take from take ${group.source.take}.` }
-      const pointers = marks.filter(mark => referencesIn(mark.note, mark.source.take, names).some(name => group.marks.some(id => nameOf(marks.find(item => item.id === id) as Mark) === name))).map(nameOf)
+      const pointers = marks.filter(mark => referencesIn(shownNote(mark), mark.source.take, names).some(name => group.marks.some(id => nameOf(marks.find(item => item.id === id) as Mark) === name))).map(nameOf)
       return { _tag: "PointedTo", label: `Pointed to by ${listed(pointers)}; makes no take.` }
     }
     const groups: MarkupGroup[] = plan.groups.map(group => {
@@ -329,7 +330,7 @@ export function createMarkupController(input: MarkupInput) {
 
   function planOf(marks: readonly Mark[], state: AppState): SendPlan {
     const takes = (state.takes?.takes ?? []).map(take => ({ take: take.take, created: take.created, kind: take.integration ? "Alternate" as const : "Experiment" as const, run: take.run }))
-    return planSend(marks.map(mark => ({ id: mark.id, name: nameOf(mark), note: mark.note, source: mark.source, location: (found.get(mark.id) ?? locate(mark)).location })), takes)
+    return planSend(marks.map(mark => ({ id: mark.id, name: nameOf(mark), note: shownNote(mark), source: mark.source, location: (found.get(mark.id) ?? locate(mark)).location })), takes)
   }
   /**
    * Planner choice 14 (A): the marks on the original that go with a typed prompt when
@@ -340,7 +341,7 @@ export function createMarkupController(input: MarkupInput) {
     const marks = ready()?.marks ?? [], preview = previewRef(state), subject = subjectRef(state)
     if (!state.prompt.trim() || !preview || !subject) return { ids: [], names: [] }
     const names = marks.map(nameOf)
-    const named = new Set(marks.flatMap(mark => referencesIn(mark.note, mark.source.take, names)))
+    const named = new Set(marks.flatMap(mark => referencesIn(shownNote(mark), mark.source.take, names)))
     const going = marks.filter(mark => isOriginal(mark.source) && sameState(mark.preview, preview) && mark.device === state.device.id
       && (!mark.subject || sameState(mark.subject, subject)) && !named.has(nameOf(mark)) && (found.get(mark.id) ?? locate(mark)).location._tag === "Located")
     return { ids: going.map(mark => mark.id), names: going.map(nameOf) }

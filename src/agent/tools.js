@@ -31,17 +31,32 @@ export function takeTools({ store, take, render, defaults }) {
   /** @param {string} value */
   const text = value => ({ type: /** @type {const} */ ("text"), text: value })
 
+  /**
+   * Planner choice 13: takes this take's notes point to ("use 2A here") can be
+   * read, never written. They come from the take's record, so they survive a restart.
+   */
+  const readable = () => (store.record(take)?.references ?? []).map(reference => reference.source).filter(source => source.take !== "0")
+  /** @param {string | undefined} other @returns {string} the take whose view to read */
+  const readAs = other => {
+    if (other === undefined || other === take) return take
+    const source = readable().find(item => item.take === other)
+    if (!source) throw new Error(`Take ${other} is not one your marks point to. You can read ${readable().map(item => `take ${item.take}`).join(", ") || "no other take"}.`)
+    if (store.record(other)?.created !== source.created) throw new Error(`Take ${other} is gone, or is no longer the take the note pointed to.`)
+    return other
+  }
+  const otherTake = Type.Optional(Type.String({ description: "Only for a take your marks point to (see the brief): read that take's copy instead of yours. You can never write there." }))
+
   /** @type {AgentTool} */
   const readFile = {
     name: "read_file",
     label: "Read",
     description: "Read a project file as this take sees it: the take's edited copy when there is one, else the real file. Paths are relative to the project root.",
-    parameters: Type.Object({ path: Type.String({ description: "Path relative to the project root, for example src/ui/Button.tsx" }) }),
+    parameters: Type.Object({ path: Type.String({ description: "Path relative to the project root, for example src/ui/Button.tsx" }), take: otherTake }),
     execute: async (_id, params) => {
-      const { path } = /** @type {{ path: string }} */ (params)
-      const content = store.read(take, path)
+      const { path, take: other } = /** @type {{ path: string, take?: string }} */ (params)
+      const content = store.read(readAs(other), path)
       const clipped = content.length > READ_LIMIT ? `${content.slice(0, READ_LIMIT)}\n[... clipped at ${READ_LIMIT} characters]` : content
-      return { content: [text(clipped)], details: { path } }
+      return { content: [text(clipped)], details: { path, ...(other === undefined ? {} : { take: other }) } }
     },
   }
 
@@ -50,10 +65,10 @@ export function takeTools({ store, take, render, defaults }) {
     name: "list_files",
     label: "List",
     description: "List the project's files under a folder, including files this take adds. node_modules, .git and environment files are not listed.",
-    parameters: Type.Object({ folder: Type.Optional(Type.String({ description: 'Folder relative to the project root. Default: "" (the whole project)' })) }),
+    parameters: Type.Object({ folder: Type.Optional(Type.String({ description: 'Folder relative to the project root. Default: "" (the whole project)' })), take: otherTake }),
     execute: async (_id, params) => {
-      const { folder } = /** @type {{ folder?: string }} */ (params)
-      const found = store.listFiles(take, folder ?? "")
+      const { folder, take: other } = /** @type {{ folder?: string, take?: string }} */ (params)
+      const found = store.listFiles(readAs(other), folder ?? "")
       const shown = found.slice(0, LIST_LIMIT)
       const more = found.length > shown.length ? `\n[... ${found.length - shown.length} more. List a smaller folder.]` : ""
       return { content: [text(`${shown.join("\n")}${more}` || "No files.")], details: { folder: folder ?? "", count: found.length } }

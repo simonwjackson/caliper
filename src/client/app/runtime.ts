@@ -145,6 +145,8 @@ export function createChromeApp(input: RuntimeInput) {
       const successful = results.flatMap((result, index) => result.status === "fulfilled" && directions[index] ? [directions[index]] : [])
       const remaining = review?.directions.filter(row => !successful.includes(row.direction)) ?? []
       const retry: Plan = review && remaining.length ? { ...review, directions: remaining } : { _tag: "None" }
+      // Planner choice 14: marks on the original that went with the prompt leave the draft once a take started.
+      if (ids.length && ask.marks?.length) await markup.release(ask.marks).catch(error => failures.push(`Started takes ${ids.join(", ")}, but the marks that went with the prompt are still in the draft: ${error instanceof Error ? error.message : String(error)} Remove them before Send.`))
       if (generation === epoch) {
         if (ids.length && retry._tag === "None") consumeSubmission(submitted)
         set({ ...state, plan: retry, notices: [...(ids.length && failures.length ? [{ kind: "info" as const, text: `Started takes ${ids.join(", ")}. Only unsuccessful directions remain.` }] : []), ...failures.map(text => ({ kind: "error" as const, text }))] })
@@ -170,7 +172,8 @@ export function createChromeApp(input: RuntimeInput) {
     const subject = subjectRef(state)
     if (!subject) return
     const images = wireImages()
-    const ask: Ask = { ...subject, device: state.device.id, prompt: state.prompt.trim(), ...(state.context ? { context: state.context } : {}), ...(images.length ? { images } : {}) }
+    const going = markup.withPrompt(state).ids
+    const ask: Ask = { ...subject, device: state.device.id, prompt: state.prompt.trim(), ...(state.context ? { context: state.context } : {}), ...(images.length ? { images } : {}), ...(going.length ? { marks: going } : {}) }
     const submitted = submission()
     if (state.count === 1) return launch(ask, [undefined], submitted)
     const id = ++generation, count = state.count

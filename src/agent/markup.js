@@ -4,10 +4,10 @@ import { Check } from "typebox/value"
 import { DEVICES } from "../client/device-frame.js"
 import { contextsFor, sameState } from "../client/scenarios.js"
 import { json, readJson, refuse } from "../http.js"
-import { planSend } from "../takes/send-plan.js"
-import { MarkChangeSchema, NewMarkSchema, RevisionSchema } from "../takes/marks-contract.js"
+import { isOriginal, planSend } from "../takes/send-plan.js"
+import { MarkChangeSchema, NewMarkSchema, ReleaseSchema, RevisionSchema } from "../takes/marks-contract.js"
 import { StaleDraft } from "../takes/marks.js"
-import { markupMessage } from "./markup-message.js"
+import { markupMessage, promptMarksText } from "./markup-message.js"
 
 /**
  * The draft of marks and Send, on the dev server under `/__caliper/marks`.
@@ -30,7 +30,7 @@ import { markupMessage } from "./markup-message.js"
  * @param {{
  *   store: import("../takes/store.js").TakeStore,
  *   marks: import("../takes/marks.js").MarkStore,
- *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "views" | "fork" | "startMarkup">,
+ *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "views" | "fork" | "create" | "startMarkup">,
  *   project: () => Promise<import("../types").Project>,
  *   validateTake: (parts: readonly import("../types").Part[], record: TakeRecord) => void,
  *   render: (jobs: RenderJob[]) => Promise<RenderResult[]>,
@@ -45,11 +45,22 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
 
   /**
    * The take a mark goes on must exist at that creation time and be an
-   * experiment. The preview is its subject or a declared scenario of it.
+   * experiment, or be the original (phase 6). The preview is its subject or a
+   * declared scenario of it.
    *
    * @param {Mark["source"]} source @param {Mark["preview"]} preview @param {string} device
+   * @param {Mark["subject"]} [subject] required for a mark on the original
    */
-  const markable = async (source, preview, device) => {
+  const markable = async (source, preview, device, subject) => {
+    if (isOriginal(source)) {
+      // Plan decision 8: the original frame shows the real files at a subject's state or a declared scenario of it.
+      if (!subject) throw new Error("A mark on the original needs the subject it edits.")
+      const { parts } = await project()
+      if (!parts.some(part => part.file === subject.part && part.states.some(state => state.export === subject.state))) throw new Error(`${subject.part} · ${subject.state} does not exist.`)
+      if (!sameState(preview, subject) && !contextsFor(parts, subject).some(context => sameState(context, preview))) throw new Error(`${preview.part} · ${preview.state} is not a declared scenario of ${subject.part} · ${subject.state}.`)
+      if (!DEVICES.some(candidate => candidate.id === device)) throw new Error(`Caliper has no device "${device}".`)
+      return
+    }
     const record = store.record(source.take)
     if (record === null || record.created !== source.created) throw new Error(`Take ${source.take} is no longer the take you marked. Reload the takes.`)
     if (record.integration) throw new Error(`Take ${source.take} is an alternate. Alternates have their own review and cannot be marked.`)
@@ -87,10 +98,16 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       const [, , id = "", action = ""] = path.split("/")
       if (path === "/marks") {
         if (!Check(NewMarkSchema, body)) throw new Error("A new mark needs the draft revision, its take, preview, device and anchor.")
-        await markable(body.source, body.preview, body.device)
-        const added = marks.add(body.revision, { source: body.source, preview: body.preview, device: body.device, anchor: body.anchor })
+        await markable(body.source, body.preview, body.device, body.subject)
+        const added = marks.add(body.revision, { source: body.source, preview: body.preview, ...(isOriginal(body.source) && body.subject ? { subject: body.subject } : {}), device: body.device, anchor: body.anchor })
         changed(added.draft)
         json(response, 201, added)
+      } else if (path === "/marks/release") {
+        if (!Check(ReleaseSchema, body)) throw new Error("Releasing marks needs the draft revision and the marks.")
+        const draft = marks.current(body.revision)
+        const ids = new Set(body.ids)
+        if (draft.marks.some(mark => ids.has(mark.id) && !isOriginal(mark.source))) throw new Error("Only marks on the original go with a prompt.")
+        json(response, 200, { draft: changed(marks.release(body.revision, ids)) })
       } else if (path === "/marks/send") {
         if (!Check(RevisionSchema, body)) throw new Error("Send needs the draft revision it shows.")
         json(response, 201, await send(body.revision))
@@ -111,7 +128,9 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
   }
 
   /**
-   * Make one new take from each marked take, and start their agents together.
+   * Make one new take from each marked take, or from the original, whose marks
+   * are not all pointed to by notes on other takes (decisions 7 and 8), and
+   * start their agents together.
    *
    * @param {number} revision the draft the user sent
    * @returns {Promise<{ takes: string[], draft: Draft }>}
@@ -125,12 +144,27 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       const draft = marks.current(revision)
       const plan = check(draft)
       const { parts } = await project()
+      const byId = (/** @type {string} */ id) => /** @type {Mark} */ (draft.marks.find(mark => mark.id === id))
       const groups = plan.groups.map(group => {
-        const record = /** @type {TakeRecord} */ (store.record(group.source.take))
-        validateTake(parts, record)
-        return { source: group.source, record, marks: group.marks.map(id => /** @type {Mark} */ (draft.marks.find(mark => mark.id === id))) }
+        const own = group.marks.map(byId)
+        const base = { source: group.source, marks: own, makes: group.outcome._tag === "NewTake", pointsTo: group.pointsTo.map(byId) }
+        if (!isOriginal(group.source)) {
+          const record = /** @type {TakeRecord} */ (store.record(group.source.take))
+          validateTake(parts, record)
+          return { ...base, record }
+        }
+        // Plan decision 8: one take from the real files, so every mark on the original in one pass edits one subject.
+        const subjects = [...new Set(own.map(mark => JSON.stringify([mark.subject?.part ?? mark.preview.part, mark.subject?.state ?? mark.preview.state])))]
+        if (subjects.length > 1) throw new Error("The marks on the original are on more than one part or state. Send them one subject at a time: remove the others first.")
+        const first = /** @type {Mark} */ (own[0])
+        const subject = first.subject ?? first.preview
+        /** @type {Omit<TakeRecord, "created">} */
+        const record = { part: subject.part, state: subject.state, device: first.device, ...(sameState(first.preview, subject) ? {} : { context: first.preview }) }
+        validateTake(parts, /** @type {TakeRecord} */ ({ ...record, created: 0 }))
+        return { ...base, record }
       })
-      // One picture per take, preview and device its marks were placed on.
+      const referenced = new Set(groups.flatMap(group => group.pointsTo.map(mark => mark.id)))
+      // One picture per source, preview and device its marks were placed on. Marks a note points to also get a crop.
       const pictures = groups.map(group => {
         /** @type {Map<string, Mark[]>} */
         const on = new Map()
@@ -142,17 +176,25 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       })
       const jobs = groups.flatMap((group, index) => (pictures[index] ?? []).map(on => {
         const first = /** @type {Mark} */ (on[0])
-        return { part: first.preview.part, state: first.preview.state, device: first.device, take: group.source.take, annotations: on.map(mark => ({ letter: mark.letter, anchor: mark.anchor })) }
+        return {
+          part: first.preview.part, state: first.preview.state, device: first.device, ...(isOriginal(group.source) ? {} : { take: group.source.take }),
+          annotations: on.map(mark => ({ letter: mark.letter, anchor: mark.anchor, ...(referenced.has(mark.id) ? { crop: true } : {}) })),
+        }
       }))
       const results = await render(jobs)
       /** @type {string[]} */
       const lost = []
+      /** @type {Map<string, string>} */
+      const crops = new Map()
       let next = 0
       const rendered = groups.map((group, index) => (pictures[index] ?? []).map(on => {
         const result = results[next++]
-        if (result?.annotated === undefined) throw new Error(`Caliper could not draw the marks on take ${group.source.take}.`)
+        const where = isOriginal(group.source) ? "the real files" : `take ${group.source.take}`
+        if (result?.annotated === undefined) throw new Error(`Caliper could not draw the marks on ${where}.`)
         for (const [position, mark] of on.entries()) {
-          if (!result.annotated.marks[position]?.found && !mark.anchor.afterInput) lost.push(`${group.source.take}${mark.letter}: its element is not in a fresh render of take ${group.source.take}. Re-place or remove the mark.`)
+          const drawn = result.annotated.marks[position]
+          if (!drawn?.found && !mark.anchor.afterInput) lost.push(`${group.source.take}${mark.letter}: its element is not in a fresh render of ${where}. Re-place or remove the mark.`)
+          if (drawn?.crop) crops.set(mark.id, drawn.crop)
         }
         return { on, result, annotated: result.annotated }
       }))
@@ -168,13 +210,24 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       const launches = []
       try {
         for (const [index, group] of groups.entries()) {
-          const record = childRecord(group.source, group.record, group.marks)
-          const take = agents.fork(group.source.take, record)
+          if (!group.makes) continue
+          /** @type {Map<string, { source: TakeIdentity, marks: Mark[] }>} */
+          const bySource = new Map()
+          for (const mark of group.pointsTo) {
+            const key = `${mark.source.take}@${mark.source.created}`
+            bySource.set(key, { source: mark.source, marks: [...bySource.get(key)?.marks ?? [], mark] })
+          }
+          const references = [...bySource.values()]
+          const record = isOriginal(group.source)
+            ? { ...group.record, history: { prompt: null, lineage: [], passes: [] }, marks: group.marks, ...(references.length ? { references } : {}) }
+            : { ...childRecord(group.source, /** @type {TakeRecord} */ (group.record), group.marks), ...(references.length ? { references } : {}) }
+          const take = isOriginal(group.source) ? agents.create(record) : agents.fork(group.source.take, record)
           created.push(take)
           const shots = rendered[index] ?? []
           const sources = [...new Set([record.part, record.context?.part].filter(file => file !== undefined))].map(path => ({ path, content: store.read(take, path) }))
           const brief = markupMessage({
             take, record, sources,
+            references: group.pointsTo.map(mark => ({ source: mark.source, mark, crop: crops.has(mark.id) })),
             pictures: shots.map(({ on, result, annotated }) => ({
               preview: { part: result.part, state: result.state }, previewLabel: labels(result.part, result.state),
               deviceLabel: DEVICES.find(device => device.id === result.device)?.name ?? result.device,
@@ -184,13 +237,21 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
               outside: on.filter((_, position) => annotated.marks[position]?.found && !annotated.marks[position]?.visible).map(mark => mark.letter),
             })),
           })
-          const images = shots.map(({ result, annotated }) => ({ name: `take-${group.source.take}-${result.device}-marks.png`, mimeType: /** @type {const} */ ("image/png"), bytes: readFileSync(annotated.png) }))
+          const pictureName = (/** @type {TakeIdentity} */ source) => isOriginal(source) ? "original" : `take-${source.take}`
+          const images = [
+            ...shots.map(({ result, annotated }) => ({ name: `${pictureName(group.source)}-${result.device}-marks.png`, mimeType: /** @type {const} */ ("image/png"), bytes: readFileSync(annotated.png) })),
+            ...group.pointsTo.flatMap(mark => {
+              const crop = crops.get(mark.id)
+              return crop ? [{ name: `${pictureName(mark.source)}-${mark.letter}-crop.png`, mimeType: /** @type {const} */ ("image/png"), bytes: readFileSync(crop) }] : []
+            }),
+          ]
           launches.push({ take, brief, images })
         }
       } catch (error) {
         for (const take of created) store.discard(take)
         throw error
       }
+      // Every mark leaves the draft: its own take's, or, when a note pointed to it, as reference material.
       const released = marks.release(revision, new Set(groups.flatMap(group => group.marks.map(mark => mark.id))))
       for (const launch of launches) agents.startMarkup(launch.take, launch.brief, launch.images)
       changed(released)
@@ -215,7 +276,34 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     return plan
   }
 
-  return { handle, draft: () => marks.read() }
+  /**
+   * Planner choice 14 (A): marks on the original go with a typed prompt. Their
+   * text is appended to the prompt and a picture of the real files with them
+   * drawn in is attached. The chrome releases them from the draft once the
+   * takes started, so this reads the draft and does not change it.
+   *
+   * @param {unknown} ids from the request body
+   * @param {{ part: string, state: string, device: string, context?: import("../types").StateRef }} ask
+   * @returns {Promise<{ text: string, images: import("./images.js").AttachedImage[] }>}
+   */
+  const promptMarks = async (ids, ask) => {
+    if (ids === undefined) return { text: "", images: [] }
+    if (!Array.isArray(ids) || !ids.length || ids.length > 26 || !ids.every(id => typeof id === "string")) throw new Error("marks must be a list of marks on the original.")
+    const draft = marks.read()
+    const preview = ask.context ?? ask
+    const chosen = ids.map(id => {
+      const mark = draft.marks.find(item => item.id === id)
+      if (!mark || !isOriginal(mark.source)) throw new Error("A mark that goes with the prompt is no longer on the original in the draft. Check the draft and start again.")
+      const subject = mark.subject ?? mark.preview
+      if (!sameState(mark.preview, preview) || !sameState(subject, ask) || mark.device !== ask.device) throw new Error(`0${mark.letter} is on another preview, subject or device than this prompt.`)
+      return mark
+    })
+    const [result] = await render([{ part: preview.part, state: preview.state, device: ask.device, annotations: chosen.map(mark => ({ letter: mark.letter, anchor: mark.anchor })) }])
+    if (result?.annotated === undefined) throw new Error("Caliper could not draw the marks on the real files.")
+    return { text: promptMarksText(chosen), images: [{ name: `original-${ask.device}-marks.png`, mimeType: "image/png", bytes: readFileSync(result.annotated.png) }] }
+  }
+
+  return { handle, draft: () => marks.read(), promptMarks }
 }
 
 /**

@@ -40,7 +40,8 @@ test("the app wiring loads the draft, keeps frames' markability honest and block
     expect(view.markup).toMatchObject({ _tag: "Ready", revision: 0, groups: [], send: { _tag: "Idle", availability: { _tag: "Disabled", reason: "Mark a take first." } } })
     if (view.canvas._tag !== "Frames") throw new Error("no frames")
     const byTake = new Map(view.canvas.frames.map(frame => [frame.take, frame]))
-    expect(byTake.get(null)?.markable._tag).toBe("Disabled")
+    // Phase 6: the original frame is markable too (plan decision 8).
+    expect(byTake.get(null)?.markable._tag).toBe("Enabled")
     expect(byTake.get(take)?.markable._tag).toBe("Enabled")
     expect(byTake.get(alternate)?.markable).toEqual({ _tag: "Disabled", reason: "Alternates have their own review. Mark the experiment instead." })
 
@@ -67,6 +68,28 @@ test("the app wiring loads the draft, keeps frames' markability honest and block
     app.actions.onMarkEdit(null)
     for (let attempt = 0; attempt < 50 && (app.getSnapshot().markup as { revision: number }).revision < 2; attempt++) await settle()
     expect((await (await get("/__caliper/marks.json")).json()).marks[0].note).toBe("love this")
+
+    // Phase 6: a mark on the original needs its subject; a note that names it makes it a reference.
+    const post = (path: string, body: object) => fetch(new URL(`__caliper/${path}`, url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    expect((await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, device: "rg353m", anchor })).status).toBe(400)
+    const onOriginal = await (await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, subject: { part, state: "default" }, device: "rg353m", anchor })).json()
+    app.receiveMarks(onOriginal.draft)
+    app.actions.onMarkEdit(added.id)
+    app.actions.onMarkNote(added.id, "love this, use 0A")
+    await settle()
+    const referring = app.getSnapshot().markup
+    if (referring._tag !== "Ready" || referring.editor._tag !== "Open") throw new Error("no editor")
+    expect(referring.editor.references.map(option => option.name)).toEqual(["0A"])
+    expect(referring.groups.map(group => [group.label, group.outcome._tag])).toEqual([[`Take ${take} · Take ${take}`, "NewTake"], ["Original · the real files", "PointedTo"]])
+    expect(referring.groups[0]?.marks[0]?.references).toEqual(["0A"])
+    app.actions.onMarkEdit(null)
+    for (let attempt = 0; attempt < 50 && (app.getSnapshot().markup as { revision: number }).revision < 4; attempt++) await settle()
+    const release = await post("marks/release", { revision: 4, ids: [added.id] })
+    expect(release.status).toBe(400)
+    expect((await release.json()).error).toBe("Only marks on the original go with a prompt.")
+    const released = await (await post("marks/release", { revision: 4, ids: [onOriginal.id] })).json()
+    expect(released.draft.marks.map((mark: { id: string }) => mark.id)).toEqual([added.id])
+    app.receiveMarks(released.draft)
 
     app.actions.onSend(0)
     await settle()

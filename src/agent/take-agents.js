@@ -117,7 +117,19 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   }
 
   /**
-   * @param {string} take a take `fork` made
+   * Start a take made from marks on the original: a new take of the real files.
+   * Its agent is started with `startMarkup`.
+   *
+   * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
+   * @returns {string} the take number
+   */
+  const create = record => {
+    assertOpen()
+    return store.create(record)
+  }
+
+  /**
+   * @param {string} take a take `fork` or `create` made
    * @param {string} brief
    * @param {readonly AttachedImage[]} pictures
    */
@@ -358,7 +370,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     return files
   }
 
-  return { start, fork, startMarkup, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, fork, create, startMarkup, editByHand, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**

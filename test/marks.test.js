@@ -7,7 +7,8 @@ import { createTakeStore } from "../src/takes/store.js"
 import { createMarkStore, StaleDraft } from "../src/takes/marks.js"
 import { letterAt, nextLetter } from "../src/takes/marks-contract.js"
 import { childRecord } from "../src/agent/markup.js"
-import { markupMessage } from "../src/agent/markup-message.js"
+import { markupMessage, promptMarksText } from "../src/agent/markup-message.js"
+import { takeTools } from "../src/agent/tools.js"
 
 /** @param {Record<string, string>} files @param {(root: string) => void} run */
 function inFolder(files, run) {
@@ -18,6 +19,20 @@ function inFolder(files, run) {
       writeFileSync(join(root, file), content)
     }
     run(root)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
+
+/** @param {Record<string, string>} files @param {(root: string) => Promise<void>} run */
+async function inFolderAsync(files, run) {
+  const root = mkdtempSync(join(tmpdir(), "caliper-marks-"))
+  try {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, file)), { recursive: true })
+      writeFileSync(join(root, file), content)
+    }
+    await run(root)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -147,5 +162,62 @@ describe("a take made from marks", () => {
     expect(brief).toContain("contains: button.chip “Chip default”")
     expect(brief).toContain("Not found in this render, drawn where they were placed: 2B.")
     expect(brief).not.toContain("## Direction")
+  })
+})
+
+describe("phase 6: references and the original", () => {
+  /** @param {string} take @param {number} created @param {string} letter @param {string} note */
+  const markOn = (take, created, letter, note) => /** @type {import("../src/takes/marks-contract.js").Mark} */ ({ id: `${take}${letter}`, source: { take, created }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", letter, note, anchor })
+  const picture = { preview: { part: "src/Chip.part.tsx", state: "default" }, previewLabel: "Chip · Default", deviceLabel: "RG353M", width: 640, height: 480, drawn: ["A"], missing: [], outside: [] }
+
+  test("a take's agent may read a take its notes point to, never write there, and never read another take", () => inFolderAsync(files, async root => {
+    const store = createTakeStore(root)
+    const two = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "Two" })
+    store.write(two, "src/chip.css", ".chip { color: green }\n")
+    const five = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "Five" })
+    store.write(five, "src/chip.css", ".chip { color: pink }\n")
+    const twoCreated = /** @type {import("../src/takes/store.js").TakeRecord} */ (store.record(two)).created
+    const three = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", references: [{ source: { take: two, created: twoCreated }, marks: [markOn(two, twoCreated, "A", "")] }, { source: { take: "0", created: 0 }, marks: [] }] })
+    const tools = takeTools({ store, take: three, defaults: { state: "default", device: "rg353m" }, render: async () => [] })
+    const tool = (/** @type {string} */ name) => /** @type {import("@earendil-works/pi-agent-core").AgentTool<any>} */ (tools.find(item => item.name === name))
+    {
+      const read = await tool("read_file").execute("r", { path: "src/chip.css", take: two })
+      expect(read.content[0]).toMatchObject({ text: ".chip { color: green }\n" })
+      expect((await tool("read_file").execute("r", { path: "src/chip.css" })).content[0]).toMatchObject({ text: ".chip { color: blue }\n" })
+      expect((await tool("list_files").execute("l", { folder: "src", take: two })).content[0]).toMatchObject({ text: expect.stringContaining("src/chip.css") })
+      await expect(tool("read_file").execute("r", { path: "src/chip.css", take: five })).rejects.toThrow(`Take ${five} is not one your marks point to. You can read take ${two}.`)
+      expect(tool("write_file").parameters.properties.take).toBeUndefined()
+      expect(tool("edit_file").parameters.properties.take).toBeUndefined()
+      await tool("write_file").execute("w", { path: "src/chip.css", content: "x", take: two })
+      expect(store.read(two, "src/chip.css")).toBe(".chip { color: green }\n")
+      store.discard(two)
+      await expect(tool("read_file").execute("r", { path: "src/chip.css", take: two })).rejects.toThrow("is gone")
+    }
+  }))
+
+  test("the brief names the marks a note points to, their crops, and read access", () => {
+    const parent = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", created: 30, prompt: "Warm" })
+    const own = markOn("3", 30, "A", "use 2A here")
+    const record = { ...childRecord({ take: "3", created: 30 }, parent, [own]), references: [{ source: { take: "2", created: 20 }, marks: [markOn("2", 20, "A", "nice gap")] }] }
+    const brief = markupMessage({ take: "7", record, sources: [], pictures: [picture], references: [
+      { source: { take: "2", created: 20 }, mark: markOn("2", 20, "A", "nice gap"), crop: true },
+      { source: { take: "0", created: 0 }, mark: markOn("0", 0, "B", ""), crop: true },
+    ] })
+    expect(brief).toContain("## Marks the notes point to\n2A: nice gap")
+    expect(brief).toContain("0B: (no note)")
+    expect(brief).toContain('You may read take 2 with read_file and list_files and take: "2". You cannot write there.')
+    expect(brief).toContain("Picture 2: take 2 around 2A, with the marks drawn in.")
+    expect(brief).toContain("Picture 3: the real files around 0B, with the marks drawn in.")
+    expect(brief).toContain("Take 3 does not change, and neither does take 2.")
+  })
+
+  test("a take made from marks on the original is a copy of the real files with no parent", () => {
+    const record = { part: "src/Chip.part.tsx", state: "default", device: "rg353m", history: { prompt: null, lineage: [], passes: [] }, marks: [markOn("0", 0, "A", "too loud")] }
+    const brief = markupMessage({ take: "4", record, sources: [], pictures: [picture] })
+    expect(brief).toContain("You are take 4, a new take made from the real files.")
+    expect(brief).toContain("Take 4 starts from the real files. It has no parent take.")
+    expect(brief).toContain("## Marks on the original (this pass)\n0A: too loud")
+    expect(brief).toContain(".caliper/takes/4, a copy of the real files. Nowhere else. The real files do not change.")
+    expect(promptMarksText([markOn("0", 0, "A", "too loud")])).toContain("## Marks on the original\n")
   })
 })
