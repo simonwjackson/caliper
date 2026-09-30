@@ -8,7 +8,8 @@
   --dr-free-r: var(--dr-gutter);
   /* The canvas's gap and padding follow the one gap token, tighter on a phone. */
   --dr-gap-now: var(--dr-gap);
-  --dr-pad: var(--dr-gutter);
+  /* The stage already sits one gutter from each panel; the canvas adds no second one. */
+  --dr-pad: 0px;
   position: relative; height: 100%; min-height: 0; overflow: hidden;
   display: grid; grid-template-columns: 3rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "tools room";
 }

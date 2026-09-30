@@ -372,7 +372,8 @@ export function gridView(): ChromeView {
   const frames = STATE_FRAMES.map(([state, label, filter], index) => ({
     ...frame(null, { key: `state:${state}`, label, title: `${label} · real files`, src: frameSource(FILTERS[filter]), subject: ref(state), preview: ref(state), selected: index === 0 }),
   }))
-  return { ...view, selection: { _tag: "All", part: PART }, canvas: { _tag: "Frames", mode: "All", title: "Game Detail", frames } }
+  const parts = view.navigation.parts.map(item => item.file === PART ? { ...item, states: item.states.map(state => ({ ...state, selected: false })) } : item)
+  return { ...view, navigation: { ...view.navigation, parts }, selection: { _tag: "All", part: PART }, canvas: { _tag: "Frames", mode: "All", title: "Game Detail", frames }, focusedTake: null }
 }
 
 const STACK = `TypeError: Cannot read properties of undefined (reading 'title')

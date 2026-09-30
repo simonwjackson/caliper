@@ -22,9 +22,14 @@ export type DarkroomProps = ChromeProps & {
   readonly scheme?: "light" | "dark"
 }
 
-/** Whether the canvas shows the composer bar under it: while a state is on the canvas and Takes, Preview or a plan is in front. */
+/**
+ * Whether the canvas shows the composer bar under it: while one state is on
+ * the canvas and Takes, Preview or a plan is in front. A take belongs to one
+ * state (decision 20), so the view of every state at once has no composer.
+ */
 export function showsBar(view: ChromeView): boolean {
-  if (view.selection._tag === "None" || view.canvas._tag !== "Frames") return false
+  if (view.canvas._tag !== "Frames") return false
+  if (view.selection._tag !== "State") return view.plan._tag !== "None"
   return view.plan._tag !== "None" || view.tools.active === "takes" || view.tools.active === "preview"
 }
 export function sideOpen(view: ChromeView): boolean {
