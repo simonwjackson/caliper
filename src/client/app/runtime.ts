@@ -13,6 +13,7 @@ import { createCodeController } from "./code"
 import { createKnobsController } from "./knobs"
 import { createChecksController } from "./checks"
 import { createIntegrationController } from "./integration"
+import { createMarkupController } from "./markup"
 
 export type Request = <T>(path: string, data?: object) => Promise<T>
 export type RuntimeInput = {
@@ -53,6 +54,12 @@ export function createChromeApp(input: RuntimeInput) {
   }
   const checks = createChecksController({ request: input.request, changed, target: selectedTarget })
   const integration = createIntegrationController({ request: input.request, changed })
+  const markup = createMarkupController({
+    request: input.request, changed, notify: reason => notify(reason),
+    inform: text => set({ ...state, notices: [{ kind: "info", text }] }),
+    state: () => state, canvas: () => snapshot?.canvas ?? { _tag: "Empty", message: "" }, frames: () => frames,
+    refreshTakes: () => refreshTakes(),
+  })
   const knobs = createKnobsController({ request: input.request, changed, frames: () => [...frames.values()], variant: () => {
     if (!currentPart(state)) return null
     const take = currentTake(state)
@@ -78,7 +85,11 @@ export function createChromeApp(input: RuntimeInput) {
         const unavailable = takeSummary(state, selectedTake).unavailableReason
         if (unavailable || state.connection._tag !== "Ready") integrationView = { ...integrationView, apply: disabled(unavailable || "Vite is not reachable.") }
       }
-      snapshot = toChromeView(state, { code: code.getView(), knobs: knobs.getView(), checks: checks.getView(), integration: integrationView, badges: [...badges, ...originalBadges].flatMap(row => row.badge ? [{ ...row, badge: row.badge }] : []) })
+      const current = state
+      snapshot = toChromeView(state, {
+        code: code.getView(), knobs: knobs.getView(), checks: checks.getView(), integration: integrationView, badges: [...badges, ...originalBadges].flatMap(row => row.badge ? [{ ...row, badge: row.badge }] : []),
+        markup: { view: markup.getView(), frame: (key, frame) => ({ markable: markup.markable(frame, current), marks: markup.pins(key, frame, current) }) },
+      })
       for (const listener of subscribers) listener()
     } finally { publishing = false }
   }
@@ -224,12 +235,8 @@ export function createChromeApp(input: RuntimeInput) {
     }
     set({ ...state, notices: failures.map(text => ({ kind: "error", text })) })
   }
-  // Step 0 only declares markup. Keep direct calls reporting-only until the phase 4 controller lands.
-  const unavailableMarkup = () => notify(new Error("Take markup is not connected yet."))
   const actions: ChromeActions = {
-    onMarkMode: unavailableMarkup, onMarkPoint: unavailableMarkup, onMarkRegion: unavailableMarkup,
-    onMarkEdit: unavailableMarkup, onMarkNote: unavailableMarkup, onMarkRemove: unavailableMarkup,
-    onMarkReplace: unavailableMarkup, onDraftOpen: unavailableMarkup, onSend: unavailableMarkup,
+    ...markup.actions,
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
       // An open pane that another pane covers comes to the front; only a pane already in front closes.
@@ -249,7 +256,7 @@ export function createChromeApp(input: RuntimeInput) {
     onContext: key => { const scenario = snapshot.navigation.scenario; const choice = scenario._tag === "Selected" ? scenario.choices.find(choice => choice.key === key) : null; if (choice) selected({ ...state, context: choice.context, contextNote: "" }) },
     onSubject: ref => { const preview = previewRef(state); if (preview && subjectsOf(state.project?.parts ?? [], preview).some(child => sameState(child, ref))) selected({ ...state, part: ref.part, shown: { _tag: "One", export: ref.state }, context: preview, contextNote: "", take: null, expanded: new Map(state.expanded).set(ref.part, true) }) },
     onWholeScenario: () => { const preview = state.context; if (preview) selected({ ...state, part: preview.part, shown: { _tag: "One", export: preview.state }, context: null, contextNote: "", take: null }) },
-    onDevice: id => { const device = DEVICES.find(device => device.id === id); if (device) { set({ ...state, device }); remember("device", id); save() } },
+    onDevice: id => { const device = DEVICES.find(device => device.id === id); if (device) { set({ ...state, device }); remember("device", id); save(); markup.schedule() } },
     onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onAttach: files => immediate(() => attach(files)),
     onRemoveAttachment: id => { if (state.plan._tag !== "None") return; const image = state.attachments.find(image => image.id === id); if (image) input.revokeImage?.(image.url); set({ ...state, attachments: state.attachments.filter(image => image.id !== id), notices: [] }) },
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),
@@ -278,7 +285,7 @@ export function createChromeApp(input: RuntimeInput) {
       if (before === node) return
       const load = loads.get(key)
       if (before && load) before.removeEventListener("load", load)
-      frames.delete(key); loads.delete(key); geometries.delete(key); reportDocuments.delete(key)
+      frames.delete(key); loads.delete(key); geometries.delete(key); reportDocuments.delete(key); markup.frameRemoved(key)
       if (state.reports.has(key)) { const reports = new Map(state.reports); reports.delete(key); state = { ...state, reports }; changed() }
       if (node) {
         frames.set(key, node)
@@ -286,9 +293,12 @@ export function createChromeApp(input: RuntimeInput) {
           if (!reportDocuments.has(key) || reportDocuments.get(key) !== node.contentDocument) {
             const reports = new Map(state.reports); reports.delete(key); state = { ...state, reports }; reportDocuments.delete(key); changed()
           }
+          markup.frameLoaded(key, node)
           knobs.refresh()
         }
         node.addEventListener("load", onLoad); loads.set(key, onLoad)
+        // A frame can finish loading before React hands it over.
+        try { if (node.contentDocument?.readyState === "complete") markup.frameLoaded(key, node) } catch { /* cross-origin frames have no markup */ }
       }
       knobs.refresh()
     },
@@ -320,6 +330,7 @@ export function createChromeApp(input: RuntimeInput) {
       const prior = before?.takes.find(candidate => candidate.take === take.take && candidate.created === take.created)
       if (prior && (prior.files.join(",") !== take.files.join(",") || prior.run._tag === "Running" && take.run._tag !== "Running")) reloadFrames(take.take)
     }
+    markup.schedule()
   }
   function receiveCode(value: unknown) {
     const change: CodeChange = parseWire(CodeChangeSchema, value)
@@ -347,13 +358,13 @@ export function createChromeApp(input: RuntimeInput) {
       if (!Check(FrameReportSchema, latest) || latest.part !== report.part || latest.partState !== report.partState || latest.take !== report.take || latest.state !== report.state || JSON.stringify(latest.problems) !== JSON.stringify(report.problems)) return
     } catch { return }
     reportDocuments.set(key, node?.contentDocument ?? null)
-    set({ ...state, reports: new Map(state.reports).set(key, report) }); knobs.refresh()
+    set({ ...state, reports: new Map(state.reports).set(key, report) }); knobs.refresh(); markup.schedule()
   }
   publish()
   return {
     actions, getSnapshot: () => snapshot, subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener) } },
-    receiveProject, receiveTakes, receiveCode, receiveFrame, receiveChecks: (value: unknown) => checks.receive(parseWire(ChecksViewSchema, value)),
+    receiveProject, receiveTakes, receiveCode, receiveFrame, receiveMarks: (value: unknown) => markup.receive(value), loadMarks: () => markup.reload(), receiveChecks: (value: unknown) => checks.receive(parseWire(ChecksViewSchema, value)),
     unreachable: (reason = "Vite is not reachable.") => set({ ...state, connection: { _tag: "Unreachable", reason } }),
-    dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy() },
+    dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); markup.dispose() },
   }
 }

@@ -140,3 +140,65 @@ The known rapid-save intermittent failure and post-summary esbuild goroutine
 deadlock remain outside this migration. `The build was canceled` also appears
 in successful API test retries. Record the actual diagnostics; exit 0 does not
 prove clean teardown. Do not claim that these problems were fixed here.
+
+## Run 2, phase 4: core worker (marks, draft and Send)
+
+Branch: `markup/core`, based on `7488ae2`. Core-owned files only. The frozen
+contract, hooks, Send policy, contract fixtures and reference `Chrome.tsx` are
+unchanged. No merge, re-pin or deploy is authorized for this worker. The
+served Darkroom renders none of the markup yet; that is the UI worker's part.
+
+### What is built
+
+| Boundary | Implementation |
+|---|---|
+| Draft storage | `src/takes/marks.js` keeps `{ revision, marks }` in `.caliper/marks.json`, written atomically. Every write names its revision; a stale one throws `StaleDraft`. A broken file is reported, never replaced. The server picks each mark's id and its letter: A to Z, then AA, AB (`nextLetter`). |
+| Schemas | `src/takes/marks-contract.js` (browser-safe typebox) is shared by the server and the chrome. Rects are document-origin CSS px. |
+| Routes | In `src/agent/markup.js`, reached through the takes API: `GET marks.json`, `POST marks`, `POST marks/<id>` (note or anchor), `POST marks/<id>/remove`, `POST marks/send`. A stale revision gets 409 with the current draft. The stream sends a `marks` event on every change and on connect. |
+| Anchors | `src/takes/anchor.js`: `anchorAt` (element under a click), `anchorIn` (smallest element holding a drag, plus up to 12 outermost elements inside), `locateAnchor` (selector, box and 80-character text-prefix checks; a found mark moves with its element) and `drawMarks`. The last two are self-contained so the headless render runs their source. |
+| Placing, lost marks, Alt input | `src/client/app/markup.ts`. Overlay gestures call `place`. Each frame load attaches capture listeners: Alt-click and Alt-drag place a mark and swallow the click; other pointer or key input sets `afterInput`. Scroll, resize, DOM mutations, frame reports, device changes and takes events re-run `locateAnchor`. A mark not shown in this chrome is `Unresolved` and blocks Send, as Step 0 froze. |
+| Notes | The editor opens on each new mark. A note saves 400 ms after typing stops, on close, and before Send. A refused note save retries once against the reloaded draft (last write wins per mark). |
+| `store.fork` | One copier for alternates and marks: every edited file, no images, no half-copied take on failure. `integration.begin` uses it. |
+| Records | New takes store `prompt`. A take made from marks stores `parent`, `chain`, `history` (`prompt`, `direction`, `lineage`, earlier `passes`) and the `marks` it was sent. It does not copy the parent's name or direction, so its agent names it. |
+| Pictures | `RenderJob.annotations` finds each mark in a fresh render, draws two-tone pins and boxes, and saves `*.marks.png`. The worker contract carries annotations and the `annotated` result. |
+| Brief | `markupMessage` (`src/agent/markup-message.js`) is pure: lineage, first prompt, direction, earlier passes, this pass (note, element, selector, region contents, after-input line), one caption per picture, the write fence, and the subject source. |
+| Send | Rechecks agent readiness, revision and `planSend` on the server, renders every picture, and refuses the whole pass if any mark without `afterInput` is missing from its fresh render. Then, with no await in between, it rechecks the revision, forks every parent, releases the sent marks and starts all agents. The pictures become the new take's first-prompt images, so the record log shows them and a restart keeps them. |
+
+### Deviations from the plan's proposals
+
+- Routes are `POST`, not `PUT`/`DELETE`. `refuse()` accepts only JSON `POST`s, and the chrome transport sends only `GET` and `POST`.
+- The server, not the chrome, assigns ids and letters, so two chromes never pick the same letter.
+- The server also rechecks location, in the annotated render. A mark placed after input cannot be rechecked there; it is drawn at its stored place, and the brief says so.
+- Send is refused while the agent is off, so a pass is never spent on takes that cannot run.
+- The mark's preview may be the take's subject or any declared scenario of it, not only the take's recorded context, because the Takes canvas can show a take in the current context.
+
+### Contract readings the UI worker should know
+
+- A `Point` pin's `rect` has zero size at the click point. Draw the pin tip at `x, y`. A `Region` rect is the box.
+- `Replacing` ends after one placement and returns to the mode before it.
+- Pins exist only on frames with the mark's take identity, preview and device. Other marks appear only in the draft, as `Unresolved` with a reason that says what to show.
+- `onSend(revision)` with an old revision posts a notice and sends nothing.
+
+### Verification
+
+| Command | Result |
+|---|---|
+| `nix develop -c bun test test/marks.test.js test/anchor.test.ts test/markup-api.test.js test/chrome-markup.test.ts` | Unit, real-Chromium anchor, live-server route/Send, and app-wiring tests pass. Send is exercised with real renders and a refusing model endpoint. |
+| `nix develop -c node scripts/verify-markup.mjs` | 7 of 7 browser gates, no model spend: Alt-click marks and the part does not react; an open menu stays open when mark mode turns on and a point and a region are placed, with no frame reload; a second chrome sees the draft and its mark reaches the first; a reload keeps notes, and a mark placed after input is lost until the input repeats; the draft survives a Vite restart; a changed take turns its mark lost and blocks Send until it is removed; Send makes 2 new takes whose briefs hold only their own marks and one picture each. Evidence (pictures with pins, screenshots, `summary.json`) prints at the end. Last run: `/tmp/nix-shell.B60Mv8/caliper-markup-evidence-8NDCZJ`. |
+| `nix develop -c bun run typecheck` | Passes. |
+| `nix develop -c bun run verify:chrome-contract` | 17 scenarios, 106 hooks. The frozen gate is unchanged and passes. |
+| `nix develop -c env CALIPER_TEST_MODULES="$PWD/node_modules" bun test` (after `bun run build`) | 570 pass, 1 skip, 1 fail, 2,557 assertions across 51 files. The failure is the known 60-second timeout in `test/authored-execution.test.js`, which also fails at `110205a`. Without a build, the chrome-page and delivery tests fail because `dist/chrome` is missing; that is setup, not this change. |
+
+The gate uses the unstyled reference renderer on the real app wiring
+(`scripts/fixtures/markup-harness.tsx`). It proves effects, not Darkroom layout.
+The real-model gate on the pinned tool and Pico, the re-pin and the deploy are
+coordinator work after the UI branch lands.
+
+### Costs and limits
+
+- A mark placed after input (an open menu) is lost after any reload until the user repeats the input, and Send is blocked meanwhile. The fix is an input replay, a new plan.
+- Selector drift: an edit that adds a sibling above an unnamed element can move a mark. The text check turns most such moves lost; an element with the same leading text is not caught.
+- Alt-drag on the user's Linux desktop is not tested; the gate drives Chromium directly.
+- The picture shows the viewport at scroll 0. A mark below the fold is listed as outside the picture.
+- A pin can cover a short label in the picture; the brief repeats the element's text.
+- Rendering the pictures happens inside the Send request; any concurrent draft write during it makes Send answer 409.

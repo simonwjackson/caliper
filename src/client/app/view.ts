@@ -1,4 +1,4 @@
-import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView } from "../ui/contract"
+import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin } from "../ui/contract"
 import type { Derivation, StateRef, TakeView } from "../../types"
 import { DEVICES } from "../device-frame.js"
 import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js"
@@ -6,7 +6,13 @@ import { MAX_IMAGES } from "../images.js"
 import type { AppState } from "./state"
 import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, askAvailable, takeAvailable, takeName, frameKey } from "./state"
 
-export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[] }
+/** Marks as the markup controller sees them. `frame` reads its current locations; it does no I/O. */
+export type MarkupRegion = {
+  view: MarkupView
+  frame: (key: string, frame: Pick<FrameView, "take" | "preview">) => { markable: Availability; marks: readonly MarkPin[] }
+}
+export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
+const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }) }
 export const enabled: Availability = { _tag: "Enabled" }
 export const disabled = (reason: string): Availability => ({ _tag: "Disabled", reason })
 export function takeSummary(state: AppState, take: TakeView): TakeSummary {
@@ -69,14 +75,15 @@ function selectionLabel(state: AppState, subject: StateRef) {
   const own = state.project?.parts.find(part => part.file === subject.part)?.states.find(item => item.export === subject.state)?.label ?? subject.state
   return state.context ? `${own} in ${refLabel(state, state.context)}` : own
 }
-function canvas(state: AppState): CanvasView {
+function canvas(state: AppState, markup: MarkupRegion): CanvasView {
   const part = currentPart(state), subject = subjectRef(state), preview = previewRef(state)
   if (!part || (subject && !stateExists(state.project?.parts ?? [], subject))) return { _tag: "Empty", message: currentTake(state) ? "This take's editing state is no longer available. Restore it or discard the take." : "Pick a part from the list." }
   const frames: FrameView[] = []
   const add = (ref: StateRef, editing: StateRef, take: TakeView | null, label: string) => {
     const key = frameKey(ref, take), report = state.reports.get(key)
+    const marking = markup.frame(key, { take: take?.take ?? null, preview: ref })
     frames.push({ key, label, title: take ? take.files.join("\n") || "No changes yet" : `${refLabel(state, ref)} · ${ref.part}`, src: `frame?${new URLSearchParams({ part: ref.part, state: ref.state, ...(take ? { take: take.take } : {}) })}`, subject: editing, preview: ref, take: take?.take ?? null, selected: take ? take.take === state.take : state.take === null,
-      ...(take ? { run: take.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [], marks: [], markable: disabled("Take markup is not connected yet.") })
+      ...(take ? { run: take.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [], marks: marking.marks, markable: marking.markable })
   }
   if (state.shown._tag === "All" && part.states.length > 1) {
     for (const item of part.states) add({ part: part.file, state: item.export }, { part: part.file, state: item.export }, null, item.label)
@@ -105,12 +112,12 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
   const valid = state.plan._tag === "Review" ? state.plan.directions.filter(item => item.direction.title.trim() && item.direction.brief.trim()).length : 0
   const snapshot: ChromeView = {
     connection: state.connection, selection: subject && preview ? { _tag: "State", subject, preview, label: selectionLabel(state, subject) } : state.part ? { _tag: "All", part: state.part } : { _tag: "None" },
-    navigation: navigation(state, regions), devices: DEVICES, device: state.device, pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: canvas(state),
+    navigation: navigation(state, regions), devices: DEVICES, device: state.device, pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: canvas(state, regions.markup ?? noMarkup),
     plan: state.plan._tag === "Planning" ? { _tag: "Planning", prompt: state.plan.ask.prompt, count: state.plan.count, message: `Asking the model for ${state.plan.count} different directions…` } : state.plan._tag === "Review" ? { _tag: "Review", prompt: state.plan.ask.prompt, note: state.plan.note, directions: state.plan.directions, start: !busy && valid && agentReady && state.connection._tag === "Ready" && askAvailable(state, state.plan.ask) ? enabled : disabled("No valid directions, unavailable planned subject/context, disconnected Vite, or pending request."), startLabel: `Start ${valid} ${valid === 1 ? "take" : "takes"}` } : { _tag: "None" },
     composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
       notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
-    markup: { _tag: "Unavailable", reason: "Take markup is not connected yet." },
+    markup: (regions.markup ?? noMarkup).view,
     focusedTake: summary,
     record: take && summary && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },
     code: regions.code, knobs: regions.knobs, checks: regions.checks,

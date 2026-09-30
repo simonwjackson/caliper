@@ -80,7 +80,7 @@ export function refLabel(state: AppState, ref: StateRef) {
   return `${part?.name ?? ref.part} · ${part?.states.find(candidate => candidate.export === ref.state)?.label ?? ref.state}`
 }
 export function takeName(take: TakeView) { return take.name ?? take.direction?.title ?? `Take ${take.take}` }
-export function frameKey(preview: StateRef, take: TakeView | null) { return JSON.stringify([preview.part, preview.state, take?.take ?? null, take?.created ?? null]) }
+export function frameKey(preview: StateRef, take: Pick<TakeView, "take" | "created"> | null) { return JSON.stringify([preview.part, preview.state, take?.take ?? null, take?.created ?? null]) }
 export function locationHash(state: AppState) {
   const params = new URLSearchParams()
   if (state.part) params.set("part", state.part)

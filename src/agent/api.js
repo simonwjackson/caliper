@@ -148,6 +148,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       return trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `marks-${Date.now()}`), executablePath: chromium, signal: shutdown.signal }))
     },
     onDraft: onMarks,
+    agentProblem: () => connection === null ? (status._tag === "Failed" ? `${status.reason} ${status.hint}` : "The agent is off. Add agent: { model } to caliper() in vite.config.") : null,
   })
 
   /** Checks hold a take still until they finish, including follow-up and discard. */

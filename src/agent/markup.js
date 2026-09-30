@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs"
 import { Check } from "typebox/value"
 import { DEVICES } from "../client/device-frame.js"
-import { sameState } from "../client/scenarios.js"
+import { contextsFor, sameState } from "../client/scenarios.js"
 import { json, readJson, refuse } from "../http.js"
 import { planSend } from "../takes/send-plan.js"
 import { MarkChangeSchema, NewMarkSchema, RevisionSchema } from "../takes/marks-contract.js"
@@ -35,18 +35,26 @@ import { markupMessage } from "./markup-message.js"
  *   validateTake: (parts: readonly import("../types").Part[], record: TakeRecord) => void,
  *   render: (jobs: RenderJob[]) => Promise<RenderResult[]>,
  *   onDraft: (draft: Draft) => void,
+ *   agentProblem: () => string | null,
  * }} input
  *   `render` renders take jobs with annotations. `onDraft` tells every chrome about a new draft.
+ *   `agentProblem` says why no agent can start, so Send never spends the draft on takes that cannot run.
  */
-export function createMarkupApi({ store, marks, agents, project, validateTake, render, onDraft }) {
+export function createMarkupApi({ store, marks, agents, project, validateTake, render, onDraft, agentProblem }) {
   let sending = false
 
-  /** The take a mark goes on must exist at that creation time, be an experiment, and show that preview. @param {Mark["source"]} source @param {Mark["preview"]} preview @param {string} device */
-  const markable = (source, preview, device) => {
+  /**
+   * The take a mark goes on must exist at that creation time and be an
+   * experiment. The preview is its subject or a declared scenario of it.
+   *
+   * @param {Mark["source"]} source @param {Mark["preview"]} preview @param {string} device
+   */
+  const markable = async (source, preview, device) => {
     const record = store.record(source.take)
     if (record === null || record.created !== source.created) throw new Error(`Take ${source.take} is no longer the take you marked. Reload the takes.`)
     if (record.integration) throw new Error(`Take ${source.take} is an alternate. Alternates have their own review and cannot be marked.`)
-    if (!sameState(preview, record.context ?? record)) throw new Error(`Take ${source.take} does not show ${preview.part} · ${preview.state}.`)
+    const { parts } = await project()
+    if (!sameState(preview, record) && !contextsFor(parts, record).some(context => sameState(context, preview))) throw new Error(`Take ${source.take} does not show ${preview.part} · ${preview.state}.`)
     if (!DEVICES.some(candidate => candidate.id === device)) throw new Error(`Caliper has no device "${device}".`)
   }
 
@@ -79,7 +87,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       const [, , id = "", action = ""] = path.split("/")
       if (path === "/marks") {
         if (!Check(NewMarkSchema, body)) throw new Error("A new mark needs the draft revision, its take, preview, device and anchor.")
-        markable(body.source, body.preview, body.device)
+        await markable(body.source, body.preview, body.device)
         const added = marks.add(body.revision, { source: body.source, preview: body.preview, device: body.device, anchor: body.anchor })
         changed(added.draft)
         json(response, 201, added)
@@ -110,6 +118,8 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
    */
   const send = async revision => {
     if (sending) throw new Error("A Send is already running. Wait for it to finish.")
+    const problem = agentProblem()
+    if (problem !== null) throw new Error(problem)
     sending = true
     try {
       const draft = marks.current(revision)
