@@ -10,9 +10,9 @@ const takes: readonly SendTake[] = [
   { take: "3", created: 300, kind: "Experiment", run: { _tag: "Idle" } },
 ]
 const marks: readonly SendMark[] = [
-  { id: "1A", source: first, location: { _tag: "Located" } },
-  { id: "2A", source: second, location: { _tag: "Located" } },
-  { id: "1B", source: first, location: { _tag: "Located" } },
+  { id: "1A", name: "1A", source: first, location: { _tag: "Located" } },
+  { id: "2A", name: "2A", source: second, location: { _tag: "Located" } },
+  { id: "1B", name: "1B", source: first, location: { _tag: "Located" } },
 ]
 
 test("one Send makes one new take per marked parent, not per mark", () => {
@@ -27,7 +27,7 @@ test("one Send makes one new take per marked parent, not per mark", () => {
 })
 
 test("a running parent blocks the whole pass even when another parent is ready", () => {
-  const pass: readonly SendMark[] = [...marks, { id: "3A", source: { take: "3", created: 300 }, location: { _tag: "Located" } }]
+  const pass: readonly SendMark[] = [...marks, { id: "3A", name: "3A", source: { take: "3", created: 300 }, location: { _tag: "Located" } }]
   const result = planSend(pass, takes.map(take => take.take === "2" ? { ...take, run: { _tag: "Running" } } : take))
   expect(result._tag).toBe("Blocked")
   expect(result.groups[0]?.reasons).toEqual([])
@@ -71,6 +71,16 @@ test("a failed but stopped parent is markable, and planning never mutates inputs
   expect({ marks, takes }).toEqual(before)
   const result = planSend(marks, takes)
   expect(result.groups[0]?.source).not.toBe(first)
+})
+
+test("reasons name a mark by its take and letter, never by its opaque id", () => {
+  const opaque = { id: "48c523ff-f955-4536-8a8a-1c74b597f744", name: "2A", source: second, location: { _tag: "Lost" as const, reason: "Element not found." } }
+  const lost = planSend([opaque], takes)
+  expect(lost._tag).toBe("Blocked")
+  if (lost._tag === "Blocked") expect(lost.reasons).toEqual(["2A: Element not found."])
+  const twice = planSend([{ ...opaque, location: { _tag: "Located" } }, { ...opaque, location: { _tag: "Located" } }], takes)
+  if (twice._tag === "Blocked") expect(twice.reasons.join(" ")).not.toContain(opaque.id)
+  expect(twice._tag).toBe("Blocked")
 })
 
 test("duplicate mark ids block rather than launching ambiguous jobs", () => {

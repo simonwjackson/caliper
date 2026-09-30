@@ -209,7 +209,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
    */
   const check = draft => {
     const takes = agents.views().map(view => ({ take: view.take, created: view.created, kind: /** @type {"Alternate" | "Experiment"} */ (view.integration ? "Alternate" : "Experiment"), run: view.run }))
-    const plan = planSend(draft.marks.map(mark => ({ id: mark.id, source: mark.source, location: { _tag: "Located" } })), takes)
+    const plan = planSend(draft.marks.map(mark => ({ id: mark.id, name: `${mark.source.take}${mark.letter}`, source: mark.source, location: { _tag: "Located" } })), takes)
     if (plan._tag === "Empty") throw new Error("The draft has no marks to send.")
     if (plan._tag === "Blocked") throw new Error(plan.reasons.join("\n"))
     return plan

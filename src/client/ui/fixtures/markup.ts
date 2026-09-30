@@ -73,7 +73,7 @@ export function withMarkup(view: ChromeView, marks: readonly LocalMark[], state:
     const identity = frameIdentity(frame)
     return identity ? [{ ...identity, kind: "Experiment" as const, run: frame.run ?? { _tag: "Idle" as const } }] : []
   })
-  const plan = planSend(marks.map(mark => ({ id: mark.id, source: mark.source, location: mark.location })), takes)
+  const plan = planSend(marks.map(mark => ({ id: mark.id, name: `${mark.source.take}${mark.letter}`, source: mark.source, location: mark.location })), takes)
   const draftMark = (mark: LocalMark): DraftMarkView => ({
     id: mark.id, letter: mark.letter, kind: mark.kind, rect: mark.rect, location: mark.location,
     name: `${mark.source.take}${mark.letter}`, note: mark.note, previewLabel: mark.previewLabel, deviceLabel: mark.deviceLabel,

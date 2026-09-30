@@ -277,7 +277,7 @@ export function createMarkupController(input: MarkupInput) {
     const sending = send._tag === "Sending"
     const takes = (state.takes?.takes ?? []).map(take => ({ take: take.take, created: take.created, kind: take.integration ? "Alternate" as const : "Experiment" as const, run: take.run }))
     const where = (mark: Mark) => found.get(mark.id) ?? locate(mark)
-    const plan = planSend(marks.map(mark => ({ id: mark.id, source: mark.source, location: where(mark).location })), takes)
+    const plan = planSend(marks.map(mark => ({ id: mark.id, name: nameOf(mark), source: mark.source, location: where(mark).location })), takes)
     const busy = sending ? disabled("Sending the draft.") : enabled
     const markView = (mark: Mark): DraftMarkView => ({
       id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where(mark).rect, location: where(mark).location,

@@ -70,7 +70,7 @@ export function markupView(state: "empty" | "ready" | "lost" | "blocked" | "send
     { id: "mark-6-a", letter: "A", name: "6A", note: "Keep this spacing", kind: "Point", rect: { x: 20, y: 30, width: 40, height: 20 }, location: state === "lost" ? { _tag: "Lost", reason: "Element not found. Re-place or remove 6A." } : { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
     { id: "mark-7-a", letter: "A", name: "7A", note: "Reduce this area", kind: "Region", rect: { x: 60, y: 80, width: 100, height: 60 }, location: { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
   ]
-  const plan = planSend(marks.map((mark, index) => ({ id: mark.id, source: sources[index]!, location: mark.location })), sources.map(source => ({ ...source, kind: "Experiment", run: { _tag: state === "blocked" && source.take === "7" ? "Running" : "Idle" } })))
+  const plan = planSend(marks.map((mark, index) => ({ id: mark.id, name: mark.name, source: sources[index]!, location: mark.location })), sources.map(source => ({ ...source, kind: "Experiment", run: { _tag: state === "blocked" && source.take === "7" ? "Running" : "Idle" } })))
   const availability: Availability = plan._tag === "Ready" ? enabled : { _tag: "Disabled", reason: plan._tag === "Empty" ? "Add a mark first" : plan.reasons.join(" ") }
   const sending = state === "sending"
   const draftMarks = marks.map(mark => sending ? { ...mark, edit: blocked, remove: blocked, replace: blocked } : mark)

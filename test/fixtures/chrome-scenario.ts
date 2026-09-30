@@ -55,7 +55,7 @@ export function createChromeScenario(initial: ChromeView) {
         const frame = view.canvas._tag === "Frames" ? view.canvas.frames.find(frame => frame.key === `${group.source.take}@${group.source.created}`) : undefined
         return frame ? [{ ...group.source, kind: "Experiment" as const, run: frame.run ?? { _tag: "Idle" as const } }] : []
       })
-      const plan = planSend(groups.flatMap(group => group.marks.map(mark => ({ id: mark.id, source: group.source, location: mark.location }))), takes)
+      const plan = planSend(groups.flatMap(group => group.marks.map(mark => ({ id: mark.id, name: mark.name, source: group.source, location: mark.location }))), takes)
       const refreshed = groups.map(group => {
         const planned = plan.groups.find(row => row.source.take === group.source.take && row.source.created === group.source.created)
         if (!planned) throw new Error("The Send policy omitted a draft group")

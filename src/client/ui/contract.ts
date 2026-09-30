@@ -68,7 +68,11 @@ export type MarkRect = MarkPoint & { readonly width: number; readonly height: nu
 export type MarkPin = {
   /** Opaque draft id. Take number plus letter is a display name, never a mutation identity. */
   readonly id: string; readonly letter: string; readonly kind: "Point" | "Region"
-  /** Resolved rect, or the last known rect for a lost/unresolved mark, in device viewport CSS px. */
+  /**
+   * Resolved rect, or the last known rect for a lost/unresolved mark, in device viewport CSS px.
+   * A `Point` rect has zero width and height and sits at the clicked point, so its
+   * centre is the pin's tip. A `Region` rect is the marked box.
+   */
   readonly rect: MarkRect; readonly location: MarkLocation
 }
 export type DraftMarkView = MarkPin & {

@@ -7,7 +7,9 @@
  *
  * @typedef {{ readonly take: string, readonly created: number }} TakeIdentity
  * @typedef {{ readonly _tag: "Located" } | { readonly _tag: "Lost" | "Unresolved", readonly reason: string }} MarkLocation
- * @typedef {{ readonly id: string, readonly source: TakeIdentity, readonly location: MarkLocation }} SendMark
+ * A mark's `name` is its display name, the take number and letter ("3A").
+ * Reasons use it; the opaque `id` never reaches the user.
+ * @typedef {{ readonly id: string, readonly name: string, readonly source: TakeIdentity, readonly location: MarkLocation }} SendMark
  * @typedef {TakeIdentity & { readonly kind: "Experiment" | "Alternate", readonly run: import('../types').TakeRun }} SendTake
  * @typedef {{ readonly source: TakeIdentity, readonly marks: readonly string[], readonly reasons: readonly string[] }} SendGroup
  * @typedef {{ readonly markCount: number, readonly takeCount: number, readonly label: string, readonly groups: readonly SendGroup[] }} SendCounts
@@ -36,10 +38,10 @@ export function planSend(marks, takes) {
       else if (parent.kind === "Alternate") group.reasons.push(`Take ${parent.take} is an alternate and cannot receive marks.`)
       else if (parent.run._tag === "Running") group.reasons.push(`Take ${parent.take} is still running. Stop its agent or wait.`)
     }
-    if (ids.has(mark.id)) group.reasons.push(`Mark ${mark.id} appears more than once in the draft.`)
+    if (ids.has(mark.id)) group.reasons.push(`Mark ${mark.name} appears more than once in the draft.`)
     ids.add(mark.id)
     group.marks.push(mark.id)
-    if (mark.location._tag !== "Located") group.reasons.push(`Mark ${mark.id}: ${mark.location.reason}`)
+    if (mark.location._tag !== "Located") group.reasons.push(`${mark.name}: ${mark.location.reason}`)
   }
   const groups = [...grouped.values()]
   const reasons = groups.flatMap(group => group.reasons)
