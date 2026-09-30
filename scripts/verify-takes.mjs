@@ -51,6 +51,8 @@ const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "
 const failures = []
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })
+  // Accept and Discard confirm; one handler answers every confirm in the run.
+  page.on("dialog", dialog => void dialog.accept())
   page.on("pageerror", error => failures.push(`chrome page error: ${error.message}`))
   const selection = new URLSearchParams({ part: args.part, state: args.state, device: "rg353m" })
   if (args["context-part"]) {
@@ -140,7 +142,6 @@ try {
   if (args.accept) {
     assert(args.root, "--accept needs --root, the project folder, to check the real files")
     const root = /** @type {string} */ (args.root)
-    page.on("dialog", dialog => dialog.accept())
     await page.setViewportSize({ width:1800,height:1000 })
     const [chosen, ...rest] = ids
     /** @type {import('../src/types').TakesSnapshot} */
@@ -159,7 +160,7 @@ try {
     ids.splice(0, ids.length, ...rest)
   }
   if (!args.keep) {
-    page.on("dialog", dialog => dialog.accept())
+    // One handler for the whole run: accept and discard each confirm once.
     await page.setViewportSize({ width:1800,height:1000 })
     for (const id of ids) {
       await (await reveal(page, page.locator(`${cal.nav} ${cal.navTake}[data-take="${id}"]`))).click()
