@@ -12,9 +12,14 @@ import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, 
 export type MarkupRegion = {
   view: MarkupView
   frame: (key: string, frame: Pick<FrameView, "take" | "preview">) => { markable: Availability; marks: readonly MarkPin[] }
+  /** Names of marks on the original that go with the typed prompt (planner choice 14). */
+  withPrompt: readonly string[]
 }
+const promptMarks = (names: readonly string[]): ChromeView["composer"]["marks"] => names.length
+  ? { _tag: "WithPrompt", names, label: `${names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`} ${names.length === 1 ? "goes" : "go"} with this prompt.` }
+  : { _tag: "None" }
 export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
-const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }) }
+const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }), withPrompt: [] }
 /** A take as the chain policy reads it: its subject, files, and the chain fields of its record. */
 const chainTake = (take: TakeView): ChainTake => ({
   take: take.take, created: take.created, part: take.part, state: take.state, files: take.files,
@@ -166,6 +171,7 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
     plan: state.plan._tag === "Planning" ? { _tag: "Planning", prompt: state.plan.ask.prompt, count: state.plan.count, message: `Asking the model for ${state.plan.count} different directions…` } : state.plan._tag === "Review" ? { _tag: "Review", prompt: state.plan.ask.prompt, note: state.plan.note, directions: state.plan.directions, start: !busy && valid && agentReady && state.connection._tag === "Ready" && askAvailable(state, state.plan.ask) ? enabled : disabled("No valid directions, unavailable planned subject/context, disconnected Vite, or pending request."), startLabel: `Start ${valid} ${valid === 1 ? "take" : "takes"}` } : { _tag: "None" },
     composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
+      marks: promptMarks(state.plan._tag === "None" ? (regions.markup ?? noMarkup).withPrompt : []),
       notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
     markup: (regions.markup ?? noMarkup).view,
     focusedTake: summary,

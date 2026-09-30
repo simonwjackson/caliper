@@ -155,6 +155,7 @@ function Composer({ view, actions }: ChromeProps) {
         if (event.shiftKey) { if (composer.follow && !disabled(composer.follow.availability)) actions.onFollow(composer.follow.take) }
         else if (view.plan._tag === "None" && !disabled(composer.start)) actions.onStart()
       }} />
+    {composer.marks._tag === "WithPrompt" && <p data-cal={CAL.promptMarks}>{composer.marks.label}</p>}
     <ul data-cal={CAL.attachments}>{composer.attachments.map(image => <li key={image.id}><img src={image.url} alt={image.name} /><Action hook={CAL.attachmentRemove} availability={image.remove} action={() => actions.onRemoveAttachment(image.id)}>Remove {image.name}</Action></li>)}</ul>
     <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={event => { actions.onAttach([...event.currentTarget.files ?? []]); event.currentTarget.value = "" }} />
     <Action hook={CAL.attach} availability={composer.attach} action={() => picker.current?.click()}>Add image</Action>
@@ -377,10 +378,12 @@ function MarkupReference({ view, actions }: ChromeProps) {
       {markup.groups.length === 0 && <p>No draft marks.</p>}
       {markup.groups.map(group => <section key={`${group.source.take}@${group.source.created}`} data-take={group.source.take} data-created={group.source.created}>
         <h2>{group.label}</h2>
-        <p>{group.decision._tag === "Ready" ? "Will make one new take" : group.decision.reasons.join(" ")}</p>
+        <p data-cal={CAL.draftOutcome} data-outcome={group.outcome._tag}>{group.outcome.label}</p>
+        {group.decision._tag === "Blocked" && <p>{group.decision.reasons.join(" ")}</p>}
         <ul>{group.marks.map(mark => <li key={mark.id} data-mark-id={mark.id}>
           <button type="button" data-cal={CAL.markEdit} data-mark-id={mark.id} disabled={mark.edit._tag === "Disabled"} onClick={() => actions.onMarkEdit(mark.id)}>{mark.name}</button>
           <p>{mark.note} · {mark.previewLabel} · {mark.deviceLabel}</p>
+          {mark.references.length > 0 && <p>Points to {mark.references.join(", ")}</p>}
           {mark.location._tag !== "Located" && <p role="status">{mark.location.reason}</p>}
           <button type="button" data-cal={CAL.markReplace} data-mark-id={mark.id} disabled={mark.replace._tag === "Disabled"} onClick={() => actions.onMarkReplace(mark.id)}>Re-place {mark.name}</button>
           <button type="button" data-cal={CAL.markRemove} data-mark-id={mark.id} disabled={mark.remove._tag === "Disabled"} onClick={() => actions.onMarkRemove(mark.id)}>Remove {mark.name}</button>
@@ -392,6 +395,11 @@ function MarkupReference({ view, actions }: ChromeProps) {
         onChange={event => { if (markup.editor._tag === "Open") actions.onMarkNote(markup.editor.id, event.currentTarget.value) }}
         onKeyDown={event => { if (event.key === "Escape" || event.key === "Enter") { event.preventDefault(); actions.onMarkEdit(null) } }} />
       <button type="button" data-cal={CAL.markEditorClose} onClick={() => actions.onMarkEdit(null)}>Close note</button>
+      <ul aria-label="Marks this note can point to">{markup.editor.references.map(option => <li key={option.id}>
+        <button type="button" data-cal={CAL.markReference} data-mark-id={option.id} disabled={markup.editor._tag !== "Open" || markup.editor.edit._tag === "Disabled"}
+          onClick={() => { if (markup.editor._tag === "Open") actions.onMarkNote(markup.editor.id, `${markup.editor.note}${markup.editor.note && !markup.editor.note.endsWith(" ") ? " " : ""}${option.name}`) }}>
+          {option.name} · {option.label}{option.note ? ` · ${option.note}` : ""}{option.crop ? "" : " · no picture"}</button>
+      </li>)}</ul>
     </label>}
     <button type="button" data-cal={CAL.send} disabled={unavailable} title={reason} onClick={() => actions.onSend(markup.revision)}>{send.label}</button>
     {unavailable && <p role="status">{reason}</p>}

@@ -25,6 +25,15 @@ export const TakeIdentitySchema = Type.Object({
   created: Type.Number({ minimum: 0, maximum: 8.64e15 }),
 }, { additionalProperties: false })
 
+/**
+ * Where a mark was placed: a take, or the original (the real files) as
+ * `{ take: "0", created: 0 }`, so its marks are named "0A" (plan decision 8).
+ */
+export const MarkSourceSchema = Type.Union([
+  TakeIdentitySchema,
+  Type.Object({ take: Type.Literal("0"), created: Type.Literal(0) }, { additionalProperties: false }),
+])
+
 /** One element as the agent reads it. `box` is where it was when the mark was placed. */
 export const MarkElementSchema = Type.Object({
   selector: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -51,8 +60,10 @@ export const MarkAnchorSchema = Type.Object({
 
 export const MarkSchema = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 100 }),
-  source: TakeIdentitySchema,
+  source: MarkSourceSchema,
   preview: StateRefSchema,
+  /** Only on the original: the editing subject a take made from this mark edits. A take's subject is in its record. */
+  subject: Type.Optional(StateRefSchema),
   device: Type.String({ minLength: 1, maxLength: 100 }),
   /** A to Z, then AA, AB and so on. Unique per take identity in the draft. */
   letter: Type.String({ pattern: "^[A-Z]{1,3}$" }),
@@ -68,8 +79,9 @@ export const DraftSchema = Type.Object({
 /** What the chrome sends to add a mark. The server picks its id and letter. */
 export const NewMarkSchema = Type.Object({
   revision: Type.Integer({ minimum: 0 }),
-  source: TakeIdentitySchema,
+  source: MarkSourceSchema,
   preview: StateRefSchema,
+  subject: Type.Optional(StateRefSchema),
   device: Type.String({ minLength: 1, maxLength: 100 }),
   anchor: MarkAnchorSchema,
 }, { additionalProperties: false })
@@ -82,6 +94,12 @@ export const MarkChangeSchema = Type.Object({
 }, { additionalProperties: false })
 
 export const RevisionSchema = Type.Object({ revision: Type.Integer({ minimum: 0 }) }, { additionalProperties: false })
+
+/** Marks on the original that went with a prompt and now leave the draft (planner choice 14). */
+export const ReleaseSchema = Type.Object({
+  revision: Type.Integer({ minimum: 0 }),
+  ids: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: MAX_MARKS }),
+}, { additionalProperties: false })
 
 export const DraftResponseSchema = Type.Object({ draft: DraftSchema })
 export const AddedMarkSchema = Type.Object({ id: Type.String(), draft: DraftSchema })

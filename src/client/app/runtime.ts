@@ -89,7 +89,7 @@ export function createChromeApp(input: RuntimeInput) {
       const current = state
       snapshot = toChromeView(state, {
         code: code.getView(), knobs: knobs.getView(), checks: checks.getView(), integration: integrationView, badges: [...badges, ...originalBadges].flatMap(row => row.badge ? [{ ...row, badge: row.badge }] : []),
-        markup: { view: markup.getView(), frame: (key, frame) => ({ markable: markup.markable(frame, current), marks: markup.pins(key, frame, current) }) },
+        markup: { view: markup.getView(), frame: (key, frame) => ({ markable: markup.markable(frame, current), marks: markup.pins(key, frame, current) }), withPrompt: markup.withPrompt(current).names },
       })
       for (const listener of subscribers) listener()
     } finally { publishing = false }

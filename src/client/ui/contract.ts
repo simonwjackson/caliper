@@ -78,10 +78,36 @@ export type MarkPin = {
 export type DraftMarkView = MarkPin & {
   readonly name: string; readonly note: string; readonly previewLabel: string; readonly deviceLabel: string
   readonly edit: Availability; readonly remove: Availability; readonly replace: Availability
+  /**
+   * Phase 6. Names of marks on other takes or the original that this note points to,
+   * in the order written ("use 2A here" gives ["2A"]). The note text holds them; the
+   * UI may set them apart but must not rewrite the note.
+   */
+  readonly references: readonly string[]
 }
+/**
+ * Phase 6 (plan decisions 7 and 8, planner choice 14). What Send, or New take,
+ * does with one group. `label` is a full sentence for the draft row, for example
+ * "Send makes take 4's next take." or "Pointed to by 3A; makes no take."
+ * `WithPrompt`: marks on the original that go with the typed prompt when you press
+ * New take, and then leave the draft.
+ */
+export type MarkupOutcome = { readonly _tag: "NewTake" | "PointedTo" | "WithPrompt"; readonly label: string }
 export type MarkupGroup = {
+  /** Phase 6: the original (the real files) is `{ take: "0", created: 0 }`; its marks are named "0A". */
   readonly source: TakeIdentity; readonly label: string; readonly marks: readonly DraftMarkView[]
   readonly decision: { readonly _tag: "Ready" } | { readonly _tag: "Blocked"; readonly reasons: readonly string[] }
+  readonly outcome: MarkupOutcome
+}
+/**
+ * Phase 6 type-ahead. A mark the open note can point to: on another take or on the
+ * original. The UI inserts `name` into the note through `onMarkNote`. `crop` lets the
+ * UI draw the place: the frame `src` at `viewport` CSS px, clipped to `rect`
+ * (document-origin CSS px of that frame). Null when the mark is lost.
+ */
+export type ReferenceOption = {
+  readonly id: string; readonly name: string; readonly note: string; readonly label: string
+  readonly crop: { readonly src: string; readonly viewport: { readonly width: number; readonly height: number }; readonly rect: MarkRect } | null
 }
 export type MarkMode = { readonly _tag: "Off" } | { readonly _tag: "Marking" } | { readonly _tag: "Replacing"; readonly id: string }
 export type MarkupSend =
@@ -93,7 +119,11 @@ export type MarkupView =
   | {
       readonly _tag: "Ready"; readonly revision: number; readonly mode: MarkMode; readonly draftOpen: boolean
       readonly groups: readonly MarkupGroup[]; readonly send: MarkupSend
-      readonly editor: { readonly _tag: "Closed" } | { readonly _tag: "Open"; readonly id: string; readonly name: string; readonly note: string; readonly edit: Availability }
+      readonly editor: { readonly _tag: "Closed" } | {
+        readonly _tag: "Open"; readonly id: string; readonly name: string; readonly note: string; readonly edit: Availability
+        /** Phase 6: every mark this note can point to, in draft order. The UI filters it as you type. */
+        readonly references: readonly ReferenceOption[]
+      }
     }
 
 export type FrameView = {
@@ -102,7 +132,7 @@ export type FrameView = {
   readonly subject: StateRef; readonly preview: StateRef; readonly take: string | null
   readonly selected: boolean; readonly run?: TakeRun; readonly verdict: FrameVerdict
   readonly problems: readonly FrameProblem[]
-  /** Original and alternate frames are not markable in phase 4. Running experiments can receive marks. */
+  /** Phase 6: the original frame is markable too. Alternate frames are not. Running experiments can receive marks. */
   readonly markable: Availability; readonly marks: readonly MarkPin[]
 }
 /**
@@ -172,6 +202,12 @@ export type ComposerView = {
   readonly attachments: readonly AttachmentView[]; readonly count: 1 | 2 | 3 | 4
   readonly start: Availability; readonly startLabel: string
   readonly follow: { readonly take: string; readonly label: string; readonly availability: Availability } | null
+  /**
+   * Phase 6 (planner choice 14). Marks on the original that go with this prompt when
+   * you press New take, for example "0A and 0B go with this prompt." They then leave
+   * the draft. Marks a note points to stay for Send.
+   */
+  readonly marks: { readonly _tag: "None" } | { readonly _tag: "WithPrompt"; readonly names: readonly string[]; readonly label: string }
   readonly notices: readonly Notice[]
   readonly agent: { readonly _tag: "Connecting" } | AgentStatus; readonly skills: SkillsStatus
 }

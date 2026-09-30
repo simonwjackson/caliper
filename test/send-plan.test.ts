@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { planSend } from "../src/takes/send-plan.js"
+import { ORIGINAL, planSend, referencesIn } from "../src/takes/send-plan.js"
 import type { SendMark, SendTake } from "../src/takes/send-plan.js"
 
 const first = { take: "1", created: 100 }
@@ -10,9 +10,9 @@ const takes: readonly SendTake[] = [
   { take: "3", created: 300, kind: "Experiment", run: { _tag: "Idle" } },
 ]
 const marks: readonly SendMark[] = [
-  { id: "1A", name: "1A", source: first, location: { _tag: "Located" } },
-  { id: "2A", name: "2A", source: second, location: { _tag: "Located" } },
-  { id: "1B", name: "1B", source: first, location: { _tag: "Located" } },
+  { id: "1A", name: "1A", note: "", source: first, location: { _tag: "Located" } },
+  { id: "2A", name: "2A", note: "", source: second, location: { _tag: "Located" } },
+  { id: "1B", name: "1B", note: "", source: first, location: { _tag: "Located" } },
 ]
 
 test("one Send makes one new take per marked parent, not per mark", () => {
@@ -27,7 +27,7 @@ test("one Send makes one new take per marked parent, not per mark", () => {
 })
 
 test("a running parent blocks the whole pass even when another parent is ready", () => {
-  const pass: readonly SendMark[] = [...marks, { id: "3A", name: "3A", source: { take: "3", created: 300 }, location: { _tag: "Located" } }]
+  const pass: readonly SendMark[] = [...marks, { id: "3A", name: "3A", note: "", source: { take: "3", created: 300 }, location: { _tag: "Located" } }]
   const result = planSend(pass, takes.map(take => take.take === "2" ? { ...take, run: { _tag: "Running" } } : take))
   expect(result._tag).toBe("Blocked")
   expect(result.groups[0]?.reasons).toEqual([])
@@ -74,7 +74,7 @@ test("a failed but stopped parent is markable, and planning never mutates inputs
 })
 
 test("reasons name a mark by its take and letter, never by its opaque id", () => {
-  const opaque = { id: "48c523ff-f955-4536-8a8a-1c74b597f744", name: "2A", source: second, location: { _tag: "Lost" as const, reason: "Element not found." } }
+  const opaque = { id: "48c523ff-f955-4536-8a8a-1c74b597f744", name: "2A", note: "", source: second, location: { _tag: "Lost" as const, reason: "Element not found." } }
   const lost = planSend([opaque], takes)
   expect(lost._tag).toBe("Blocked")
   if (lost._tag === "Blocked") expect(lost.reasons).toEqual(["2A: Element not found."])
@@ -85,4 +85,51 @@ test("reasons name a mark by its take and letter, never by its opaque id", () =>
 
 test("duplicate mark ids block rather than launching ambiguous jobs", () => {
   expect(planSend([marks[0]!, marks[0]!], takes)._tag).toBe("Blocked")
+})
+
+// Phase 6: references between takes (decisions 6 and 7) and marks on the original (decision 8).
+const located = { _tag: "Located" } as const
+const mark = (name: string, note = "", source = name.startsWith("0") ? ORIGINAL : name.startsWith("1") ? first : second): SendMark => ({ id: `id-${name}`, name, note, source, location: located })
+
+test("a note names marks on other takes by take and letter; its own take and unknown names are not references", () => {
+  const names = ["1A", "2A", "2B", "0A"]
+  expect(referencesIn("use 2A here, and 0A. Not 2C, not x2Ay, and 1A is mine", "1", names)).toEqual(["2A", "0A"])
+  expect(referencesIn("2a lower case is not a name", "1", names)).toEqual([])
+  expect(referencesIn("2A and 2A again", "1", names)).toEqual(["2A"])
+})
+
+test("a take whose marks are all pointed to makes no new take; its marks go with the pointing take", () => {
+  const result = planSend([mark("1A", "use 2A here"), mark("2A", "nice spacing")], takes)
+  expect(result._tag).toBe("Ready")
+  expect(result.takeCount).toBe(1)
+  expect(result.label).toBe("Send · 1 new take")
+  expect(result.groups.map(group => [group.source.take, group.outcome._tag, group.pointsTo])).toEqual([["1", "NewTake", ["id-2A"]], ["2", "PointedTo", []]])
+})
+
+test("one mark nobody points to is enough for a take to get a new take", () => {
+  const result = planSend([mark("1A", "use 2A here"), mark("2A"), mark("2B", "too loud")], takes)
+  expect(result.takeCount).toBe(2)
+  expect(result.groups.map(group => group.outcome._tag)).toEqual(["NewTake", "NewTake"])
+})
+
+test("marks on the original: pointed to they never make a take; unpointed they make one take from the real files", () => {
+  const pointed = planSend([mark("1A", "restore 0A"), mark("0A")], takes)
+  expect(pointed.groups.map(group => [group.source.take, group.outcome._tag])).toEqual([["1", "NewTake"], ["0", "PointedTo"]])
+  expect(pointed.takeCount).toBe(1)
+  const alone = planSend([mark("0A", "too big"), mark("0B")], [])
+  expect(alone).toMatchObject({ _tag: "Ready", takeCount: 1 })
+  expect(alone.groups[0]).toMatchObject({ source: ORIGINAL, outcome: { _tag: "NewTake" }, reasons: [] })
+})
+
+test("marks that only point at each other make nothing, and Send says why", () => {
+  const result = planSend([mark("1A", "like 2A"), mark("2A", "like 1A")], takes)
+  expect(result._tag).toBe("Blocked")
+  expect(result.takeCount).toBe(0)
+  if (result._tag === "Blocked") expect(result.reasons).toEqual(["Every mark is pointed to by another note, so Send makes no take. Add a mark that no note points to."])
+})
+
+test("a lost mark that a note points to still blocks the pass", () => {
+  const result = planSend([mark("1A", "use 2A"), { ...mark("2A"), location: { _tag: "Lost", reason: "Element not found." } }], takes)
+  expect(result._tag).toBe("Blocked")
+  if (result._tag === "Blocked") expect(result.reasons).toEqual(["2A: Element not found."])
 })

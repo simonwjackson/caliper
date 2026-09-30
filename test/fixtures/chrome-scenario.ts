@@ -1,5 +1,5 @@
 import type { ChromeActions, ChromeView } from "../../src/client/ui/contract"
-import { planSend } from "../../src/takes/send-plan.js"
+import { planSend, referencesIn } from "../../src/takes/send-plan.js"
 import { chainsView } from "./chrome-view"
 
 export type ObservedCall = { [K in keyof ChromeActions]: { readonly name: K; readonly args: Parameters<ChromeActions[K]> } }[keyof ChromeActions]
@@ -51,13 +51,16 @@ export function createChromeScenario(initial: ChromeView) {
       if (view.markup._tag !== "Ready") return
       const mark = view.markup.groups.flatMap(group => group.marks).find(mark => mark.id === id)
       if (id !== null && (!mark || mark.edit._tag === "Disabled")) return
-      update({ ...view, markup: { ...view.markup, editor: mark ? { _tag: "Open", id: mark.id, name: mark.name, note: mark.note, edit: mark.edit } : { _tag: "Closed" } } })
+      const own = view.markup.groups.find(group => group.marks.some(item => item.id === id))?.source.take
+      const references = view.markup.groups.filter(group => group.source.take !== own).flatMap(group => group.marks.map(item => ({ id: item.id, name: item.name, note: item.note, label: group.label, crop: null })))
+      update({ ...view, markup: { ...view.markup, editor: mark ? { _tag: "Open", id: mark.id, name: mark.name, note: mark.note, edit: mark.edit, references } : { _tag: "Closed" } } })
     },
     onMarkNote(id, note) {
       observed.onMarkNote(id, note)
       if (view.markup._tag !== "Ready" || !view.markup.groups.some(group => group.marks.some(mark => mark.id === id && mark.edit._tag === "Enabled"))) return
+      const names = view.markup.groups.flatMap(group => group.marks.map(mark => mark.name))
       update({ ...view, markup: { ...view.markup, revision: view.markup.revision + 1,
-        groups: view.markup.groups.map(group => ({ ...group, marks: group.marks.map(mark => mark.id === id ? { ...mark, note } : mark) })),
+        groups: view.markup.groups.map(group => ({ ...group, marks: group.marks.map(mark => mark.id === id ? { ...mark, note, references: referencesIn(note, group.source.take, names) } : mark) })),
         editor: view.markup.editor._tag === "Open" && view.markup.editor.id === id ? { ...view.markup.editor, note } : view.markup.editor,
       } })
     },
@@ -73,7 +76,7 @@ export function createChromeScenario(initial: ChromeView) {
         const frame = view.canvas._tag === "Frames" ? view.canvas.frames.find(frame => frame.key === `${group.source.take}@${group.source.created}`) : undefined
         return frame ? [{ ...group.source, kind: "Experiment" as const, run: frame.run ?? { _tag: "Idle" as const } }] : []
       })
-      const plan = planSend(groups.flatMap(group => group.marks.map(mark => ({ id: mark.id, name: mark.name, source: group.source, location: mark.location }))), takes)
+      const plan = planSend(groups.flatMap(group => group.marks.map(mark => ({ id: mark.id, name: mark.name, note: mark.note, source: group.source, location: mark.location }))), takes)
       const refreshed = groups.map(group => {
         const planned = plan.groups.find(row => row.source.take === group.source.take && row.source.created === group.source.created)
         if (!planned) throw new Error("The Send policy omitted a draft group")

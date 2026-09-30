@@ -190,7 +190,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
     composer: {
       prompt: "", placeholder: "Describe a change to Game Detail", edit: enabled, attach: enabled, attachments: [], count: 1,
       start: blocked("Describe a change first"), startLabel: "New take",
-      follow: { take: selected, label: `Send to take ${selected}`, availability: blocked("Describe a change first") }, notices: [],
+      follow: { take: selected, label: `Send to take ${selected}`, availability: blocked("Describe a change first") }, marks: { _tag: "None" }, notices: [],
       agent: { _tag: "Ready", model: "claude-opus-5-5", baseUrl: "http://127.0.0.1:8317/v1", reasoning: "medium", api: "chat-completions", baseUrlFrom: "~/.pi/agent/cliproxyapi.json", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [
         { name: "pico-design", description: "Pico's palette, pixel grid and type", scope: "project", location: ".agents/skills/pico-design/SKILL.md" },

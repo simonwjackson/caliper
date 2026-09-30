@@ -83,7 +83,7 @@ export function createMarkStore(root) {
     if (draft.marks.length >= MAX_MARKS) throw new Error(`A draft holds at most ${MAX_MARKS} marks. Send or remove some first.`)
     const letters = draft.marks.filter(other => sameTake(other.source, mark.source)).map(other => other.letter)
     const id = randomUUID()
-    const added = { id, source: mark.source, preview: mark.preview, device: mark.device, letter: nextLetter(letters), note: "", anchor: mark.anchor }
+    const added = { id, source: mark.source, preview: mark.preview, ...(mark.subject === undefined ? {} : { subject: mark.subject }), device: mark.device, letter: nextLetter(letters), note: "", anchor: mark.anchor }
     return { id, draft: save(draft.revision, [...draft.marks, added]) }
   }
 

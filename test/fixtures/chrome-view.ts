@@ -1,7 +1,7 @@
-import { planSend } from "../../src/takes/send-plan.js"
+import { planSend, referencesIn } from "../../src/takes/send-plan.js"
 import { acceptFlag, flagWords, historyLabel, lineageLabel, planChains } from "../../src/takes/chains.js"
 import type { AcceptRecord, ChainTake } from "../../src/takes/chains.js"
-import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupView, TakeSummary } from "../../src/client/ui/contract"
+import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupOutcome, MarkupView, TakeSummary } from "../../src/client/ui/contract"
 import { DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
 
 export const enabled: Availability = { _tag: "Enabled" }
@@ -38,12 +38,12 @@ export function readyView(): ChromeView {
     },
     devices: DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
     tools: { active: "takes", navOpen: true, codeOpen: true, side: "record", codeShare: 0.45 },
-    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }, frame],
+    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: enabled }, frame],
       chains: [{ id: "6@1234", shown: frame.key, parent: null, take: "6", label: "6", history: { _tag: "None" }, flag: { _tag: "Current" }, solo: "Shown" }] },
     plan: { _tag: "None" }, composer: {
       prompt: "Make the button quiet", placeholder: "Describe a change", edit: enabled, attach: enabled,
       attachments: [{ id: "image-1", name: "reference.png", url: pixel, remove: enabled }], count: 3, start: enabled, startLabel: "Plan 3 takes",
-      follow: { take: "6", label: "Send to take 6", availability: enabled }, notices: [{ kind: "info", text: "Editing the subject, not the scenario" }],
+      follow: { take: "6", label: "Send to take 6", availability: enabled }, marks: { _tag: "WithPrompt", names: ["0A"], label: "0A goes with this prompt." }, notices: [{ kind: "info", text: "Editing the subject, not the scenario" }],
       agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "vite.config", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [{ name: "design", description: "Describe a change", scope: "project", location: ".agents/skills/design/SKILL.md" }], problems: [] },
     },
@@ -71,23 +71,62 @@ export function markupView(state: "empty" | "ready" | "lost" | "blocked" | "send
   const ready = readyView()
   const sources = [{ take: "6", created: 1234 }, { take: "7", created: 5678 }]
   const marks: DraftMarkView[] = state === "empty" ? [] : [
-    { id: "mark-6-a", letter: "A", name: "6A", note: "Keep this spacing", kind: "Point", rect: { x: 20, y: 30, width: 40, height: 20 }, location: state === "lost" ? { _tag: "Lost", reason: "Element not found. Re-place or remove 6A." } : { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
-    { id: "mark-7-a", letter: "A", name: "7A", note: "Reduce this area", kind: "Region", rect: { x: 60, y: 80, width: 100, height: 60 }, location: { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
+    { id: "mark-6-a", letter: "A", name: "6A", note: "Keep this spacing", kind: "Point", rect: { x: 20, y: 30, width: 40, height: 20 }, location: state === "lost" ? { _tag: "Lost", reason: "Element not found. Re-place or remove 6A." } : { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled, references: [] },
+    { id: "mark-7-a", letter: "A", name: "7A", note: "Reduce this area", kind: "Region", rect: { x: 60, y: 80, width: 100, height: 60 }, location: { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled, references: [] },
   ]
-  const plan = planSend(marks.map((mark, index) => ({ id: mark.id, name: mark.name, source: sources[index]!, location: mark.location })), sources.map(source => ({ ...source, kind: "Experiment", run: { _tag: state === "blocked" && source.take === "7" ? "Running" : "Idle" } })))
+  const plan = planSend(marks.map((mark, index) => ({ id: mark.id, name: mark.name, note: mark.note, source: sources[index]!, location: mark.location })), sources.map(source => ({ ...source, kind: "Experiment", run: { _tag: state === "blocked" && source.take === "7" ? "Running" : "Idle" } })))
   const availability: Availability = plan._tag === "Ready" ? enabled : { _tag: "Disabled", reason: plan._tag === "Empty" ? "Add a mark first" : plan.reasons.join(" ") }
   const sending = state === "sending"
   const draftMarks = marks.map(mark => sending ? { ...mark, edit: blocked, remove: blocked, replace: blocked } : mark)
   const markup: MarkupView = {
     _tag: "Ready", revision: 4, mode: { _tag: state === "ready" ? "Marking" : "Off" }, draftOpen: true,
-    groups: plan.groups.map(group => ({ source: group.source, label: `Take ${group.source.take}`, marks: draftMarks.filter(mark => group.marks.includes(mark.id)), decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" } })),
-    editor: !marks.length || sending ? { _tag: "Closed" } : { _tag: "Open", id: marks[0]!.id, name: marks[0]!.name, note: marks[0]!.note, edit: enabled },
+    groups: plan.groups.map(group => ({ source: group.source, label: `Take ${group.source.take}`, marks: draftMarks.filter(mark => group.marks.includes(mark.id)), decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" }, outcome: { _tag: "NewTake" as const, label: `Send makes a new take from take ${group.source.take}.` } })),
+    editor: !marks.length || sending ? { _tag: "Closed" } : { _tag: "Open", id: marks[0]!.id, name: marks[0]!.name, note: marks[0]!.note, edit: enabled, references: [] },
     send: sending ? { _tag: "Sending", label: "Sending 2 new takes…" } : state === "failed" ? { _tag: "Failed", label: plan.label, reason: "Send failed before any take started. Draft retained.", availability } : { _tag: "Idle", label: plan.label, availability },
   }
   return { ...ready, markup, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [
-    { ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } },
+    { ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: enabled },
     ...sources.map(source => ({ ...frame, key: `${source.take}@${source.created}`, take: source.take, src: `/frame?take=${source.take}`, label: `Take ${source.take}`, run: { _tag: state === "blocked" && source.take === "7" ? "Running" as const : "Idle" as const }, marks: draftMarks.filter(mark => mark.name.startsWith(source.take)), markable: sending ? blocked : enabled })),
   ], chains: sources.map(source => ({ id: `${source.take}@${source.created}`, shown: `${source.take}@${source.created}`, parent: null, take: source.take, label: source.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const }, solo: "Shown" as const })) } }
+}
+
+/**
+ * Phase 6 references through the shared Send policy: 6A points to 7A and 0A,
+ * so take 7 makes no take; 6 makes one and so does the original's unnamed 0B.
+ * The note on 6A is open with every mark it can point to.
+ */
+export function referencesView(): ChromeView {
+  const ready = readyView()
+  const original = { take: "0", created: 0 }, six = { take: "6", created: 1234 }, seven = { take: "7", created: 5678 }
+  const base = { kind: "Point" as const, location: { _tag: "Located" as const }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled }
+  const rows = [
+    { source: six, mark: { ...base, id: "mark-6-a", letter: "A", name: "6A", note: "Use 7A here, and restore 0A", rect: { x: 20, y: 30, width: 0, height: 0 } } },
+    { source: seven, mark: { ...base, id: "mark-7-a", letter: "A", name: "7A", note: "This spacing", rect: { x: 60, y: 80, width: 0, height: 0 } } },
+    { source: original, mark: { ...base, id: "mark-0-a", letter: "A", name: "0A", note: "", rect: { x: 10, y: 10, width: 0, height: 0 } } },
+    { source: original, mark: { ...base, id: "mark-0-b", letter: "B", name: "0B", note: "Too loud", rect: { x: 40, y: 12, width: 0, height: 0 } } },
+  ]
+  const names = rows.map(row => row.mark.name)
+  const marks: DraftMarkView[] = rows.map(row => ({ ...row.mark, references: referencesIn(row.mark.note, row.source.take, names) }))
+  const plan = planSend(rows.map(row => ({ id: row.mark.id, name: row.mark.name, note: row.mark.note, source: row.source, location: row.mark.location })), [six, seven].map(source => ({ ...source, kind: "Experiment" as const, run: { _tag: "Idle" as const } })))
+  const labelOf = (source: { take: string }) => source.take === "0" ? "Original · the real files" : `Take ${source.take}`
+  const outcome = (group: typeof plan.groups[number]): MarkupOutcome => group.outcome._tag === "PointedTo" ? { _tag: "PointedTo", label: "Pointed to by 6A; makes no take." }
+    : { _tag: "NewTake", label: group.source.take === "0" ? "Send makes a new take from the real files." : `Send makes a new take from take ${group.source.take}.` }
+  const crop = (take: string | null, rect: { x: number; y: number }) => ({ src: `/frame${take ? `?take=${take}` : ""}`, viewport: { width: device.cssWidth, height: device.cssHeight }, rect: { ...rect, width: 0, height: 0 } })
+  const markup: MarkupView = {
+    _tag: "Ready", revision: 9, mode: { _tag: "Off" }, draftOpen: true,
+    groups: plan.groups.map(group => ({ source: group.source, label: labelOf(group.source), marks: marks.filter(mark => group.marks.includes(mark.id)), decision: { _tag: "Ready" }, outcome: outcome(group) })),
+    editor: { _tag: "Open", id: "mark-6-a", name: "6A", note: rows[0]!.mark.note, edit: enabled, references: [
+      { id: "mark-7-a", name: "7A", note: "This spacing", label: "Take 7 · Quiet button", crop: crop("7", { x: 60, y: 80 }) },
+      { id: "mark-0-a", name: "0A", note: "", label: "Original · Page · Menu open", crop: crop(null, { x: 10, y: 10 }) },
+      { id: "mark-0-b", name: "0B", note: "Too loud", label: "Original · Page · Menu open", crop: null },
+    ] },
+    send: { _tag: "Idle", label: plan.label, availability: plan._tag === "Ready" ? enabled : blocked },
+  }
+  const pinsOf = (take: string) => marks.filter(mark => mark.name.startsWith(take)).map(({ id, letter, kind, rect, location }) => ({ id, letter, kind, rect, location }))
+  return { ...ready, markup, composer: { ...ready.composer, marks: { _tag: "None" } }, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [
+    { ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: enabled, marks: pinsOf("0") },
+    ...[six, seven].map(source => ({ ...frame, key: `${source.take}@${source.created}`, take: source.take, src: `/frame?take=${source.take}`, label: `Take ${source.take}`, marks: pinsOf(source.take), markable: enabled })),
+  ], chains: [six, seven].map(source => ({ id: `${source.take}@${source.created}`, shown: `${source.take}@${source.created}`, parent: null, take: source.take, label: source.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const }, solo: "Shown" as const })) } }
 }
 
 /**
@@ -110,7 +149,7 @@ export function chainsView(history: "folded" | "open" = "folded"): ChromeView {
   }
   const key = (identity: { take: string; created: number }) => `${identity.take}@${identity.created}`
   const chains = planChains(takes, at("6", 600))
-  const frames: FrameView[] = [{ ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }]
+  const frames: FrameView[] = [{ ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: enabled }]
   const views: ChainView[] = chains.map(chain => {
     for (const identity of [chain.parent, chain.shown]) if (identity) frames.push({ ...frame, key: key(identity), take: identity.take, src: `/frame?take=${identity.take}`, label: `Take ${identity.take}`, selected: identity.take === "6" })
     const steps: ChainStepView[] = chain.steps.map(step => step.present ? { _tag: "Present", take: step.take, label: `Take ${step.take}`, selected: step.take === chain.shown.take } : { _tag: "Discarded", take: step.take, label: `Take ${step.take}, discarded` })
@@ -142,6 +181,7 @@ export function contractViews(): Record<string, ChromeView> {
     markBlocked: markupView("blocked"), markSending: markupView("sending"), markFailed: markupView("failed"),
     connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
     chainPairs: chainsView("folded"), chainHistory: chainsView("open"),
+    references: referencesView(),
     failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", chains: [], frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
     planning: { ...plan, plan: { _tag: "Planning", prompt: "Make it quiet", count: 3, message: "Planning 3 directions" } },

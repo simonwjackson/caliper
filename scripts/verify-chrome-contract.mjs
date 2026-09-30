@@ -108,7 +108,7 @@ try {
   assert(region && region.args[0] === "6@1234")
   for (const [actual, expected] of [[region.args[1].x, 160], [region.args[1].y, 120], [region.args[1].width, 320], [region.args[1].height, 240]]) assert(Math.abs(actual - expected) < 2, "Reverse drag normalizes the region")
   assert.equal(await markedFrame.locator("#count").textContent(), "1", "Marking must not click or reload the part")
-  assert.equal(await page.locator(`${selector("markSurface")}[data-frame-key="real"]`).count(), 0, "Original frames cannot receive marks in phase 4")
+  assert.equal(await page.locator(`${selector("markSurface")}[data-frame-key="real"]`).count(), 1, "Phase 6: the original frame receives marks too")
   await page.locator(`${selector("markRegion")}[data-frame-key="6@1234"]`).click()
   assert(await page.evaluate(() => window.chromeContract.calls.some(call => call.name === "onMarkRegion" && call.args[0] === "6@1234" && call.args[1].width === 320)))
   await page.locator(selector("markNote")).fill("Keep the spacing and title")
@@ -150,6 +150,20 @@ try {
   assert(await page.locator(selector("send")).isDisabled())
 
   // Phase 5 chains. Every take frame sits in exactly one chain; the pair spans a discarded take.
+  // Phase 6: references, outcomes per group, and marks that go with a prompt.
+  await page.goto(`${origin}/?scenario=references`)
+  assert.deepEqual(await page.locator(selector("draftOutcome")).evaluateAll(nodes => nodes.map(node => node.getAttribute("data-outcome"))), ["NewTake", "PointedTo", "NewTake"], "Each group says what Send does with it")
+  assert.equal(await page.locator(selector("send")).textContent(), "Send · 2 new takes")
+  assert.equal(await page.locator(selector("markReference")).count(), 3, "The note can point to every mark on another source")
+  await page.locator(`${selector("markReference")}[data-mark-id="mark-0-b"]`).click()
+  assert(await page.evaluate(() => window.chromeContract.calls.some(call => call.name === "onMarkNote" && call.args[0] === "mark-6-a" && call.args[1] === "Use 7A here, and restore 0A 0B")), "A reference inserts its name through onMarkNote")
+  await page.locator(selector("markMode")).click()
+  assert.equal(await page.locator(`${selector("markSurface")}[data-frame-key="real"]`).count(), 1, "The original frame is markable in mark mode")
+  await page.goto(`${origin}/?scenario=ready`)
+  assert.equal(await page.locator(selector("promptMarks")).textContent(), "0A goes with this prompt.")
+  await page.goto(`${origin}/?scenario=references`)
+  assert.equal(await page.locator(selector("promptMarks")).count(), 0, "No prompt line when no marks go with the prompt")
+
   await page.goto(`${origin}/?scenario=chainPairs`)
   const chainOne = page.locator(`${selector("chain")}[data-chain="1@100"]`)
   assert.equal(await chainOne.locator("h2").textContent(), "6 ← from 1 (1 discarded)")

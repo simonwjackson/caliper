@@ -73,22 +73,25 @@ export function withMarkup(view: ChromeView, marks: readonly LocalMark[], state:
     const identity = frameIdentity(frame)
     return identity ? [{ ...identity, kind: "Experiment" as const, run: frame.run ?? { _tag: "Idle" as const } }] : []
   })
-  const plan = planSend(marks.map(mark => ({ id: mark.id, name: `${mark.source.take}${mark.letter}`, source: mark.source, location: mark.location })), takes)
+  const plan = planSend(marks.map(mark => ({ id: mark.id, name: `${mark.source.take}${mark.letter}`, note: mark.note, source: mark.source, location: mark.location })), takes)
   const draftMark = (mark: LocalMark): DraftMarkView => ({
     id: mark.id, letter: mark.letter, kind: mark.kind, rect: mark.rect, location: mark.location,
     name: `${mark.source.take}${mark.letter}`, note: mark.note, previewLabel: mark.previewLabel, deviceLabel: mark.deviceLabel,
     edit: sending ? locked : enabled, remove: sending ? locked : enabled, replace: sending ? locked : enabled,
+    // Phase 6 Step 0: the gallery has no references yet; the UI worker adds them.
+    references: [],
   })
   const groups: MarkupGroup[] = plan.groups.map(group => ({
     source: group.source, label: `Take ${group.source.take}`,
     marks: marks.filter(mark => group.marks.includes(mark.id)).map(draftMark),
     decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" },
+    outcome: { _tag: group.outcome._tag, label: group.outcome._tag === "NewTake" ? `Send makes a new take from take ${group.source.take}.` : "Pointed to by another note; makes no take." },
   }))
   const open = state.editor ? groups.flatMap(group => group.marks).find(mark => mark.id === state.editor) : undefined
   const send: MarkupSend = state.send ?? { _tag: "Idle", label: plan.label, availability: plan._tag === "Ready" ? enabled : { _tag: "Disabled", reason: plan._tag === "Empty" ? "Add a mark first" : plan.reasons.join(" ") } }
   const markup: MarkupView = {
     _tag: "Ready", revision: state.revision, mode: sending ? { _tag: "Off" } : state.mode, draftOpen: state.draftOpen && groups.length > 0, groups, send,
-    editor: open ? { _tag: "Open", id: open.id, name: open.name, note: open.note, edit: open.edit } : { _tag: "Closed" },
+    editor: open ? { _tag: "Open", id: open.id, name: open.name, note: open.note, edit: open.edit, references: [] } : { _tag: "Closed" },
   }
   return { ...view, canvas, markup }
 }

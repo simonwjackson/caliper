@@ -1,14 +1,19 @@
-import type { Availability, CanvasView, DraftMarkView, FrameView, MarkMode, MarkPin, MarkPoint, MarkRect, MarkupGroup, MarkupView } from "../ui/contract"
+import type { Availability, CanvasView, DraftMarkView, FrameView, MarkMode, MarkPin, MarkPoint, MarkRect, MarkupGroup, MarkupOutcome, MarkupView, ReferenceOption } from "../ui/contract"
 import type { Draft, Mark, MarkAnchor } from "../../takes/marks-contract.js"
-import type { MarkLocation, TakeIdentity } from "../../takes/send-plan.js"
+import type { MarkLocation, SendPlan, TakeIdentity } from "../../takes/send-plan.js"
 import { AddedMarkSchema, DraftResponseSchema, DraftSchema, SentSchema } from "../../takes/marks-contract.js"
 import { anchorAt, anchorIn, locateAnchor } from "../../takes/anchor.js"
-import { planSend } from "../../takes/send-plan.js"
+import { ORIGINAL, isOriginal, planSend, referencesIn } from "../../takes/send-plan.js"
 import { sameState } from "../scenarios.js"
 import { DEVICES } from "../device-frame.js"
 import { parseWire } from "./wire"
 import type { AppState } from "./state"
-import { frameKey, refLabel, takeName } from "./state"
+import { frameKey, previewRef, refLabel, subjectRef, takeName } from "./state"
+
+/** A mark's frame: its take's, or the real files' for a mark on the original. */
+const frameOf = (source: TakeIdentity) => isOriginal(source) ? null : source
+/** "0A and 0B", "0A, 0B and 0C". */
+const listed = (names: readonly string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
 
 export type MarkupInput = {
   request: <T>(path: string, data?: object) => Promise<T>
@@ -101,12 +106,12 @@ export function createMarkupController(input: MarkupInput) {
     const state = input.state(), name = nameOf(mark)
     const unresolved = (reason: string): Found => ({ location: { _tag: "Unresolved", reason }, rect: viewportRect(mark.anchor.rect, null) })
     if (mark.device !== state.device.id) return unresolved(`${name} was placed on ${deviceName(mark.device)}. Switch to it to check ${name}.`)
-    const node = input.frames().get(frameKey(mark.preview, mark.source))
-    if (!node) return unresolved(`Show take ${mark.source.take} in ${refLabel(state, mark.preview)} to check ${name}.`)
+    const node = input.frames().get(frameKey(mark.preview, frameOf(mark.source)))
+    if (!node) return unresolved(`Show ${isOriginal(mark.source) ? "the real files" : `take ${mark.source.take}`} in ${refLabel(state, mark.preview)} to check ${name}.`)
     let document: Document | null = null
     try { document = node.contentDocument } catch { document = null }
     const status = document?.documentElement?.dataset.caliperState
-    if (!document || status === undefined || status === "Loading") return unresolved(`Take ${mark.source.take}'s frame is loading. ${name} is checked when it renders.`)
+    if (!document || status === undefined || status === "Loading") return unresolved(`${isOriginal(mark.source) ? "The real files'" : `Take ${mark.source.take}'s`} frame is loading. ${name} is checked when it renders.`)
     const where = locateAnchor(document, mark.anchor)
     return where._tag === "Located"
       ? { location: { _tag: "Located" }, rect: viewportRect(where.rect, document) }
@@ -142,22 +147,23 @@ export function createMarkupController(input: MarkupInput) {
     let document: Document | null = null
     try { document = input.frames().get(key)?.contentDocument ?? null } catch { document = null }
     const status = document?.documentElement?.dataset.caliperState
-    if (!take || !document || status === undefined || status === "Loading") return input.notify(new Error("Wait for the frame to render, then mark it."))
+    if ((frame.take !== null && !take) || !document || status === undefined || status === "Loading") return input.notify(new Error("Wait for the frame to render, then mark it."))
     const input_ = afterInput.get(key) ?? false
     const anchored = gesture._tag === "Point" ? anchorAt(document, gesture.point, input_) : anchorIn(document, gesture.rect, input_)
     if (anchored._tag === "Refused") return input.notify(new Error(anchored.reason))
-    const device = input.state().device.id, source = { take: take.take, created: take.created }
+    const device = input.state().device.id, source: TakeIdentity = take ? { take: take.take, created: take.created } : ORIGINAL
     if (mode._tag === "Replacing") {
       const id = mode.id, mark = current.marks.find(item => item.id === id)
       if (!mark) { mode = resume; input.changed(); return }
       if (!sameTake(mark.source, source) || !sameState(mark.preview, frame.preview) || mark.device !== device) {
-        return input.notify(new Error(`Re-place ${nameOf(mark)} on take ${mark.source.take} in ${refLabel(input.state(), mark.preview)}, on ${deviceName(mark.device)}.`))
+        return input.notify(new Error(`Re-place ${nameOf(mark)} on ${isOriginal(mark.source) ? "the real files" : `take ${mark.source.take}`} in ${refLabel(input.state(), mark.preview)}, on ${deviceName(mark.device)}.`))
       }
       mode = resume
       void write(`marks/${encodeURIComponent(id)}`, { anchor: anchored.anchor }, DraftResponseSchema).catch(input.notify)
       return
     }
-    void write<{ id: string; draft: Draft }>("marks", { source, preview: { part: frame.preview.part, state: frame.preview.state }, device, anchor: anchored.anchor satisfies MarkAnchor }, AddedMarkSchema)
+    const subject = take ? {} : { subject: { part: frame.subject.part, state: frame.subject.state } }
+    void write<{ id: string; draft: Draft }>("marks", { source, preview: { part: frame.preview.part, state: frame.preview.state }, ...subject, device, anchor: anchored.anchor satisfies MarkAnchor }, AddedMarkSchema)
       .then(result => { flushNote(); editor = { id: result.id, note: "", saved: "" }; input.changed() })
       .catch(input.notify)
   }
@@ -253,21 +259,21 @@ export function createMarkupController(input: MarkupInput) {
 
   // The view: pure selection over the draft, locations and app state.
   function markable(frame: Pick<FrameView, "take">, state: AppState): Availability {
-    if (frame.take === null) return disabled("Marks on the real files come in a later phase. Mark a take.")
-    const take = state.takes?.takes.find(item => item.take === frame.take)
-    if (!take) return disabled("This take is gone.")
-    if (take.integration) return disabled("Alternates have their own review. Mark the experiment instead.")
+    const take = frame.take === null ? null : state.takes?.takes.find(item => item.take === frame.take)
+    if (take === undefined) return disabled("This take is gone.")
+    if (take?.integration) return disabled("Alternates have their own review. Mark the experiment instead.")
     if (draft._tag !== "Ready") return disabled(draft._tag === "Loading" ? "Loading the draft of marks…" : draft.reason)
     if (send._tag === "Sending") return disabled("Sending the draft.")
     return enabled
   }
   function pins(key: string, frame: Pick<FrameView, "take" | "preview">, state: AppState): MarkPin[] {
     const take = frame.take === null ? null : state.takes?.takes.find(item => item.take === frame.take)
-    if (!take) return []
+    if (take === undefined) return []
+    const source = take ? { take: take.take, created: take.created } : ORIGINAL
     return (ready()?.marks ?? []).flatMap(mark => {
-      if (!sameTake(mark.source, take) || !sameState(mark.preview, frame.preview) || mark.device !== state.device.id) return []
+      if (!sameTake(mark.source, source) || !sameState(mark.preview, frame.preview) || mark.device !== state.device.id) return []
       const where = found.get(mark.id) ?? locate(mark)
-      return frameKey(mark.preview, mark.source) === key ? [{ id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where.rect, location: where.location }] : []
+      return frameKey(mark.preview, frameOf(mark.source)) === key ? [{ id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where.rect, location: where.location }] : []
     })
   }
   function getView(): MarkupView {
@@ -275,22 +281,35 @@ export function createMarkupController(input: MarkupInput) {
     if (draft._tag === "Failed") return { _tag: "Unavailable", reason: draft.reason }
     const state = input.state(), marks = draft.draft.marks
     const sending = send._tag === "Sending"
-    const takes = (state.takes?.takes ?? []).map(take => ({ take: take.take, created: take.created, kind: take.integration ? "Alternate" as const : "Experiment" as const, run: take.run }))
     const where = (mark: Mark) => found.get(mark.id) ?? locate(mark)
-    const plan = planSend(marks.map(mark => ({ id: mark.id, name: nameOf(mark), source: mark.source, location: where(mark).location })), takes)
+    const plan = planOf(marks, state)
+    const names = marks.map(nameOf)
     const busy = sending ? disabled("Sending the draft.") : enabled
+    const noteOf = (mark: Mark) => editor?.id === mark.id ? editor.note : mark.note
     const markView = (mark: Mark): DraftMarkView => ({
       id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where(mark).rect, location: where(mark).location,
-      name: nameOf(mark), note: editor?.id === mark.id ? editor.note : mark.note,
+      name: nameOf(mark), note: noteOf(mark), references: referencesIn(noteOf(mark), mark.source.take, names),
       previewLabel: refLabel(state, mark.preview), deviceLabel: deviceName(mark.device),
-      edit: busy, remove: busy, replace: sending ? busy : takeOf(mark.source) ? enabled : disabled(`Take ${mark.source.take} is gone. Remove ${nameOf(mark)}.`),
+      edit: busy, remove: busy, replace: sending ? busy : isOriginal(mark.source) || takeOf(mark.source) ? enabled : disabled(`Take ${mark.source.take} is gone. Remove ${nameOf(mark)}.`),
     })
+    const prompt = withPrompt(state)
+    const outcomeOf = (group: SendPlan["groups"][number]): MarkupOutcome => {
+      const going = group.marks.filter(id => prompt.ids.includes(id))
+      if (going.length) {
+        const goingNames = going.map(id => nameOf(marks.find(mark => mark.id === id) as Mark))
+        return { _tag: "WithPrompt", label: `${listed(goingNames)} ${goingNames.length === 1 ? "goes" : "go"} with your prompt when you press New take. Send would make a take from the real files instead.` }
+      }
+      if (group.outcome._tag === "NewTake") return { _tag: "NewTake", label: isOriginal(group.source) ? "Send makes a new take from the real files." : `Send makes a new take from take ${group.source.take}.` }
+      const pointers = marks.filter(mark => referencesIn(mark.note, mark.source.take, names).some(name => group.marks.some(id => nameOf(marks.find(item => item.id === id) as Mark) === name))).map(nameOf)
+      return { _tag: "PointedTo", label: `Pointed to by ${listed(pointers)}; makes no take.` }
+    }
     const groups: MarkupGroup[] = plan.groups.map(group => {
       const take = takeOf(group.source)
       return {
-        source: group.source, label: take ? `Take ${take.take} · ${takeName(take)}` : `Take ${group.source.take} · gone`,
+        source: group.source, label: isOriginal(group.source) ? "Original · the real files" : take ? `Take ${take.take} · ${takeName(take)}` : `Take ${group.source.take} · gone`,
         marks: group.marks.map(id => markView(marks.find(mark => mark.id === id) as Mark)),
         decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" },
+        outcome: outcomeOf(group),
       }
     })
     const why = state.connection._tag !== "Ready" ? "Vite is not reachable."
@@ -304,8 +323,45 @@ export function createMarkupController(input: MarkupInput) {
       _tag: "Ready", revision: draft.draft.revision, mode, draftOpen,
       groups,
       send: sending ? { _tag: "Sending", label: plan.label } : send._tag === "Failed" ? { _tag: "Failed", label: plan.label, reason: send.reason, availability } : { _tag: "Idle", label: plan.label, availability },
-      editor: editor && editing ? { _tag: "Open", id: editing.id, name: nameOf(editing), note: editor.note, edit: busy } : { _tag: "Closed" },
+      editor: editor && editing ? { _tag: "Open", id: editing.id, name: nameOf(editing), note: editor.note, edit: busy, references: referenceOptions(editing, state) } : { _tag: "Closed" },
     }
+  }
+
+  function planOf(marks: readonly Mark[], state: AppState): SendPlan {
+    const takes = (state.takes?.takes ?? []).map(take => ({ take: take.take, created: take.created, kind: take.integration ? "Alternate" as const : "Experiment" as const, run: take.run }))
+    return planSend(marks.map(mark => ({ id: mark.id, name: nameOf(mark), note: mark.note, source: mark.source, location: (found.get(mark.id) ?? locate(mark)).location })), takes)
+  }
+  /**
+   * Planner choice 14 (A): the marks on the original that go with a typed prompt when
+   * you press New take. They are on the shown original frame and device, found, and
+   * no note points to them. Marks a note points to stay for Send.
+   */
+  function withPrompt(state: AppState): { ids: string[]; names: string[] } {
+    const marks = ready()?.marks ?? [], preview = previewRef(state), subject = subjectRef(state)
+    if (!state.prompt.trim() || !preview || !subject) return { ids: [], names: [] }
+    const names = marks.map(nameOf)
+    const named = new Set(marks.flatMap(mark => referencesIn(mark.note, mark.source.take, names)))
+    const going = marks.filter(mark => isOriginal(mark.source) && sameState(mark.preview, preview) && mark.device === state.device.id
+      && (!mark.subject || sameState(mark.subject, subject)) && !named.has(nameOf(mark)) && (found.get(mark.id) ?? locate(mark)).location._tag === "Located")
+    return { ids: going.map(mark => mark.id), names: going.map(nameOf) }
+  }
+  /** Every mark on another source that the note on `editing` can point to, with a crop of its place. */
+  function referenceOptions(editing: Mark, state: AppState): ReferenceOption[] {
+    return (ready()?.marks ?? []).filter(mark => mark.source.take !== editing.source.take).map(mark => {
+      const take = takeOf(mark.source), device = DEVICES.find(item => item.id === mark.device)
+      const lost = (found.get(mark.id) ?? locate(mark)).location._tag === "Lost"
+      const src = `frame?${new URLSearchParams({ part: mark.preview.part, state: mark.preview.state, ...(isOriginal(mark.source) ? {} : { take: mark.source.take }) })}`
+      return {
+        id: mark.id, name: nameOf(mark), note: mark.note,
+        label: isOriginal(mark.source) ? `Original · ${refLabel(state, mark.preview)}` : `Take ${mark.source.take}${take ? ` · ${takeName(take)}` : " · gone"}`,
+        crop: lost || !device ? null : { src, viewport: { width: device.cssWidth, height: device.cssHeight }, rect: mark.anchor.rect },
+      }
+    })
+  }
+  /** After New take used them (choice 14), the marks leave the draft. */
+  async function release(ids: readonly string[]) {
+    if (!ids.length) return
+    await write("marks/release", { ids }, DraftResponseSchema)
   }
 
   const actions = {
@@ -341,7 +397,7 @@ export function createMarkupController(input: MarkupInput) {
   }
 
   return {
-    actions, receive, reload, getView, pins, markable, frameLoaded, frameRemoved, schedule, resolve,
+    actions, receive, reload, getView, pins, markable, frameLoaded, frameRemoved, schedule, resolve, withPrompt, release,
     dispose: () => {
       disposed = true
       clearTimeout(noteTimer); clearTimeout(resolveTimer)
