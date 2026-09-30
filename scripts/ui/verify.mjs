@@ -34,8 +34,11 @@ const failures = []
 const passed = []
 /** @type {string[]} */
 const pageErrors = []
+/** `verify.mjs <text>` runs only the gates whose name contains the text. */
+const only = process.argv[2]
 /** @param {string} name @param {() => Promise<void>} run */
 async function gate(name, run) {
+  if (only && !name.includes(only)) return
   try { await run(); passed.push(name) } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`) }
 }
 /** @param {{ width: number, height: number }} size @param {string} fixture */
@@ -274,6 +277,29 @@ await gate("actions: checks approve an image after review; closing is not Stop",
     await running.page.locator(cal("check-stop")).click()
     assert.deepEqual((await called(running.page, "onCheckStop")).at(-1)?.args, ["run-8"])
   } finally { await running.close() }
+})
+await gate("layout: the editor fills the code pane, which spans the stage, not the frame", async () => {
+  const fold = { width: 1000, height: 680 }
+  for (const size of [desk, fold, phone]) {
+    for (const fixture of ["code", "codeWatching"]) {
+      const { page, close } = await open(size, fixture)
+      try {
+        // On a phone the code pane is a sheet behind the Code tool.
+        if (size === phone) await page.locator(`${cal("tool")}[data-tool="code"]`).click()
+        await page.locator(`${cal("code-editor")} .cm-content`).waitFor()
+        const boxes = await page.evaluate(() => {
+          const box = (/** @type {string} */ selector) => { const node = document.querySelector(selector); if (!node) throw new Error(`No ${selector}`); const r = node.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, width: r.width } }
+          return { ready: box(".dr-code__ready"), editor: box(".dr-code__editor"), pane: box(".dr-code"), stage: box(".dr-stage"), frame: box(".dr-frame__screen") }
+        })
+        const where = `${fixture} at ${size.width}x${size.height}`
+        assert.ok(Math.abs(boxes.editor.bottom - boxes.ready.bottom) <= 1, `${where}: the editor ends ${Math.round(boxes.ready.bottom - boxes.editor.bottom)} px above the pane's foot`)
+        if (size !== phone) {
+          assert.ok(Math.abs(boxes.pane.left - boxes.stage.left) <= 1 && Math.abs(boxes.pane.right - boxes.stage.right) <= 1, `${where}: the pane spans ${Math.round(boxes.pane.width)} px of a ${Math.round(boxes.stage.width)} px stage`)
+          assert.ok(boxes.pane.width > boxes.frame.width, `${where}: the pane (${Math.round(boxes.pane.width)} px) is no wider than the frame (${Math.round(boxes.frame.width)} px)`)
+        }
+      } finally { await close() }
+    }
+  }
 })
 await gate("actions: code tabs, files, steps, divider, retry", async () => {
   const { page, close } = await open(desk, "code")

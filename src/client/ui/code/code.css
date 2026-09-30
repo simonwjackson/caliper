@@ -7,7 +7,10 @@
 .dr-code .dr-panel__body { overflow: auto; display: grid; grid-template-rows: minmax(0, 1fr); }
 .dr-code__quiet { padding: .9rem 1rem; color: var(--dr-ink-2); font-size: var(--dr-fs-1); display: grid; gap: .6rem; align-content: start; }
 .dr-code__failed { padding: .9rem 1rem; display: grid; gap: .6rem; justify-items: start; color: var(--dr-bad); font-size: var(--dr-fs-1); border-left: 3px solid var(--dr-bad); margin: .8rem 1rem; }
+/* Tabs, head, an optional notice, then the editor. The editor always takes the last row,
+   so a pane with no notice leaves no empty row under it. */
 .dr-code__ready { display: grid; grid-template-rows: auto auto auto minmax(6rem, 1fr); min-height: 0; }
+.dr-code__ready > .dr-code__editor { grid-row: 4; }
 .dr-code__tabs { display: flex; align-items: flex-end; gap: .4rem; padding: .3rem .5rem 0; border-bottom: 1px solid var(--dr-edge); font-size: var(--dr-fs-1); min-width: 0; position: relative; }
 .dr-code__tablist { display: flex; gap: 2px; overflow-x: auto; min-width: 0; scrollbar-width: none; }
 .dr-code__tab { border: 0; background: none; color: var(--dr-ink-2); padding: .35rem .6rem; border-radius: 5px 5px 0 0; white-space: nowrap; display: inline-flex; gap: .4rem; align-items: center; }
