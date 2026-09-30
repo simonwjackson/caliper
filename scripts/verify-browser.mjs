@@ -169,7 +169,9 @@ try {
       const doc = /** @type {HTMLIFrameElement} */ (document.querySelector('[data-cal="frame"]')).contentDocument
       return doc?.documentElement?.dataset.caliperState === "Rendered" && doc.body?.innerText.includes("probe empty state")
     }, undefined, { timeout: 10_000 })
-    assert.match(await page.locator(cal.canvas).getByRole("heading", { level:1 }).innerText(), /Caliper probe · No results/)
+    // The heading names the part; the state sits beside it in the same header.
+    assert.match(await page.locator(cal.canvas).getByRole("heading", { level:1 }).innerText(), /^Caliper probe$/)
+    assert.match(await page.locator(cal.canvas).locator("header").first().innerText(), /Caliper probe\s+No results/)
     assert.match(page.url(), /state=NoResults/, "the URL keeps the state")
     await page.screenshot({ path: join(out, "state.png") })
     console.log("a named state rendered")
