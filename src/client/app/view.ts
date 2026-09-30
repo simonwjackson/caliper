@@ -71,7 +71,7 @@ function canvas(state: AppState): CanvasView {
   const add = (ref: StateRef, editing: StateRef, take: TakeView | null, label: string) => {
     const key = frameKey(ref, take), report = state.reports.get(key)
     frames.push({ key, label, title: take ? take.files.join("\n") || "No changes yet" : `${refLabel(state, ref)} · ${ref.part}`, src: `frame?${new URLSearchParams({ part: ref.part, state: ref.state, ...(take ? { take: take.take } : {}) })}`, subject: editing, preview: ref, take: take?.take ?? null, selected: take ? take.take === state.take : state.take === null,
-      ...(take ? { run: take.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [] })
+      ...(take ? { run: take.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [], marks: [], markable: disabled("Take markup is not connected yet.") })
   }
   if (state.shown._tag === "All" && part.states.length > 1) {
     for (const item of part.states) add({ part: part.file, state: item.export }, { part: part.file, state: item.export }, null, item.label)
@@ -105,6 +105,7 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
     composer: { prompt: state.prompt, placeholder: "Describe a change to this part. Paste or drop reference images.", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `Plan ${state.count} takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
       notices: [...state.notices, ...(agentReady && subject ? [{ kind: "info" as const, text: `Editing ${refLabel(state, subject)}${state.context ? ` in ${refLabel(state, state.context)}` : ""} on ${state.device.name}. Ctrl+Enter starts or plans takes${take ? `; Ctrl+Shift+Enter sends to take ${take.take}` : ""}.` }] : [])], agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
+    markup: { _tag: "Unavailable", reason: "Take markup is not connected yet." },
     focusedTake: summary,
     record: take && summary && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },
     code: regions.code, knobs: regions.knobs, checks: regions.checks,

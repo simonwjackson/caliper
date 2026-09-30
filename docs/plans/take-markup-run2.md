@@ -1,7 +1,9 @@
 # Take markup, Run 2: build plan
 
-Status: planned on 2026-09-30. Phase cut B confirmed by the user on
-2026-09-30. Nothing is built. The 15 planner choices are not confirmed.
+Status: phase 4 Step 0 is built. Production markup is not connected.
+Phase cut B is confirmed. The user also confirmed that Send waits for every
+marked take: lost marks and running parents block the entire pass.
+The remaining planner choices are not user-confirmed.
 
 Behaviour: `docs/plans/take-markup.md` decisions 1 to 13. Appearance:
 `docs/decisions.md` 35 and the mockup states `takes`, `mark`, `draft` and
@@ -81,6 +83,8 @@ The user did not make these. Each one is reversible before its phase starts.
    computed in each chrome, not stored. Re-place makes the next mark click move
    that mark. **Send is blocked while the draft has a lost mark**, with the
    reason, because decision 10 says a lost mark is never dropped quietly.
+   The user confirmed this blocking rule during Step 0. The selector and
+   re-resolution details remain implementation proposals.
 
 5. **Letters.** Letters are per take identity, A to Z, then AA, AB and so on.
    A letter is not reused while its mark is in the draft. This answers the
@@ -104,6 +108,8 @@ The user did not make these. Each one is reversible before its phase starts.
    Not alternates: they have their own review and exact-revision apply. A
    running take can be marked, but Send is blocked for it until its agent
    stops, because the copy would catch it halfway through an edit.
+   The user confirmed that one running parent blocks the entire Send, not
+   only that parent's new take.
 
 9. **Record fields for chains.** A new take's record gets
    `parent: { take, created }`, `chain: { take, created }` (the chain's first
@@ -213,8 +219,95 @@ never makes a take; an unreferenced "0A" makes one take from the real files.
 | Alt-drag on this desktop | It may never reach the page. | Test on the user's own desktop in phase 4. |
 | Cost per pass | Three new takes run about 30 s in parallel, and each makes one extra render for the picture. | Record times in the phase 4 gate. |
 
-## Stop point
+## Phase 4 Step 0 record
 
-This file is the plan. The phase cut is settled. Nothing in `src` changes
-until the user starts phase 4. Its first step is Step 0: the contract, the
-fixtures and `send-plan.js`, on a coordinator branch.
+The coordinator built the contract, fixtures and shared Send policy in
+`markup/contract`, from `110205a`. This does not complete phase 4. No workers
+started, no marks are persisted, and no markup agent is launched.
+
+`ChromeView.markup` distinguishes unavailable markup from a loaded draft.
+The loaded draft contains its revision, mode, groups, open note editor and
+Send state. `FrameView` adds markability and projected pins. A pin distinguishes
+located, lost and unresolved locations. Unresolved locations also block Send,
+so loading a frame cannot authorize an unchecked mark.
+
+Take identity is `{ take, created }`. Mark actions use opaque draft ids.
+A take number plus letter is only a display name. Placement actions take a
+frame key and numeric device CSS px from the iframe viewport. Core converts
+those points into document-origin anchors and projects stored anchors back
+into viewport rectangles. UI does not discover selectors or read frame documents.
+
+The coordinator added `onMarkEdit(id | null)` to open or close an existing
+note. The original action list lacked that operation. `onMarkReplace` remains
+a separate operation. `onSend(revision)` captures the displayed draft revision.
+Core must reject stale revisions, recheck parent identity and location, and
+block the whole pass if any marked parent is running. Typed follow-ups stay
+unchanged.
+
+`src/takes/send-plan.js` is a pure, browser-safe policy over validated inputs.
+It groups marks by exact take identity and returns `Empty`, `Blocked` or
+`Ready`, with one count and label shared by both callers. A blocked result
+authorizes no groups. Missing parents, reused take numbers, alternates,
+duplicate mark ids and unresolved locations remain visible blockers. References
+and original marks are not part of this phase 4 policy. This module does not
+validate wire payloads or resolve anchors.
+
+The existing unstyled `Chrome.tsx` runs the added contract controls and an
+example overlay. Its native coordinate buttons exercise point and region
+callbacks with keyboard input. These buttons, its jitter threshold and its
+plain pin buttons do not specify the production design. Decision 35 remains
+the visual contract. The shipped-reference check inspected the anchored comment
+editor in [Higgsfield](https://mobbin.com/screens/f04d66dd-9181-4921-83cc-76330b2b57ac).
+It supports keeping the note tied to its marked object, not a new visual direction.
+
+The served Darkroom still receives unavailable markup, empty pin lists and
+disabled markability. Direct production markup callbacks report that the
+controller is not connected. They make no requests and no file writes.
+
+### Freeze and ownership
+
+Freeze `src/client/ui/contract.ts`, `src/client/ui/hooks.ts`,
+`src/takes/send-plan.js`, `test/send-plan.test.ts`, the contract fixtures,
+`test/chrome-contract-types.ts`, `test/chrome-contract.test.tsx`,
+`scripts/fixtures/chrome-contract.tsx`, `scripts/verify-chrome-contract.mjs`,
+and the executable reference `src/client/ui/Chrome.tsx` during the worker run.
+Requests for changes go to the coordinator. Keep the Run 1 UI/core split.
+Core owns storage and schemas, anchor resolution, location checks, Alt input,
+forking, annotated renders and agent launch. UI owns the production overlay,
+pins, notes, draft, focus, layout and touch gestures. Do not weaken a gate.
+
+### Verification and limits
+
+Typecheck and build pass. The final targeted run passes all 54 Send policy,
+contract and decomposition tests. A read-only review found a stale per-parent
+decision after mark removal; the coordinator fixed it and added a regression.
+The reviewer verified the correction. The browser gate passes 17 scenarios
+and all 106 hooks. It checks
+point conversion, reverse-drag rectangles, scaling at 416 px, note focus across
+updates, note reopening, draft disclosure, revision capture and blocked Send.
+The frame's reached input state survives turning mark mode on and placing marks.
+
+The full-suite run before the final fixture correction reports 550 pass,
+1 skip and 1 fail. The failure is the existing
+60-second timeout in `test/authored-execution.test.js`. An isolated retry and
+an unchanged detached `110205a` worktree both reproduce that timeout. This is
+not a clean full-suite pass. The first run also caught two reference-component
+decomposition failures; the coordinator fixed them without changing their gates.
+
+The public browser, code and takes smoke gates also pass against the built
+served chrome. They do not prove markup behavior. A broader core-gate attempt
+stopped at its 120-second command limit before completion. Several existing
+scripts explicitly defer layout checks despite the README's broader description.
+Do not present that attempt as a completed 21-gate or layout result.
+
+The reference does not prove persistence, multi-chrome synchronization,
+selector drift, Alt input, real-model context, production layout or Pico input.
+These remain phase 4 integration gates. Step 0 does not move the recovery-tool
+pin or deploy an unfinished markup feature. Re-pin and deploy after the full
+phase lands, as required above.
+
+## Next stop point
+
+Step 0 is the frozen basis for the phase 4 UI and core workers. Do not start
+phase 5, add references, or mark the original as part of phase 4. The next work
+is the production implementation, followed by the full phase gate.

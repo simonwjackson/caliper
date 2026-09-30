@@ -224,7 +224,12 @@ export function createChromeApp(input: RuntimeInput) {
     }
     set({ ...state, notices: failures.map(text => ({ kind: "error", text })) })
   }
+  // Step 0 only declares markup. Keep direct calls reporting-only until the phase 4 controller lands.
+  const unavailableMarkup = () => notify(new Error("Take markup is not connected yet."))
   const actions: ChromeActions = {
+    onMarkMode: unavailableMarkup, onMarkPoint: unavailableMarkup, onMarkRegion: unavailableMarkup,
+    onMarkEdit: unavailableMarkup, onMarkNote: unavailableMarkup, onMarkRemove: unavailableMarkup,
+    onMarkReplace: unavailableMarkup, onDraftOpen: unavailableMarkup, onSend: unavailableMarkup,
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
       // An open pane that another pane covers comes to the front; only a pane already in front closes.

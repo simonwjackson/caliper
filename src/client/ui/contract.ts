@@ -5,6 +5,7 @@ import type { CheckResult } from "../../render/check-contract.js"
 import type { Device, FrameGeometry } from "../device-frame.js"
 import type { Mode } from "../code-editor.js"
 import type { Review } from "../../takes/integration.js"
+import type { TakeIdentity, MarkLocation } from "../../takes/send-plan.js"
 
 /** Imported mutable wire/geometry values are read-only at the rendering seam too. */
 type Snapshot<T> = T extends object ? { readonly [K in keyof T]: Snapshot<T[K]> } : T
@@ -61,12 +62,44 @@ export type FrameVerdict =
   | { readonly _tag: "Rendered" }
   | { readonly _tag: "Empty" }
   | { readonly _tag: "Failed" }
+/** Gesture coordinates are device CSS px from the iframe viewport, before physical scaling. */
+export type MarkPoint = { readonly x: number; readonly y: number }
+export type MarkRect = MarkPoint & { readonly width: number; readonly height: number }
+export type MarkPin = {
+  /** Opaque draft id. Take number plus letter is a display name, never a mutation identity. */
+  readonly id: string; readonly letter: string; readonly kind: "Point" | "Region"
+  /** Resolved rect, or the last known rect for a lost/unresolved mark, in device viewport CSS px. */
+  readonly rect: MarkRect; readonly location: MarkLocation
+}
+export type DraftMarkView = MarkPin & {
+  readonly name: string; readonly note: string; readonly previewLabel: string; readonly deviceLabel: string
+  readonly edit: Availability; readonly remove: Availability; readonly replace: Availability
+}
+export type MarkupGroup = {
+  readonly source: TakeIdentity; readonly label: string; readonly marks: readonly DraftMarkView[]
+  readonly decision: { readonly _tag: "Ready" } | { readonly _tag: "Blocked"; readonly reasons: readonly string[] }
+}
+export type MarkMode = { readonly _tag: "Off" } | { readonly _tag: "Marking" } | { readonly _tag: "Replacing"; readonly id: string }
+export type MarkupSend =
+  | { readonly _tag: "Idle"; readonly label: string; readonly availability: Availability }
+  | { readonly _tag: "Sending"; readonly label: string }
+  | { readonly _tag: "Failed"; readonly label: string; readonly reason: string; readonly availability: Availability }
+export type MarkupView =
+  | { readonly _tag: "Unavailable"; readonly reason: string }
+  | {
+      readonly _tag: "Ready"; readonly revision: number; readonly mode: MarkMode; readonly draftOpen: boolean
+      readonly groups: readonly MarkupGroup[]; readonly send: MarkupSend
+      readonly editor: { readonly _tag: "Closed" } | { readonly _tag: "Open"; readonly id: string; readonly name: string; readonly note: string; readonly edit: Availability }
+    }
+
 export type FrameView = {
   /** Include take creation identity, not only its reusable numeric id. Preserve DOM while key/src stay unchanged. */
   readonly key: string; readonly label: string; readonly title: string; readonly src: string
   readonly subject: StateRef; readonly preview: StateRef; readonly take: string | null
   readonly selected: boolean; readonly run?: TakeRun; readonly verdict: FrameVerdict
   readonly problems: readonly FrameProblem[]
+  /** Original and alternate frames are not markable in phase 4. Running experiments can receive marks. */
+  readonly markable: Availability; readonly marks: readonly MarkPin[]
 }
 export type CanvasView =
   | { readonly _tag: "Empty"; readonly message: string }
@@ -220,7 +253,7 @@ export type ChromeView = {
   readonly connection: Connection; readonly selection: Selection; readonly navigation: NavigationView
   readonly devices: readonly Snapshot<Device>[]; readonly device: Snapshot<Device>; readonly pxPerMm: number; readonly calibrated: boolean
   readonly tools: { readonly active: Tool; readonly navOpen: boolean; readonly codeOpen: boolean; readonly side: "closed" | "knobs" | "record"; readonly codeShare: number }
-  readonly canvas: CanvasView; readonly plan: PlanView; readonly composer: ComposerView
+  readonly canvas: CanvasView; readonly plan: PlanView; readonly composer: ComposerView; readonly markup: MarkupView
   readonly focusedTake: TakeSummary | null; readonly record: TakeRecordView
   readonly code: CodeView; readonly knobs: KnobsView; readonly checks: ChecksView; readonly calibration: CalibrationView
 }
@@ -249,6 +282,19 @@ export type ChromeActions = {
   readonly onRemoveAttachment: (id: string) => void
   readonly onStart: () => void
   readonly onFollow: (take: string) => void
+  readonly onMarkMode: (on: boolean) => void
+  /** UI converts physical geometry to viewport CSS px. Core resolves anchors and document scroll offsets. */
+  readonly onMarkPoint: (frameKey: string, point: MarkPoint) => void
+  readonly onMarkRegion: (frameKey: string, rect: MarkRect) => void
+  /** Open/close the note editor without re-placing a mark. null closes it. */
+  readonly onMarkEdit: (id: string | null) => void
+  readonly onMarkNote: (id: string, note: string) => void
+  readonly onMarkRemove: (id: string) => void
+  /** Next placement moves this id, preserving its letter. Core checks take, preview and device identity. */
+  readonly onMarkReplace: (id: string) => void
+  readonly onDraftOpen: (open: boolean) => void
+  /** A stale revision, lost/unresolved mark or running parent blocks the entire pass. No partial Send. */
+  readonly onSend: (revision: number) => void
   readonly onPlanBack: () => void
   readonly onDirection: (id: string, field: "title" | "brief", text: string) => void
   readonly onRemoveDirection: (id: string) => void

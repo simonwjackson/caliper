@@ -2,6 +2,37 @@ import type { ChromeActions, ChromeView, CodeView, PlanView } from "../src/clien
 
 export function typeProbes(view: ChromeView, actions: ChromeActions): void {
   actions.onCount(4)
+  actions.onMarkPoint("6@1234", { x: 20, y: 30 })
+  actions.onMarkRegion("6@1234", { x: 20, y: 30, width: 40, height: 50 })
+  actions.onMarkEdit("opaque-mark-id")
+  actions.onMarkEdit(null)
+  actions.onSend(4)
+  // @ts-expect-error Send must capture the draft revision.
+  actions.onSend()
+  // @ts-expect-error Point coordinates are numeric device CSS px, not CSS lengths.
+  actions.onMarkPoint("6@1234", { x: "20px", y: 30 })
+  // @ts-expect-error A region needs both dimensions.
+  actions.onMarkRegion("6@1234", { x: 20, y: 30, width: 40 })
+  if (view.markup._tag === "Ready") {
+    // @ts-expect-error UI cannot change core-owned draft groups.
+    view.markup.groups.pop()
+    const group = view.markup.groups[0]
+    if (group) {
+      // @ts-expect-error Take creation identity is immutable.
+      group.source.created = 999
+      const mark = group.marks[0]
+      if (mark) {
+        // @ts-expect-error Pin geometry is immutable.
+        mark.rect.x = 0
+        // @ts-expect-error A lost mark must carry a reason.
+        const location: typeof mark.location = { _tag: "Lost" }
+        void location
+      }
+    }
+  }
+  // @ts-expect-error A Sending state has no enabled action to authorize another Send.
+  const sending: import("../src/client/ui/contract").MarkupSend = { _tag: "Sending", label: "Sending…", availability: { _tag: "Enabled" } }
+  void sending
   actions.onDirection("stable-id", "brief", "Use a quieter button")
   actions.onKnobCommit("gap", "12px")
   actions.onApplyAlternate("6", "reviewed-revision")

@@ -1,6 +1,7 @@
 import type { ChromeActions, ChromeView } from "../../src/client/ui/contract"
+import { planSend } from "../../src/takes/send-plan.js"
 
-export type ObservedCall = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
+export type ObservedCall = { [K in keyof ChromeActions]: { readonly name: K; readonly args: Parameters<ChromeActions[K]> } }[keyof ChromeActions]
 /** Local action implementation for contract tests. Records calls and updates explicit scenario inputs. */
 export function createChromeScenario(initial: ChromeView) {
   let view = initial
@@ -8,9 +9,12 @@ export function createChromeScenario(initial: ChromeView) {
   const listeners = new Set<() => void>()
   function update(next: ChromeView) { view = next; for (const listener of listeners) listener() }
   function record<K extends keyof ChromeActions>(name: K) {
-    return (...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args }) }
+    return (...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args } as ObservedCall) }
   }
   const observed = {
+    onMarkMode: record("onMarkMode"), onMarkPoint: record("onMarkPoint"), onMarkRegion: record("onMarkRegion"),
+    onMarkEdit: record("onMarkEdit"), onMarkNote: record("onMarkNote"), onMarkRemove: record("onMarkRemove"),
+    onMarkReplace: record("onMarkReplace"), onDraftOpen: record("onDraftOpen"), onSend: record("onSend"),
     onTool: record("onTool"), onNavOpen: record("onNavOpen"), onFilter: record("onFilter"), onPart: record("onPart"), onPartExpanded: record("onPartExpanded"),
     onState: record("onState"), onCompare: record("onCompare"), onTake: record("onTake"), onContext: record("onContext"), onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"), onDevice: record("onDevice"),
     onPrompt: record("onPrompt"), onCount: record("onCount"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanBack: record("onPlanBack"), onDirection: record("onDirection"), onRemoveDirection: record("onRemoveDirection"),
@@ -22,6 +26,59 @@ export function createChromeScenario(initial: ChromeView) {
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,
+    onMarkMode(on) { observed.onMarkMode(on); if (view.markup._tag === "Ready") update({ ...view, markup: { ...view.markup, mode: { _tag: on ? "Marking" : "Off" } } }) },
+    onDraftOpen(draftOpen) { observed.onDraftOpen(draftOpen); if (view.markup._tag === "Ready") update({ ...view, markup: { ...view.markup, draftOpen } }) },
+    onMarkEdit(id) {
+      observed.onMarkEdit(id)
+      if (view.markup._tag !== "Ready") return
+      const mark = view.markup.groups.flatMap(group => group.marks).find(mark => mark.id === id)
+      if (id !== null && (!mark || mark.edit._tag === "Disabled")) return
+      update({ ...view, markup: { ...view.markup, editor: mark ? { _tag: "Open", id: mark.id, name: mark.name, note: mark.note, edit: mark.edit } : { _tag: "Closed" } } })
+    },
+    onMarkNote(id, note) {
+      observed.onMarkNote(id, note)
+      if (view.markup._tag !== "Ready" || !view.markup.groups.some(group => group.marks.some(mark => mark.id === id && mark.edit._tag === "Enabled"))) return
+      update({ ...view, markup: { ...view.markup, revision: view.markup.revision + 1,
+        groups: view.markup.groups.map(group => ({ ...group, marks: group.marks.map(mark => mark.id === id ? { ...mark, note } : mark) })),
+        editor: view.markup.editor._tag === "Open" && view.markup.editor.id === id ? { ...view.markup.editor, note } : view.markup.editor,
+      } })
+    },
+    onMarkReplace(id) {
+      observed.onMarkReplace(id)
+      if (view.markup._tag === "Ready" && view.markup.groups.some(group => group.marks.some(mark => mark.id === id && mark.replace._tag === "Enabled"))) update({ ...view, markup: { ...view.markup, mode: { _tag: "Replacing", id } } })
+    },
+    onMarkRemove(id) {
+      observed.onMarkRemove(id)
+      if (view.markup._tag !== "Ready" || !view.markup.groups.some(group => group.marks.some(mark => mark.id === id && mark.remove._tag === "Enabled"))) return
+      const groups = view.markup.groups.map(group => ({ ...group, marks: group.marks.filter(mark => mark.id !== id) })).filter(group => group.marks.length)
+      const takes = groups.flatMap(group => {
+        const frame = view.canvas._tag === "Frames" ? view.canvas.frames.find(frame => frame.key === `${group.source.take}@${group.source.created}`) : undefined
+        return frame ? [{ ...group.source, kind: "Experiment" as const, run: frame.run ?? { _tag: "Idle" as const } }] : []
+      })
+      const plan = planSend(groups.flatMap(group => group.marks.map(mark => ({ id: mark.id, source: group.source, location: mark.location }))), takes)
+      const refreshed = groups.map(group => {
+        const planned = plan.groups.find(row => row.source.take === group.source.take && row.source.created === group.source.created)
+        if (!planned) throw new Error("The Send policy omitted a draft group")
+        return { ...group, decision: planned.reasons.length ? { _tag: "Blocked" as const, reasons: planned.reasons } : { _tag: "Ready" as const } }
+      })
+      update({ ...view, canvas: view.canvas._tag === "Frames" ? { ...view.canvas, frames: view.canvas.frames.map(frame => ({ ...frame, marks: frame.marks.filter(mark => mark.id !== id) })) } : view.canvas,
+        markup: { ...view.markup, revision: view.markup.revision + 1, groups: refreshed,
+          mode: view.markup.mode._tag === "Replacing" && view.markup.mode.id === id ? { _tag: "Off" } : view.markup.mode,
+          editor: view.markup.editor._tag === "Open" && view.markup.editor.id === id ? { _tag: "Closed" } : view.markup.editor,
+          send: { _tag: "Idle", label: plan.label, availability: plan._tag === "Ready" ? { _tag: "Enabled" } : { _tag: "Disabled", reason: plan._tag === "Empty" ? "Add a mark first" : plan.reasons.join(" ") } },
+        } })
+    },
+    onSend(revision) {
+      observed.onSend(revision)
+      if (view.markup._tag !== "Ready" || revision !== view.markup.revision || view.markup.send._tag === "Sending" || view.markup.send.availability._tag === "Disabled") return
+      const locked = { _tag: "Disabled", reason: "The draft is being sent" } as const
+      update({ ...view, canvas: view.canvas._tag === "Frames" ? { ...view.canvas, frames: view.canvas.frames.map(frame => ({ ...frame, markable: locked })) } : view.canvas,
+        markup: { ...view.markup, mode: { _tag: "Off" },
+          groups: view.markup.groups.map(group => ({ ...group, marks: group.marks.map(mark => ({ ...mark, edit: locked, remove: locked, replace: locked })) })),
+          editor: view.markup.editor._tag === "Open" ? { ...view.markup.editor, edit: locked } : view.markup.editor,
+          send: { _tag: "Sending", label: "Sending…" },
+        } })
+    },
     onPrompt(text) { observed.onPrompt(text); update({ ...view, composer: { ...view.composer, prompt: text } }) },
     onFilter(filter) { observed.onFilter(filter); update({ ...view, navigation: { ...view.navigation, filter } }) },
     onNavOpen(navOpen) { observed.onNavOpen(navOpen); update({ ...view, tools: { ...view.tools, navOpen } }) },

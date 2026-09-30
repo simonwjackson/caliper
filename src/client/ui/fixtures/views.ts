@@ -48,7 +48,7 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
   return {
     key: take ? `${take}@2026-09-29T13:${take.padStart(2, "0")}` : "real", label: take ? TAKE_NAMES[take] ?? `Take ${take}` : "Real files",
     title: take ? `Take ${take} · ${TAKE_NAMES[take]}` : "The real files", src: frameSource(FILTERS[id]), subject: DEFAULT, preview: DEFAULT,
-    take, selected: take === "6", run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], ...overrides,
+    take, selected: take === "6", run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], marks: [], markable: blocked("Take markup is not connected yet"), ...overrides,
   }
 }
 
@@ -140,6 +140,7 @@ export function takesView(): ChromeView {
         { name: "intrinsic-design", description: "Layout as a function of the container", scope: "user", location: "~/.agents/skills/intrinsic-design/SKILL.md" },
       ], problems: [] },
     },
+    markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Closed" },
     code: { _tag: "Closed" }, knobs: { _tag: "Closed" }, checks: { _tag: "Closed" }, calibration: { _tag: "Closed" },
   }

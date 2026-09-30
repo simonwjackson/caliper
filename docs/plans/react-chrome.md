@@ -5,7 +5,8 @@ is React, drawn as Darkroom, and Caliper opens and edits its own parts through
 a pinned tool. See "Run 1 merge record" at the end. Run 2 (phases 4 to 6, take
 markup) is planned in `docs/plans/take-markup-run2.md`, which replaces the
 rows for phases 4 to 6 below. The user chose its phase cut B: Send lands in
-phase 4.
+phase 4. Phase 4's contract-only Step 0 is built. The Run 2 plan records its
+frozen files and evidence. Production markup is not connected.
 Phase 7 (real hardware) is not done.
 
 ## Scope and sequence
@@ -43,7 +44,8 @@ layout, focus restoration, frame performance, CodeMirror behavior or server I/O.
 `src/client/ui/hooks.ts` exports `CAL` and `calSelector`. Use the same hook on
 inline and overflow versions of a control. A hook exists only when its capability
 applies to that state. The union of contract examples exercises all 92 hooks;
-every fixture is not required to expose every hook.
+every fixture is not required to expose every hook. Run 2 Step 0 extends this
+to 106 hooks across 17 examples. The original numbers below are Run 1 evidence.
 
 | Identity | Attribute |
 |---|---|

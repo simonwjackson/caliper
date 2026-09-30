@@ -48,6 +48,9 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     ((...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args }); effect?.(...args) }) as ChromeActions[K]
 
   const actions: ChromeActions = {
+    onMarkMode: record("onMarkMode"), onMarkPoint: record("onMarkPoint"), onMarkRegion: record("onMarkRegion"),
+    onMarkEdit: record("onMarkEdit"), onMarkNote: record("onMarkNote"), onMarkRemove: record("onMarkRemove"),
+    onMarkReplace: record("onMarkReplace"), onDraftOpen: record("onDraftOpen"), onSend: record("onSend"),
     onTool: record("onTool", active => update(tool(active))),
     onNavOpen: record("onNavOpen", navOpen => update({ ...view, tools: { ...view.tools, navOpen } })),
     onFilter: record("onFilter", filter => update({ ...view, navigation: { ...view.navigation, filter } })),

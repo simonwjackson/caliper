@@ -1,4 +1,5 @@
-import type { Availability, ChromeView, FrameView, TakeSummary } from "../../src/client/ui/contract"
+import { planSend } from "../../src/takes/send-plan.js"
+import type { Availability, ChromeView, DraftMarkView, FrameView, MarkupView, TakeSummary } from "../../src/client/ui/contract"
 import { DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
 
 export const enabled: Availability = { _tag: "Enabled" }
@@ -16,7 +17,7 @@ const take: TakeSummary = {
 }
 const frame: FrameView = {
   key: "6@1234", label: "Quiet button", title: "Changes src/Button.tsx", src: "/frame?take=6",
-  subject, preview, take: "6", selected: true, run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [],
+  subject, preview, take: "6", selected: true, run: { _tag: "Idle" }, verdict: { _tag: "Rendered" }, problems: [], marks: [], markable: enabled,
 }
 
 /** Contract examples, not a second renderer or a server snapshot adapter. Each call supplies fresh values. */
@@ -34,7 +35,7 @@ export function readyView(): ChromeView {
     },
     devices: DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
     tools: { active: "takes", navOpen: true, codeOpen: true, side: "record", codeShare: 0.45 },
-    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false }, frame] },
+    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }, frame] },
     plan: { _tag: "None" }, composer: {
       prompt: "Make the button quiet", placeholder: "Describe a change", edit: enabled, attach: enabled,
       attachments: [{ id: "image-1", name: "reference.png", url: pixel, remove: enabled }], count: 3, start: enabled, startLabel: "Plan 3 takes",
@@ -42,6 +43,7 @@ export function readyView(): ChromeView {
       agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "vite.config", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [{ name: "design", description: "Describe a change", scope: "project", location: ".agents/skills/design/SKILL.md" }], problems: [] },
     },
+    markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Open", take, emptyLogMessage: "No conversation since Vite started", integration: { _tag: "None" },
       log: [{ _tag: "User", text: "Make it quiet", images: [{ name: "reference.png", url: pixel }] }, { _tag: "Assistant", text: "Changed the spacing" }, { _tag: "Edit", file: "src/Button.css" }, { _tag: "Tool", name: "render", subject: "default@rg353m", outcome: "Done", detail: "Rendered" }] },
     code: { _tag: "Ready", files: [{ file: "src/Button.tsx", label: "Button.tsx", depth: 1, changed: true, added: 1, removed: 1 }, { file: subject.part, label: "Button.atom.part.tsx", depth: 0, changed: false }], tabs: ["src/Button.tsx"], filter: "", selectedFile: "src/Button.tsx",
@@ -60,6 +62,30 @@ export function readyView(): ChromeView {
   } satisfies ChromeView)
 }
 
+/** Local inputs exercise the shared Send policy. No storage, selector resolution or agent is simulated. */
+export function markupView(state: "empty" | "ready" | "lost" | "blocked" | "sending" | "failed" = "ready"): ChromeView {
+  const ready = readyView()
+  const sources = [{ take: "6", created: 1234 }, { take: "7", created: 5678 }]
+  const marks: DraftMarkView[] = state === "empty" ? [] : [
+    { id: "mark-6-a", letter: "A", name: "6A", note: "Keep this spacing", kind: "Point", rect: { x: 20, y: 30, width: 40, height: 20 }, location: state === "lost" ? { _tag: "Lost", reason: "Element not found. Re-place or remove 6A." } : { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
+    { id: "mark-7-a", letter: "A", name: "7A", note: "Reduce this area", kind: "Region", rect: { x: 60, y: 80, width: 100, height: 60 }, location: { _tag: "Located" }, previewLabel: "Page · Menu open", deviceLabel: device.name, edit: enabled, remove: enabled, replace: enabled },
+  ]
+  const plan = planSend(marks.map((mark, index) => ({ id: mark.id, source: sources[index]!, location: mark.location })), sources.map(source => ({ ...source, kind: "Experiment", run: { _tag: state === "blocked" && source.take === "7" ? "Running" : "Idle" } })))
+  const availability: Availability = plan._tag === "Ready" ? enabled : { _tag: "Disabled", reason: plan._tag === "Empty" ? "Add a mark first" : plan.reasons.join(" ") }
+  const sending = state === "sending"
+  const draftMarks = marks.map(mark => sending ? { ...mark, edit: blocked, remove: blocked, replace: blocked } : mark)
+  const markup: MarkupView = {
+    _tag: "Ready", revision: 4, mode: { _tag: state === "ready" ? "Marking" : "Off" }, draftOpen: true,
+    groups: plan.groups.map(group => ({ source: group.source, label: `Take ${group.source.take}`, marks: draftMarks.filter(mark => group.marks.includes(mark.id)), decision: group.reasons.length ? { _tag: "Blocked", reasons: group.reasons } : { _tag: "Ready" } })),
+    editor: !marks.length || sending ? { _tag: "Closed" } : { _tag: "Open", id: marks[0]!.id, name: marks[0]!.name, note: marks[0]!.note, edit: enabled },
+    send: sending ? { _tag: "Sending", label: "Sending 2 new takes…" } : state === "failed" ? { _tag: "Failed", label: plan.label, reason: "Send failed before any take started. Draft retained.", availability } : { _tag: "Idle", label: plan.label, availability },
+  }
+  return { ...ready, markup, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [
+    { ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } },
+    ...sources.map(source => ({ ...frame, key: `${source.take}@${source.created}`, take: source.take, src: `/frame?take=${source.take}`, label: `Take ${source.take}`, run: { _tag: state === "blocked" && source.take === "7" ? "Running" as const : "Idle" as const }, marks: draftMarks.filter(mark => mark.name.startsWith(source.take)), markable: sending ? blocked : enabled })),
+  ] } }
+}
+
 export function contractViews(): Record<string, ChromeView> {
   const ready = readyView()
   const plan: ChromeView = { ...ready, plan: { _tag: "Review", prompt: ready.composer.prompt, note: "One direction is strange", directions: [{ id: "a", direction: { title: "Quiet", brief: "Reduce the chrome" } }, { id: "b", direction: { title: "Different structure", brief: "Use a different arrangement", strange: true } }], start: enabled, startLabel: "Start 2 takes" }, composer: { ...ready.composer, edit: blocked, attach: blocked } }
@@ -74,6 +100,8 @@ export function contractViews(): Record<string, ChromeView> {
   } } }
   return {
     ready, plan, running, alternate, checks,
+    markEmpty: markupView("empty"), markDraft: markupView("ready"), markLost: markupView("lost"),
+    markBlocked: markupView("blocked"), markSending: markupView("sending"), markFailed: markupView("failed"),
     connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
     failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },

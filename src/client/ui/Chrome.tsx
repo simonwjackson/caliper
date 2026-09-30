@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import type {
-  Availability, ChromeActions, ChromeProps, ChromeView, FrameView, IntegrationView, KnobView, Notice,
+  Availability, ChromeActions, ChromeProps, ChromeView, FrameView, IntegrationView, KnobView, Notice, MarkPoint,
 } from "./contract"
 import { CAL } from "./hooks"
 import type { CalHook } from "./hooks"
 import { CARD, frameGeometry } from "../device-frame.js"
 import { clampTo, formatNumber, parseNumber } from "../knob-values.js"
 
-/** Unstyled contract implementation. Not served by the plugin until the core migration. */
+/** Unstyled executable contract. The plugin serves Darkroom, not this reference renderer. */
 export default function Chrome({ view, actions }: ChromeProps) {
   return <div data-cal={CAL.root}>
     <p data-cal={CAL.connection} role="status">{view.connection._tag === "Unreachable" ? view.connection.reason : view.connection._tag}</p>
@@ -31,6 +31,7 @@ export default function Chrome({ view, actions }: ChromeProps) {
       <div role="group" aria-label="Device">{view.devices.map(device =>
         <button key={device.id} data-cal={CAL.device} data-device={device.id} type="button" aria-pressed={device.id === view.device.id} onClick={() => actions.onDevice(device.id)}>{device.name}</button>)}</div>
     </main>
+    <MarkupReference view={view} actions={actions} />
     <Composer view={view} actions={actions} />
     {view.focusedTake && <TakeActions take={view.focusedTake} actions={actions} />}
     <Record view={view} actions={actions} />
@@ -109,10 +110,15 @@ function DeviceFrame({ frame, view, actions }: { frame: FrameView; view: ChromeV
     resize()
     return () => observer.disconnect()
   }, [actions.onFrameGeometry, frame.key, view.device, view.pxPerMm, view.calibrated])
+  const marking = view.markup._tag === "Ready" && view.markup.mode._tag !== "Off" && frame.markable._tag === "Enabled"
   return <figure data-frame-key={frame.key}>
     <figcaption><button type="button" data-cal={CAL.frameSelect} data-frame-key={frame.key} data-take={frame.take ?? undefined} aria-current={frame.selected} title={frame.title} onClick={() => frame.take ? actions.onTake(frame.take) : actions.onState(frame.subject)}>{frame.label}</button>
       {frame.run?._tag} · {frame.verdict._tag}<span data-fit="" /></figcaption>
-    <div ref={screen}><iframe ref={mount} data-cal={CAL.frame} data-frame-key={frame.key} data-part={frame.preview.part} data-state={frame.preview.state} data-take={frame.take ?? undefined} title={frame.label} src={frame.src} width={view.device.cssWidth} height={view.device.cssHeight} /></div>
+    <div ref={screen} style={{ position: "relative" }}><iframe ref={mount} data-cal={CAL.frame} data-frame-key={frame.key} data-part={frame.preview.part} data-state={frame.preview.state} data-take={frame.take ?? undefined} title={frame.label} src={frame.src} width={view.device.cssWidth} height={view.device.cssHeight} />
+      {marking && <MarkSurface frame={frame} width={view.device.cssWidth} height={view.device.cssHeight} actions={actions} />}
+    </div>
+    {marking && <MarkCoordinates frame={frame} width={view.device.cssWidth} height={view.device.cssHeight} actions={actions} />}
+    {frame.marks.map(mark => <button key={mark.id} type="button" data-cal={CAL.markPin} data-mark-id={mark.id} data-frame-key={frame.key} onClick={() => actions.onMarkEdit(mark.id)}>{mark.letter} · {mark.location._tag}</button>)}
     {frame.problems.map((problem, index) => <div key={index} data-cal={CAL.frameProblem} role={problem.kind === "error" ? "alert" : "status"}><strong>{problem.title}</strong><pre>{problem.detail}</pre></div>)}
   </figure>
 }
@@ -331,4 +337,86 @@ function Calibration({ view, actions }: ChromeProps) {
     <output>{calibration.pxPerMm.toFixed(2)} px/mm · {Math.round(calibration.pxPerMm * 25.4)} px/in · {calibration.calibrated ? "Calibrated" : "Assumed"}</output>
     <button type="button" data-cal={CAL.calibrationReset} onClick={actions.onResetCalibration}>Reset</button><button type="button" data-cal={CAL.calibrationClose} onClick={actions.onCalibrationClose}>Done</button>
   </section>
+}
+
+/** Executable unstyled contract, not the production Darkroom markup design. */
+function MarkupReference({ view, actions }: ChromeProps) {
+  const markup = view.markup
+  const note = useRef<HTMLInputElement>(null)
+  const editorId = markup._tag === "Ready" && markup.editor._tag === "Open" ? markup.editor.id : null
+  useEffect(() => { if (editorId) note.current?.focus() }, [editorId])
+  if (markup._tag === "Unavailable") return null
+  const send = markup.send
+  const unavailable = send._tag === "Sending" || send.availability._tag === "Disabled"
+  const reason = send._tag === "Sending" ? "Sending the draft" : send.availability._tag === "Disabled" ? send.availability.reason : undefined
+  return <section data-cal={CAL.markup} aria-label="Take markup">
+    <button type="button" data-cal={CAL.markMode} aria-pressed={markup.mode._tag !== "Off"} onClick={() => actions.onMarkMode(markup.mode._tag === "Off")}>Mark mode</button>
+    {markup.mode._tag !== "Off" && <p role="status">Click or drag to mark. Turn Mark mode off to use the part.</p>}
+    <button type="button" data-cal={CAL.draftOpen} aria-expanded={markup.draftOpen} onClick={() => actions.onDraftOpen(!markup.draftOpen)}>Draft</button>
+    {markup.draftOpen && <div data-cal={CAL.draft}>
+      {markup.groups.length === 0 && <p>No draft marks.</p>}
+      {markup.groups.map(group => <section key={`${group.source.take}@${group.source.created}`} data-take={group.source.take} data-created={group.source.created}>
+        <h2>{group.label}</h2>
+        <p>{group.decision._tag === "Ready" ? "Will make one new take" : group.decision.reasons.join(" ")}</p>
+        <ul>{group.marks.map(mark => <li key={mark.id} data-mark-id={mark.id}>
+          <button type="button" data-cal={CAL.markEdit} data-mark-id={mark.id} disabled={mark.edit._tag === "Disabled"} onClick={() => actions.onMarkEdit(mark.id)}>{mark.name}</button>
+          <p>{mark.note} · {mark.previewLabel} · {mark.deviceLabel}</p>
+          {mark.location._tag !== "Located" && <p role="status">{mark.location.reason}</p>}
+          <button type="button" data-cal={CAL.markReplace} data-mark-id={mark.id} disabled={mark.replace._tag === "Disabled"} onClick={() => actions.onMarkReplace(mark.id)}>Re-place {mark.name}</button>
+          <button type="button" data-cal={CAL.markRemove} data-mark-id={mark.id} disabled={mark.remove._tag === "Disabled"} onClick={() => actions.onMarkRemove(mark.id)}>Remove {mark.name}</button>
+        </li>)}</ul>
+      </section>)}
+    </div>}
+    {markup.editor._tag === "Open" && <label>Note for {markup.editor.name}
+      <input ref={note} data-cal={CAL.markNote} data-mark-id={markup.editor.id} aria-label={`Note for ${markup.editor.name}`} value={markup.editor.note} disabled={markup.editor.edit._tag === "Disabled"}
+        onChange={event => { if (markup.editor._tag === "Open") actions.onMarkNote(markup.editor.id, event.currentTarget.value) }}
+        onKeyDown={event => { if (event.key === "Escape" || event.key === "Enter") { event.preventDefault(); actions.onMarkEdit(null) } }} />
+      <button type="button" data-cal={CAL.markEditorClose} onClick={() => actions.onMarkEdit(null)}>Close note</button>
+    </label>}
+    <button type="button" data-cal={CAL.send} disabled={unavailable} title={reason} onClick={() => actions.onSend(markup.revision)}>{send.label}</button>
+    {unavailable && <p role="status">{reason}</p>}
+    {send._tag === "Failed" && <p role="alert">{send.reason}</p>}
+  </section>
+}
+
+/** UI-only coordinate conversion. No anchor discovery, frame document access or persisted marks. */
+function MarkSurface({ frame, width, height, actions }: {
+  frame: FrameView; width: number; height: number; actions: ChromeActions
+}) {
+  const start = useRef<{ readonly pointer: number; readonly point: MarkPoint } | null>(null)
+  return <>
+    <div data-cal={CAL.markSurface} data-frame-key={frame.key} role="button" tabIndex={0} aria-label={`Place a mark on ${frame.label}`}
+      // The reference overlay follows measured physical frame geometry, not a fixed design size.
+      style={{ position: "absolute", inset: 0 }}
+      onPointerDown={event => {
+        if (start.current || event.button !== 0 || !event.isPrimary) return
+        const box = event.currentTarget.getBoundingClientRect()
+        start.current = { pointer: event.pointerId, point: { x: (event.clientX - box.left) * width / box.width, y: (event.clientY - box.top) * height / box.height } }
+        event.currentTarget.setPointerCapture(event.pointerId)
+        event.preventDefault()
+      }}
+      onPointerUp={event => {
+        if (start.current?.pointer !== event.pointerId) return
+        const from = start.current.point
+        start.current = null
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+        event.currentTarget.releasePointerCapture(event.pointerId)
+        const box = event.currentTarget.getBoundingClientRect()
+        const to = { x: Math.max(0, Math.min(width, (event.clientX - box.left) * width / box.width)), y: Math.max(0, Math.min(height, (event.clientY - box.top) * height / box.height)) }
+        // Reference-only jitter threshold in device CSS px. Production gestures remain UI-owned.
+        if (Math.hypot(to.x - from.x, to.y - from.y) < 4) actions.onMarkPoint(frame.key, to)
+        else actions.onMarkRegion(frame.key, { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), width: Math.abs(to.x - from.x), height: Math.abs(to.y - from.y) })
+      }}
+      onPointerCancel={event => { if (start.current?.pointer === event.pointerId) start.current = null }}
+      onLostPointerCapture={event => { if (start.current?.pointer === event.pointerId) start.current = null }}
+      onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); actions.onMarkPoint(frame.key, { x: width / 2, y: height / 2 }) } }} />
+  </>
+}
+
+/** Native alternatives exercise coordinate actions without prescribing production gestures. */
+function MarkCoordinates({ frame, width, height, actions }: { frame: FrameView; width: number; height: number; actions: ChromeActions }) {
+  return <>
+    <button type="button" data-cal={CAL.markPoint} data-frame-key={frame.key} onClick={() => actions.onMarkPoint(frame.key, { x: width / 2, y: height / 2 })}>Mark centre point</button>
+    <button type="button" data-cal={CAL.markRegion} data-frame-key={frame.key} onClick={() => actions.onMarkRegion(frame.key, { x: width / 4, y: height / 4, width: width / 2, height: height / 2 })}>Mark centre region</button>
+  </>
 }
