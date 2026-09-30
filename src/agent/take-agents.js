@@ -473,10 +473,12 @@ function lastAssistant(log) {
  */
 function subjectOf(name, args) {
   if (name === "render") return args?.related ? "all declared related scenarios" : [args?.part, args?.state, args?.device].filter(Boolean).join("@") || "as asked"
-  if (name === "list_files") return String(args?.folder || ".")
+  // A read of a take a note points to (planner choice 13) says which take it read.
+  const from = typeof args?.take === "string" && (name === "read_file" || name === "list_files") ? ` in take ${args.take}` : ""
+  if (name === "list_files") return `${String(args?.folder || ".")}${from}`
   if (name === "activate_skill") return String(args?.name ?? "")
   if (name === "read_skill_file") return `${args?.name ?? ""}: ${args?.path ?? ""}`
-  return String(args?.path ?? "")
+  return `${String(args?.path ?? "")}${from}`
 }
 
 /**
