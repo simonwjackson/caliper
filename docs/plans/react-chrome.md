@@ -7,7 +7,9 @@ markup) is planned in `docs/plans/take-markup-run2.md`, which replaces the
 rows for phases 4 to 6 below. The user chose its phase cut B: Send lands in
 phase 4. Phase 4's contract-only Step 0 is built. The Run 2 plan records its
 frozen files and evidence. Production markup is not connected.
-Phase 7 (real hardware) is not done.
+Phase 7 (real hardware) is skipped: the user chose on 2026-09-30 not to run
+it. Its checks (real monitors, Fold touch, keyboard and accessibility, frame
+performance, a week of daily use, remote history) are not done.
 
 ## Scope and sequence
 
