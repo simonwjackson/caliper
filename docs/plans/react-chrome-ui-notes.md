@@ -14,7 +14,7 @@ the mockup did not draw, the contract requests, and the gate evidence.
 | Regions | `tools/` rail and dock, `nav/` parts panel, `canvas/` frames, plan slots, caption, calibrate, `bar/` composer and New take split menu, `side/` take record, alternate review, Knobs, `code/` code pane, `checks/` Checks window |
 | Atoms | `atoms/` Button, Icon, Notices, Panel, MenuButton |
 | Editor look | `src/client/ui/editor-appearance.ts`: Darkroom CodeMirror theme and highlight, on the same tokens |
-| Parts | A `*.part.tsx` beside every component (31), with states from local fixtures |
+| Parts | A `*.part.tsx` beside every component (33 part files), with states from local fixtures |
 | Fixtures | `src/client/ui/fixtures/`: 26 views and a scenario with local action behavior |
 | Gallery and gates | `scripts/ui/`: `serve.mjs`, `shoot.mjs`, `verify.mjs`, `applicable.ts` |
 
