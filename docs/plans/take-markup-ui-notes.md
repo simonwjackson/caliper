@@ -259,3 +259,151 @@ writes them (the folder is ignored by git). Looked at:
 - Every chain at 60 % after an accept on the same part is the mockup's
   dimming applied to choice 15's answer C. Worth a look by the user.
 - Not tried on a real Fold, or with touch.
+
+# Phase 6: references and marks on the original (branch `markup/p6-ui`)
+
+Run 2, phase 6, UI worker, from `markup/p6` at `7187273` on the frozen
+contract (`89c4a77`) and core (`7187273`). Behaviour: plan decisions 6 to 8,
+planner choices 13 and 14. Appearance: decision 35, mockup states `mark` and
+`draft`. Core already serves this phase, so the served Darkroom shows all of
+it; the gallery fixtures follow core's labels and the shared Send policy.
+
+The Mobbin search the brief asks for did not run: this session has no Mobbin
+tools. The type-ahead follows the mockup and the combobox pattern (focus
+stays in the field, the list names its active option).
+
+## What is built
+
+| Area | Files |
+|---|---|
+| Pure policy | `references.ts`: `typedName` (the name typed at the caret: a take number, or 0, and up to three letters, at the start of a word), `matchReferences`, `insertReference` (the name replaces what was typed; one space after it; the caret after that), `noteSegments` (names set apart; joined, the note is unchanged), `cropView` (the part of a page a crop shows), `VISIBLE_REFERENCES` = 5 |
+| Type-ahead | `canvas/NoteEditor.tsx`: typing a name offers `editor.references` whose name starts with it. ArrowDown and ArrowUp move (and wrap), Enter or Tab picks, Escape closes the list and keeps the note and mark mode, ArrowDown opens it again, typing on opens it again. A press picks and does not take focus. The field is a `combobox` with `aria-activedescendant`. The hint reads "Type 0 or a take number to point to a mark. Enter closes." |
+| The list | `canvas/ReferenceList.tsx`: a `popover="manual"` card at window level, under the field or over it when there is more room there, so neither the draft's scroll nor the canvas clips it. It hides while its field is scrolled out of sight. Each option: a crop, the name, core's label, the note with its own names set apart. At most 5 options and 5 crop pages; "3 more match. Type more of the name." |
+| Crop (atom) | `atoms/RefCrop.tsx`: `crop.src` in an inert, lazily loaded iframe at `crop.viewport`, scaled and moved so the mark is in a 64 x 48 box. The window keeps the box's shape, holds a region with half its size again round it, a point with a fifth of the page's width round it, and stays inside the page. A two-tone ring marks a point, a box a region. `crop: null`: a dashed plate that says "No picture" |
+| Names in notes (atom) | `atoms/NoteText.tsx`: the names of `mark.references` as small bordered tokens (the mockup's `.ref`) in the draft row's notes, in each option's note, in the draft's outcome sentence and in the prompt line. The text is never rewritten |
+| Pins' titles | `canvas/MarkLayer.tsx`: "Mark 6B: Too heavy, like 0A. Points to 0A." A lost pin adds its reason |
+| Draft outcome | `bar/DraftTake.tsx`: the head is the group's label ("**Original** the real files", "**Take 6** Cover at half"); under it, `outcome.label` with hook `draft-outcome` and `data-outcome`. NewTake reads in ink 2; PointedTo in ink 3 with the picture at 78 %, as a pair's parent is drawn: material to compare with, not the take that changes; WithPrompt in ink. "waits" in warn stays at the right while the group is blocked. The draft's head counts "on 4 takes and the real files" |
+| The original | `DeviceFrame`, `Canvas`, `DraftMark`: the real files take mark mode, pins and the note like a take; the Re-place lines say "the real files" |
+| Prompt line | `bar/ComposerBar.tsx`: `composer.marks.label` (hook `prompt-marks`) at the top of the well, above the text, where attached images sit, with the names set apart |
+| New take stays first | `bar/NewTakeMenu.tsx`: while marks go with the typed prompt, New take stays the split's main half and Send moves to the top of its menu (same hook, `marks-send`). Without a prompt Send is the main half again, as in phase 4 |
+| Fixtures | `fixtures/markup.ts`: marks on the original (`sourceOf`), core's group labels and outcome sentences, `references` per mark, the open note's options with crops (lost: null), `composer.marks` while a prompt is typed. `fixtures/scenario.ts`: a press on the real files places 0A, 0B; `onPrompt` moves marks in and out of the prompt; `onStart` takes them out of the draft. Four fixtures in `fixtures/views.ts`; every fixture's real files take marks now |
+| Parts | `NoteText`, `RefCrop`, `ReferenceList`, and phase 6 states on `NoteEditor`, `MarkLayer`, `DeviceFrame`, `Canvas`, `DraftMark`, `DraftTake`, `Draft`, `ComposerBar` and the Darkroom page |
+| Gates | `scripts/ui/applicable.ts` (the three hooks), 8 reference gates in `scripts/ui/verify.mjs`, `scripts/ui/verify-served-typeahead.mjs` on the served chrome, `test/ui-references.test.ts` |
+
+### Fixtures
+
+| Fixture | What it holds |
+|---|---|
+| `references` | The mockup's draft with references: 0A on the real files, 6B "... like 0A", 5A "Restore 0A here, with the spacing of 3A". The real files and take 3 are PointedTo; 6, 5 and 2 make takes: "Send · 3 new takes". The draft is open |
+| `typeahead` | The mockup's mark state: mark mode on, the note at 6B ends "... like 0", so the list offers 0A and 0B with crops. 3A is lost (no picture); 2A was placed on the ODIN 2 PORTAL (a 1920 px crop) |
+| `original` | 0A and 0B on the real files in mark mode: "Send · 1 new take" |
+| `withPrompt` | First run with a typed prompt: "0A and 0B go with this prompt.", the group's outcome is WithPrompt, New take is the main button |
+
+## Choices for undrawn states
+
+| State | Choice |
+|---|---|
+| Where the list opens | At window level beside the field, not inside the card as drawn: the card sits in the canvas's scroll, in the draft's scroll or above the well, and each would clip or grow with an inline list. It covers the note's hint and Done while it is open; a pick or Escape shows them again |
+| A name typed in full | Still offered, so Enter on "0A" writes "0A " and keeps the note open; a second Enter closes it. A pick or Escape closes the list for that word until you type on |
+| Which names start a list | A number and up to three letters at the start of a word; not after a point, so "0.5" is a number. Letters match in either case and the pick writes core's capitals |
+| Many matches | 5 drawn, the rest counted. Only drawn options load a crop page |
+| A mark below the first screen | The crop shows the page as it loads, at the top: see limits |
+| The mark button on first run | Shown: the real files take marks, so there is something to mark (the phase 4 rule) |
+| Where a mark was placed | A draft mark says "Placed on ..." only when no frame on the canvas shows it. Before, the draft compared core's preview label ("Chip · Default") with the selection's ("Default"), so on the served chrome every mark said "Placed on Chip · Default, RG353M" (seen on this branch before the fix; inferred to be on `main` since phase 4) |
+
+## Contract requests (for the coordinator; the UI did not change the contract)
+
+1. **A picture per crop.** Each drawn option loads the take's page in an
+   iframe, up to 5 at a time. Core already saves a crop round each mark for
+   the agent. A `crop.image` URL (that PNG) would be cheaper, would show a
+   mark below the first screen, and would match what the agent sees.
+2. **A point's crop rect.** The UI draws a ring when `crop.rect` has no size
+   and a box otherwise, because `ReferenceOption` has no `kind`. The served
+   chrome sent an Alt-click with no size (seen in `served-typeahead.png`, not
+   asserted). Document it, or add `kind`.
+3. **Phase 4 request 1 still stands** for `MarkPin.rect` on the canvas.
+
+## Gates and evidence
+
+Run in `.worktree/p6-ui`, one at a time, none beside a build:
+
+| Gate | Result |
+|---|---|
+| `nix develop -c bun run typecheck` | passes |
+| `nix develop -c bun test test/ui-parts.test.ts test/ui-layout.test.ts test/ui-markup.test.ts test/ui-references.test.ts test/ui-chains.test.ts test/chrome-contract.test.tsx test/send-plan.test.ts` | 143 pass, 0 fail |
+| `nix develop -c bun run build` | builds |
+| `nix develop -c node scripts/ui/verify.mjs` | 320 of 320 (the brief's start: 267 of 268, the hook union short of the three new hooks): 41 fixtures at 3 sizes, 114 hooks, 8 reference gates, 19 fixtures at 8 sizes of reachability |
+| `nix develop -c bun run verify:chrome-contract` (frozen) | 20 scenarios, 114 hooks, passes |
+| `nix develop -c node scripts/verify-references.mjs --darkroom` | 3 of 3 |
+| `nix develop -c node scripts/verify-markup.mjs --darkroom` | 7 of 7 |
+| `nix develop -c node scripts/verify-chains.mjs --darkroom` | 5 of 5 |
+| `nix develop -c node scripts/ui/verify-served-typeahead.mjs` | 9 of 9 |
+
+The reference gates prove, on the gallery:
+
+- `typeahead`: the note has focus; a note ending in 0 offers 0A and 0B, the
+  first active, one crop page each; ArrowDown and ArrowUp move and wrap, and
+  the field's active descendant follows; Enter writes `... like 0B ` through
+  `onMarkNote("m-6b", ...)`, closes the list, keeps the note and focus;
+  typing "and 5" offers 5A and Tab writes it; with the list closed Enter
+  closes the note.
+- Filtering: "0b" narrows to 0B, Backspace widens again, no number closes the
+  list, "3" offers 3A with no picture and no page, "3Z" matches nothing, "6"
+  (the note's own take) offers nothing, and "2" offers 2A with a 1920 px page.
+- Escape closes the list and keeps the note, its text, focus and mark mode;
+  ArrowDown or typing on opens it again; Escape with the list closed closes
+  the note and still keeps mark mode.
+- A press on an option picks it and focus stays in the note.
+- `references`: each group's outcome hook, `data-outcome` and text are core's;
+  every note reads as written and its `.dr-ref` tokens are its `references`;
+  the outcome's names are set apart; take 3's picture is at 0.78; 6B's pin
+  title ends "like 0A. Points to 0A."; picking 0A in the draft's own editor
+  turns the original's outcome into "Pointed to by 6A, 6B and 5A".
+- `withPrompt`: the prompt line reads "0A and 0B go with this prompt." in the
+  well, New take is the main half and Send is in the menu; an empty prompt
+  takes the line away and puts Send first; Ctrl+Enter calls `onStart` and
+  the marks leave the draft.
+- `original`: the real files have the dashed edge and their pins' labels; a
+  press is `onMarkPoint("real", {480, 120})` and opens 0C; the keyboard's Pin
+  places at {320, 240}; the draft names the group "Original · the real files"
+  with "Send makes a new take from the real files."
+- At the 8 ladder sizes the list shows, the field is on screen, the list is
+  inside the window and does not cover the field, and every option is in the
+  list or its scroll.
+
+`verify-served-typeahead.mjs` runs a live subject, real frames and core:
+Alt-click marks 0A, 2A and 1A; typing "use 2" offers only 2A and its crop
+loads core's frame URL; Enter and then "and 0" plus Tab write
+"use 2A and 0A " through core with the caret after each pick; the draft says
+PointedTo, PointedTo, NewTake, sets 2A and 0A apart, and says no "Placed
+on" for marks on the shown state.
+
+### Screenshots
+
+`nix develop -c node scripts/ui/shoot.mjs typeahead references original withPrompt`
+and the served gate write them (the folder is ignored by git). Looked at:
+
+- The note editor with the type-ahead: `scripts/ui/out/typeahead-desk-dark.png`,
+  `typeahead-desk-light.png`, `typeahead-phone-dark.png`,
+  `typeahead-phone-light.png`, and `scripts/ui/out/compare/typeahead-desk-dark.png`
+  beside the mockup's `mark` state.
+- The draft with PointedTo groups: `scripts/ui/out/references-desk-dark.png`,
+  `references-fold-light.png`, `references-phone-dark.png`.
+- `scripts/ui/out/withPrompt-desk-dark.png`, `withPrompt-phone-light.png`,
+  `original-fold-dark.png`.
+- The served chrome: `scripts/ui/out/served/served-typeahead.png`,
+  `served-draft.png`.
+
+## What is not proved, and limits
+
+- A crop shows the page at the top, as it loads. A mark further down a page
+  that scrolls falls outside its crop (request 1).
+- Each drawn option loads a live page: up to 5 while the list is open.
+- The field is a plain input, so the name being typed is not drawn as a token
+  inside it, as the mockup draws "0".
+- The list covers the note's hint and Done while it is open.
+- In the light scheme the 78 % of a PointedTo picture lightens it, as it does
+  a pair's parent.
+- Only names that start with a number are offered; there is no way to browse
+  every mark without typing a take number.
+- Not tried on a real Fold, or with touch.
