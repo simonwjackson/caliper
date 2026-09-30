@@ -3,8 +3,8 @@
 Status: behaviour settled (decisions 1 to 13 below). Appearance settled
 (`docs/decisions.md` 35, drawn in `docs/design/mockups/`). Build order
 chosen (below). Not built. Slice 0 is done (Run 1). Slices 1 to 3 are planned
-as Run 2 in `docs/plans/take-markup-run2.md`, which proposes moving Send into
-the first slice. Decision 36 adds the React and
+as Run 2 in `docs/plans/take-markup-run2.md`. The user chose to move Send
+into the first slice (cut B), with new takes shown flat until phase 5. Decision 36 adds the React and
 self-editing foundation. `docs/plans/react-chrome.md` defines the phased,
 two-agent implementation and its shared contract.
 

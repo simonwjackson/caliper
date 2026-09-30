@@ -1,7 +1,7 @@
 # Take markup, Run 2: build plan
 
-Status: planned on 2026-09-30. Nothing is built. Do not start a phase until the
-user confirms the phase cut in "The one decision this plan needs".
+Status: planned on 2026-09-30. Phase cut B confirmed by the user on
+2026-09-30. Nothing is built. The 15 planner choices are not confirmed.
 
 Behaviour: `docs/plans/take-markup.md` decisions 1 to 13. Appearance:
 `docs/decisions.md` 35 and the mockup states `takes`, `mark`, `draft` and
@@ -9,7 +9,7 @@ Behaviour: `docs/plans/take-markup.md` decisions 1 to 13. Appearance:
 This plan replaces that file's one-line rows for phases 4 to 6. Where this plan
 makes a choice that the user has not made, it says so under "Planner choices".
 
-## The one decision this plan needs
+## Phase cut (settled: B)
 
 `react-chrome.md` cuts Run 2 as: phase 4 marks and the draft, phase 5 Send and
 chains, phase 6 references and marks on the original. After phase 4 you can
@@ -21,9 +21,9 @@ is whether marks give better takes than screenshots, until phase 5 is done.
 | A. As written | Marks, mark mode, Alt-click, lost marks, draft | Send, chains, history, pair view, accept and discard | References, marks on the original | Phase 4 gives nothing you can use. The biggest risk is tested last. |
 | B. Send early (recommended) | Marks, mark mode, Alt-click, lost marks, draft, **Send making new takes shown flat**, with `parent`, `chain` and history stored | Pair view, chain history, accept and discard rules | References, marks on the original | Until phase 5 lands, takes pile up flat, the way decision 11 was meant to prevent. Phase 4 is larger. |
 
-Recommendation: B. It is the option C from the interview (Q15), which the user
-left undecided. Phase 4 of cut B stores every record field that phase 5 needs,
-so phase 5 changes only how takes are shown and removed, not what is stored.
+The user chose B on 2026-09-30. It is the option C from the interview (Q15).
+Phase 4 of cut B stores every record field that phase 5 needs, so phase 5
+changes only how takes are shown and removed, not what is stored.
 
 ## What exists today (verified at `12cb7b9`)
 
@@ -215,6 +215,6 @@ never makes a take; an unreferenced "0A" makes one take from the real files.
 
 ## Stop point
 
-This file is the plan. Nothing in `src` changes until the user confirms the
-phase cut. The next step after that is phase 4's Step 0: the contract, the
+This file is the plan. The phase cut is settled. Nothing in `src` changes
+until the user starts phase 4. Its first step is Step 0: the contract, the
 fixtures and `send-plan.js`, on a coordinator branch.
