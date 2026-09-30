@@ -94,7 +94,30 @@ the plugin. The central app sends it to its own chrome.
 | 3 | Add the central app: a `caliper` bin that serves the chrome on one port, reads the registry, shows the switcher and connects to one project. The switcher's look is drawn before build under decision 34. It is not drawn here. | The central app shows Pico and a second project from two Vite servers, and switches between them without reload errors. A plugin with another protocol number shows in the switcher and does not connect. |
 | 4 | Move `src/agent/` into the central app. Add `createRemoteTakeStore`, the store and skills endpoints, and the config file. Remove the `agent` option from the plugin. | The central app makes three takes on Pico and accepts one. The fence tests refuse `..`, absolute and symlink escapes through the endpoints. A project `vite.config` with `agent` fails with a message that names the config file. |
 | 5 | Remove the chrome, assets and install files from the plugin. Move the install to the central app. Update the README, `vite.config.js` for self-hosting, the pinned tool and `caliper-render` docs. | `/__caliper/` on a project answers 404 with a message that names the central app. The install checks in `scripts/verify-pwa.mjs` pass against the central app. |
-| 6 | Deploy. Run the pinned central app on Caliper itself and the checkout central app on Pico at the same time. | Both apps run on different ports. Each makes a take in its own project. Record the timing of 100 agent file reads through the plugin. |
+| 6 | Deploy. Replace the installed legacy app (see below) with the checkout central app at `https://caliper.hummingbird-lake.ts.net`. Run the pinned central app on Caliper itself on another port. | `caliper.service` runs the central app, not `bin/caliper.mjs`. `caliper-proxy.service` serves it on the tailnet name `caliper`. The Fold opens the name, switches between Pico and a second project and makes a take in each. Both units are enabled and start after a reboot. Record the timing of 100 agent file reads through the plugin. |
+
+## Replace the installed legacy app
+
+Checked on 2026-09-30 on `zao`:
+
+| Item | State |
+|---|---|
+| `~/.config/systemd/user/caliper.service` | Disabled, inactive. Runs `nix develop --command bun ./bin/caliper.mjs --port 3132 --browse-root /home/simonwjackson/code` in the main checkout. Drop-in `caliper.service.d/nofile.conf` sets `LimitNOFILE=65536`. |
+| `bin/caliper.mjs` | Gone from `main`. It was the legacy multi-project launcher, last seen in `feat-zero-touch-onboarding`. The unit cannot start today. |
+| `~/.config/systemd/user/caliper-proxy.service` | Disabled, inactive. Runs `~/.local/bin/caliper-tsnet --name caliper --state ~/.config/caliper-tsnet --upstream http://127.0.0.1:3132`. |
+| Tailnet node `caliper` (`100.76.133.33`) | Offline, last seen 23 days ago. The name `caliper.hummingbird-lake.ts.net` still resolves. |
+| `caliper-tsnet` source | Not found in this repository. The binary takes one `--upstream`. |
+
+The replacement keeps the tailnet name, the tsnet state and `caliper-proxy.service`.
+It rewrites `caliper.service` to start the central app from the main checkout on
+port 3132, with no `--browse-root`. The central app starts no projects, so the
+launcher behaviour of the legacy app goes away. The deploy step writes both unit
+files from this repository, so the installed units stop drifting from the code.
+
+The central app must also work from another device, such as the Fold. A browser
+there cannot open a frame at `http://127.0.0.1:5173`, and an HTTPS page cannot
+embed an HTTP frame. Phase 3 must settle how a remote browser reaches frames and
+HMR before it builds the switcher. See the first open question.
 
 ## Not in scope
 
@@ -107,6 +130,9 @@ the plugin. The central app sends it to its own chrome.
 
 ## Open questions
 
+- How a browser on another device reaches a project's frames, modules and HMR
+  socket. This blocks phase 3. The candidates are a proxy in the central app with
+  one port for each project, or each dev server exposed on the tailnet itself.
 - Which fixed port the central app uses. Phase 3 picks it.
 - Whether checks move to the central app later, so only one shell needs
   `CHROMIUM`.

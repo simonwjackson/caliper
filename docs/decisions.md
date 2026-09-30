@@ -488,6 +488,11 @@ Costs:
   the one that starts Vite and the one that starts the central app.
 - Installs under a project's `/__caliper/` stop working. The install moves to
   the central app's origin.
+- The central app replaces the installed legacy launcher at
+  `caliper.hummingbird-lake.ts.net` (user units `caliper.service` and
+  `caliper-proxy.service`). The new app does not start projects, so a project
+  shows only after you start its dev server. A remote browser cannot reach a
+  frame on `127.0.0.1`. The plan leaves that path open until phase 3.
 - A protocol change breaks every project on the old number until it updates.
   There is no warning period.
 
