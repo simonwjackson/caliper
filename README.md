@@ -37,13 +37,14 @@ It does not run the app to do this.
 
 `vite build` never includes Caliper. The plugin sets `apply: "serve"`.
 
-This core branch serves the unstyled React reference. Takes are on the canvas;
-Knobs and the selected take's record share a side region. Native disclosures
-keep controls reachable with scrolling. Darkroom styling, rail/dock placement,
-sheet height budgets and no-overflow layout remain for UI integration. The
-reference is not the finished design. See
-[`docs/plans/react-chrome-core-notes.md`](docs/plans/react-chrome-core-notes.md)
-for its verification record and limits.
+The chrome is the Darkroom design (decision 34), built in React
+(`src/client/ui/Darkroom.tsx`). Tools sit on a rail at the left on a desk and
+in a dock at the bottom on a phone. Takes are on the canvas, with the composer
+bar under it; Knobs and the selected take's record share a side panel. Every
+region has a `*.part.tsx` beside it, so Caliper can show and edit its own
+chrome. The unstyled reference (`src/client/ui/Chrome.tsx`) stays as the
+contract's executable spec. See
+[`docs/plans/react-chrome.md`](docs/plans/react-chrome.md) for the merge record.
 
 ## Install the dev chrome
 
@@ -924,33 +925,38 @@ report, not that all behavior is safe.
 
 ## Develop
 
-The core migration wires the unchanged reference from
-[`docs/plans/react-chrome.md`](docs/plans/react-chrome.md) to real state and
-controllers. Caliper builds React/React DOM and lazy CodeMirror chunks into
+The app state in `src/client/app/` drives the Darkroom renderer through the
+contract in [`docs/plans/react-chrome.md`](docs/plans/react-chrome.md).
+Caliper builds React/React DOM and lazy CodeMirror chunks into
 `dist/chrome`; the consumer's Vite serves them under `/__caliper/assets/`
 without resolving their dependencies. Product frames still use the consumer's
 React. A linked checkout needs `bun run build` after chrome changes. `bun pack`
 builds the artifacts through `prepack`. Consumer production builds omit Caliper.
 
-Self-hosting uses a separate recovery tool at commit `8d23556`, not this
-checkout's plugin. Install it with `nix develop -c bun run tool:install`, then
-run `nix develop -c bun run dev` and open `/__caliper/`. Select **Reference
-chrome** to inspect `src/client/app/Reference.page.part.tsx`. Its three local
-scenarios use the real reference with an empty project; they are not UI-owned
-region coverage. The pinned tool retains the baseline DOM outer chrome. Its
-archive, source and lock hashes are checked before startup. To restore a
-missing or changed copy, run
-`nix develop -c bun run tool:install -- --repair`. This explicit pin permits
-recovery when subject edits break the current renderer, but needs an explicit
-update after UI integration.
+Self-hosting uses a separate recovery tool, pinned to one commit
+(`TOOL_REVISION` in `src/build/tool.js`), not this checkout's plugin. Install
+it with `nix develop -c bun run tool:install`, then run
+`nix develop -c bun run dev` and open `/__caliper/`. The tool shows the chrome's
+own parts (the bar, the canvas, the side panel and the rest) as this
+checkout's source, and its take agent edits them. Its archive, source and lock
+hashes are checked before startup, and the install builds its own chrome
+bundle. To restore a missing or changed copy, run
+`nix develop -c bun run tool:install -- --repair`. A bad accept breaks only
+this checkout, never the tool you use to undo it. The pin moves only by hand:
+commit the change, run `scripts/tool-pin-hashes.mjs <commit>`, put the four
+values in `src/build/tool.js`, and install with `--repair`.
 
 Run the unchanged contract gate with
 `nix develop -c bun run verify:chrome-contract`. Run live public gates on
 disposable consumers with `nix develop -c node scripts/verify-chrome-core.mjs`.
-The latter uses a deterministic local model endpoint for take transport, not a
-paid model. Run `nix develop -c bun run verify:chrome-delivery` for linked/packed
-React-major isolation, source HMR, lazy editor delivery and pinned-tool
-self-hosting. Reference passes do not prove final layout or real-device input.
+The latter runs 21 gates against the built Darkroom chrome, layout assertions
+included. It uses a deterministic local model endpoint for take transport, not
+a paid model. Run `nix develop -c bun run verify:chrome-delivery` for
+linked/packed React-major isolation, source HMR, lazy editor delivery and
+pinned-tool self-hosting. Run `nix develop -c node scripts/ui/verify.mjs` for the
+Darkroom regions: 26 fixtures at three sizes, every hook, keyboard, frame and
+editor preservation, and reachability at eight sizes. None of these prove
+real-device input.
 
 ```sh
 nix develop -c bun install
@@ -1028,19 +1034,22 @@ It types in a real file and checks that the file on disk changes, no take
 starts and the frame renders. Then it undoes the edit and checks that the file
 is back. It starts a take in the project at `--root`, and checks the take's
 frame, the diff and its line count, Revert, the state lenses, and samples
-four window sizes. Add `--reference` on the unstyled core branch to report its
-layout gates as deferred, not passed. It makes no model calls. It writes the real file back and
+four window sizes. Add `--reference` to report its layout gates as deferred
+when you run it against the unstyled reference renderer. It makes no model calls. It writes the real file back and
 discards every take it starts, even when a step fails. Pick a part with two or
 more states to check the lenses.
 
 `scripts/verify-takes.mjs` checks takes on the canvas against a configured model: it
 starts takes from the chrome, waits for the agents, checks every take frame,
-takes screenshots at three window sizes and discards the takes.
+takes screenshots at three window sizes and discards the takes. With
+`--accept --root <project>` it first accepts one take through the chrome,
+checks that the take's files replaced the real ones and that the other takes
+remain. Run that against a scratch checkout: the accepted edit is real.
 
 `scripts/verify-integration.mjs` checks alternate preview, unchanged original
 renders, real click behavior, revision-bound review/apply, and review controls at
-five container sizes. On the core reference, add `--reference` to defer that
-containment gate. It uses a temporary React consumer. Add `--live` to also
+five container sizes. Against the unstyled reference renderer, add
+`--reference` to defer that containment gate. It uses a temporary React consumer. Add `--live` to also
 exercise naming and alternate preparation through the configured local proxy.
 
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders

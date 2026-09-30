@@ -1,8 +1,9 @@
 # React chrome: contract and two-agent build
 
-Status: Step 0 supplies the shared contract. The live chrome is still plain DOM. No implementation
-agent has started. Decision 36 records the user's React and self-editing choice.
-Decisions 34 and 35 remain the chosen appearance, not completed implementation.
+Status: Run 1 (phases 1 to 3) is merged on `main` as of 2026-09-30. The chrome
+is React, drawn as Darkroom, and Caliper opens and edits its own parts through
+a pinned tool. See "Run 1 merge record" at the end. Run 2 (phases 4 to 6, take
+markup) is not planned yet. Phase 7 (real hardware) is not done.
 
 ## Scope and sequence
 
@@ -267,3 +268,43 @@ It can still miss a state. Parallel isolated branches postpone real integration
 until merge. Local fixtures do not establish hermeticity, interaction coverage
 for every consumer, or real-device input. A pinned tool trades automatic updates
 for recovery when the subject breaks.
+
+## Run 1 merge record
+
+Merged on 2026-09-30. Core (`09106cf`) landed first, then UI (`48f7fbd` to
+`cadc80a`), then the integration commits below. The two branches touched no
+common file and no frozen contract file.
+
+| Commit | What integration needed |
+|---|---|
+| `18a32bf` | Serve `Darkroom` from the app entry. The build listed no stylesheet in its manifest, so the chrome loaded bare; `cssCodeSplit` fixes it. The page gave the root no height. The docked parts column started closed and closed on every selection; it is now a remembered preference. The part's own "select all states" control existed only while unfolded. |
+| `d4ee49c` | Run every public gate with its layout assertions on. Checks became modal inside Caliper's own box, so an embedded chrome keeps it contained. A covered code or knobs sheet comes to the front on its tool instead of closing. Accessible names the gates rely on: preview scenario, knob labels, knob numbers as spinbuttons, frame titles, one literals live region. `reveal()` reaches Darkroom controls through the parts drawer, the New take menu, More tools and folded groups. |
+| `fdcdbc8` | On a cold dependency cache, Vite's first bundle took 9 to 39 s here, past the 10 s frame watchdog. A frame page now waits for it, at most 60 s. The tool installs its own chrome bundle. |
+| `1504766` | Re-pin the recovery tool from `8d23556` (DOM chrome) to `fdcdbc8` (Darkroom). |
+
+Evidence at `d4ee49c`/`b19e815` on one build: typecheck; `bun test` 541 pass,
+0 fail; `verify-chrome-core.mjs` 21 of 21 gates with layout on;
+`scripts/ui/verify.mjs` 171 of 171; `verify:chrome-contract` 11 scenarios and 92
+hooks. After `1504766`: `verify:chrome-delivery` passes linked, packed and
+self-host through the new pin.
+
+Phase 3 gate: in a scratch subject copy, the pinned tool planned three takes of
+the composer bar with the real model (one strange direction), ran them, and
+accepted one through the chrome. The take's files replaced the real ones and the
+other two takes stayed. The accepted edit was not kept.
+
+Changed behaviour a reviewer can see: the Checks copy uses the gates' labels
+("Check selected preview", "Approve this image"); result rows start folded and
+the reason shows in each row's summary line; a take row's approval block always
+shows, disabled with its reason; the uncalibrated caption says "until
+calibration".
+
+Open, not fixed here:
+
+- Real monitors, the Fold with touch, and many frames at true size (phase 7).
+- The intermittent `late-changes` rapid-save failure and the esbuild shutdown
+  message recorded in Step 0.
+- Contract requests UI 3 to 5 (check badge on a frame, a short state label,
+  a threshold's current size) are unanswered; the UI works around them.
+- The cold first bundle is slow on this machine under load; the wait hides it
+  but does not shorten it.
