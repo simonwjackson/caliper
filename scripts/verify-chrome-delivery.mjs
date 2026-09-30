@@ -231,7 +231,8 @@ try {
   // Open the real pinned tool page (the Darkroom chrome), not only an isolated subject frame.
   await page.goto(new URL(`__caliper/#part=${encodeURIComponent(subjectPart)}&state=default`, ready.url).href)
   const subjectFrame = page.frameLocator('iframe[src*="Reference.page.part.tsx"][src*="state=default"]')
-  await subjectFrame.locator('[data-cal="chrome"]').waitFor()
+  // A cold subject waits for Vite's first dependency bundle (up to 60 s) before the frame loads.
+  await subjectFrame.locator('[data-cal="chrome"]').waitFor({ timeout: 90_000 })
   const localFilter = subjectFrame.locator('[data-cal="parts-filter"]')
   await localFilter.fill("Local scenario filter")
   assert.equal(await localFilter.inputValue(), "Local scenario filter")

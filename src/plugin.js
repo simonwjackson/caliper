@@ -390,9 +390,39 @@ function createSession(server, root, options, env, overlay) {
       const metadata = optimizer.metadata
       await Promise.all(REACT_PACKAGES.map(name => (metadata.optimized[name] ?? metadata.discovered[name])?.processing))
     })()
+    await capped(bundled)
+  }
+
+  /**
+   * Transform a frame's part and every local module it imports before the page
+   * is sent, at most OPTIMIZE_WAIT_MS. Vite transforms modules on request, so a
+   * large part's first load (the chrome's own app is 37 modules) can take longer
+   * than the watchdog while nothing is wrong with the part. Warm modules are
+   * cached, so later loads skip this. Dependencies are already bundled.
+   *
+   * @param {string} url the part's module URL, as the frame imports it
+   */
+  const partReady = async url => {
+    const environment = server.environments.client
+    if (!environment) return
+    /** @type {Set<string>} */
+    const seen = new Set()
+    /** @param {string} next */
+    const visit = async next => {
+      if (seen.has(next) || next.includes("/node_modules/")) return
+      seen.add(next)
+      try { await environment.transformRequest(next) } catch { return }
+      const mod = await environment.moduleGraph.getModuleByUrl(next)
+      await Promise.all([...(mod?.importedModules ?? [])].map(child => child.url ? visit(child.url) : undefined))
+    }
+    await capped(visit(url))
+  }
+
+  /** @param {Promise<unknown>} work */
+  const capped = async work => {
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer
-    await Promise.race([bundled.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, OPTIMIZE_WAIT_MS) })])
+    await Promise.race([work.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, OPTIMIZE_WAIT_MS) })])
     clearTimeout(timer)
   }
 
@@ -447,6 +477,7 @@ function createSession(server, root, options, env, overlay) {
     const frameUrl = `${CALIPER_PATH}/frame?part=${encodeURIComponent(partFile)}&state=${encodeURIComponent(stateName)}${takeQuery}`
     // Vite prefixes HTML resource URLs with its base during transformation.
     // The JSON config already has final URLs and is not transformed by Vite.
+    if (problem === null) await partReady(config.part.slice(base.length) || config.part)
     const html = framePage({ clientUrl: `${CALIPER_PATH}/client`, config, problem })
     send(response, problem === null ? 200 : 404, "text/html", await server.transformIndexHtml(frameUrl, html))
   }
