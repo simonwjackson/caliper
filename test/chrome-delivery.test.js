@@ -59,7 +59,7 @@ describe("isolated chrome delivery", () => {
     })
   })
 
-  test.skipIf(!process.env.CALIPER_TEST_TOOL)("uses a baseline-pinned independent tool installation", () => {
+  test.skipIf(!process.env.CALIPER_TEST_TOOL)("uses a pinned independent tool installation", () => {
     const tool = verifiedToolDirectory()
     expect(tool).toEndWith(TOOL_REVISION)
     expect(tool).not.toContain(".worktree/core")

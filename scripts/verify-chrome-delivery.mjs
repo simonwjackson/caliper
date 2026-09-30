@@ -228,7 +228,7 @@ try {
   const selfHostErrors = []
   page.on("pageerror", error => selfHostErrors.push(error.message))
   page.on("console", message => { if (message.type() === "error") selfHostErrors.push(`${message.text()} ${message.location().url}`) })
-  // Open the real baseline tool page, not only an isolated subject frame.
+  // Open the real pinned tool page (the Darkroom chrome), not only an isolated subject frame.
   await page.goto(new URL(`__caliper/#part=${encodeURIComponent(subjectPart)}&state=default`, ready.url).href)
   const subjectFrame = page.frameLocator('iframe[src*="Reference.page.part.tsx"][src*="state=default"]')
   await subjectFrame.locator('[data-cal="chrome"]').waitFor()
@@ -268,7 +268,7 @@ try {
   await stop()
   results.push({ mode: "self-host", revision: TOOL_REVISION, directory: pinned, subject: packageRoot, part: chromePart.file, states: stateEvidence, toolWriteRefused: true, coverage: "Temporary core-owned reference only; no Darkroom or UI-owned region scenario coverage" })
   write(join(evidence, "summary.json"), JSON.stringify({ status: "Passed", tarballSha256, fixtureDependencies, results }, null, 2))
-  console.log(`PASS self-host: pinned baseline ${TOOL_REVISION}; actual subject source; tool outside write fence`)
+  console.log(`PASS self-host: pinned tool ${TOOL_REVISION}; actual subject source; tool outside write fence`)
   console.log(`PASS chrome delivery. Evidence: ${evidence}`)
 } catch (error) {
   if (activePage && !activePage.isClosed()) {

@@ -59,6 +59,8 @@ const RESOLVED_REACT_MODULE = "\0caliper:react"
 /** The project's React packages the frame loads, pre-bundled so the first load does not reload. */
 const REACT_PACKAGES = ["react", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"]
 const REFRESH_DELAY_MS = 80
+/** The longest a frame page waits for Vite's first dependency bundle. */
+const OPTIMIZE_WAIT_MS = 60_000
 const TAKES_DELAY_MS = 100
 
 /**
@@ -374,12 +376,34 @@ function createSession(server, root, options, env, overlay) {
   }
 
   /**
+   * Wait for Vite's first dependency bundle before serving a frame, at most
+   * OPTIMIZE_WAIT_MS. On a cold cache that bundle (React, CodeMirror, the check
+   * libraries) can take longer than the frame watchdog, which would then report
+   * a slow part when only the one-time bundle is slow. After the cap the frame
+   * is served anyway, so a stuck optimizer still ends in the watchdog's report.
+   */
+  const dependenciesReady = async () => {
+    const optimizer = server.environments.client?.depsOptimizer
+    if (!optimizer) return
+    const bundled = (async () => {
+      await optimizer.scanProcessing
+      const metadata = optimizer.metadata
+      await Promise.all(REACT_PACKAGES.map(name => (metadata.optimized[name] ?? metadata.discovered[name])?.processing))
+    })()
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer
+    await Promise.race([bundled.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, OPTIMIZE_WAIT_MS) })])
+    clearTimeout(timer)
+  }
+
+  /**
    * @param {string} partFile
    * @param {string} stateName the export to render
    * @param {string | null} take the take to overlay, or null for the real files
    * @param {ServerResponse} response
    */
   const sendFrame = async (partFile, stateName, take, response) => {
+    await dependenciesReady()
     const { project } = await load()
     const parts = take !== null && isTakeId(take) && store.record(take) !== null ? takeParts(store, take, project.parts) : project.parts
     const part = parts.find(candidate => candidate.file === partFile)
