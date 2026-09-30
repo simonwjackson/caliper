@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process"
 import { createRequire } from "node:module"
 import Chrome from "../src/client/ui/Chrome"
 import { CAL, calSelector } from "../src/client/ui/hooks"
-import { contractViews, readyView, markupView } from "./fixtures/chrome-view"
+import { chainsView, contractViews, readyView, markupView } from "./fixtures/chrome-view"
 import { createChromeScenario } from "./fixtures/chrome-scenario"
 
 const require = createRequire(import.meta.url)
@@ -106,3 +106,26 @@ test("contract positive and negative type probes pass with library checking", ()
   ], { cwd: new URL("../", import.meta.url), encoding: "utf8", timeout: 30_000 })
   expect(output).toBe("")
 }, 35_000)
+
+test("chains: every take frame is in exactly one chain, and chain frames exist on the canvas", () => {
+  for (const [name, view] of Object.entries(contractViews())) {
+    if (view.canvas._tag !== "Frames") continue
+    const keys = view.canvas.frames.map(frame => frame.key)
+    const placed = view.canvas.chains.flatMap(chain => [chain.shown, ...(chain.parent ? [chain.parent] : [])])
+    for (const key of placed) expect(keys, `${name}: ${key}`).toContain(key)
+    expect(new Set(placed).size, name).toBe(placed.length)
+    if (view.canvas.mode === "Takes") for (const frame of view.canvas.frames) if (frame.take) expect(placed, `${name}: take ${frame.take}`).toContain(frame.key)
+    if (view.canvas.mode !== "Takes") expect(view.canvas.chains, name).toEqual([])
+  }
+})
+test("opening and folding a chain's history updates explicit inputs without changing the original", () => {
+  const initial = chainsView("folded")
+  const scenario = createChromeScenario(initial)
+  scenario.actions.onChainHistory("1@100", true)
+  const opened = scenario.getView().canvas
+  expect(opened._tag === "Frames" && opened.chains[0]?.history._tag).toBe("Open")
+  expect(initial.canvas._tag === "Frames" && initial.canvas.chains[0]?.history._tag).toBe("Folded")
+  scenario.actions.onChainHistory("1@100", false)
+  const folded = scenario.getView().canvas
+  expect(folded._tag === "Frames" && folded.chains[0]?.history).toEqual({ _tag: "Folded", label: "3 in chain" })
+})

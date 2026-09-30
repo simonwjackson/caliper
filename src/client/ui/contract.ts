@@ -105,11 +105,53 @@ export type FrameView = {
   /** Original and alternate frames are not markable in phase 4. Running experiments can receive marks. */
   readonly markable: Availability; readonly marks: readonly MarkPin[]
 }
+/**
+ * Phase 5 (plan decision 12, planner choice 15 answered C). A take made before a
+ * later accept that touched its part or one of its files. Accepting it can undo
+ * that accept. It warns; it never blocks. `label` reads "made before take 8 was
+ * accepted"; `detail` says why (the part, or which files).
+ */
+export type AcceptFlag =
+  | { readonly _tag: "Current" }
+  | { readonly _tag: "Before"; readonly take: string; readonly label: string; readonly detail: string }
+/** One take a chain has had, oldest first. A present step selects its take with `onTake`. */
+export type ChainStepView =
+  | { readonly _tag: "Present"; readonly take: string; readonly label: string; readonly selected: boolean }
+  | { readonly _tag: "Discarded"; readonly take: string; readonly label: string }
+/**
+ * Phase 5 (plan decisions 11 and 13). One chain of takes on the Takes canvas:
+ * the shown take next to its nearest ancestor that still exists. `shown` and
+ * `parent` are keys of frames in the same canvas. `parent` is null for a chain
+ * of one, or when every ancestor is discarded. The shown take is the selected
+ * take when it is in this chain, otherwise the chain's newest take. The UI
+ * decides, per device and from the canvas size, whether the pair fits or falls
+ * back to the shown take with the parent one tap away (decision 35).
+ */
+export type ChainView = {
+  /** Opaque. Stable while the chain exists, including after its first take is discarded. */
+  readonly id: string
+  readonly shown: string; readonly parent: string | null
+  /** The shown take's number, and its heading, for example "7 ← from 3 (5 discarded)". */
+  readonly take: string; readonly label: string
+  /** None for a chain of one step. Folded and Open carry "3 in chain". */
+  readonly history:
+    | { readonly _tag: "None" }
+    | { readonly _tag: "Folded"; readonly label: string }
+    | { readonly _tag: "Open"; readonly label: string; readonly steps: readonly ChainStepView[] }
+  /** The shown take's flag. */
+  readonly flag: AcceptFlag
+}
 export type CanvasView =
   | { readonly _tag: "Empty"; readonly message: string }
   | {
       readonly _tag: "Frames"; readonly mode: "One" | "All" | "Takes"
       readonly title: string; readonly frames: readonly FrameView[]
+      /**
+       * Takes mode only; empty otherwise. Every take frame in `frames` belongs to
+       * exactly one chain, as its `shown` or its `parent`. Frames in no chain are
+       * the real files or a preview state.
+       */
+      readonly chains: readonly ChainView[]
     }
 export type PlanView =
   | { readonly _tag: "None" }
@@ -140,6 +182,11 @@ export type TakeSummary = {
   readonly direction: Direction | null; readonly unavailableReason: string
   readonly accept: Availability; readonly discard: Availability; readonly stop: Availability; readonly prepareAlternate: Availability
   readonly kind: "Experiment" | "Alternate"
+  /** Phase 5. The chain heading for this take, "" for a take with no ancestors. */
+  readonly lineage: string
+  /** Phase 5. What Accept also removes, for example "Accept also removes takes 1 and 4 of this chain.", or "". */
+  readonly acceptNote: string
+  readonly flag: AcceptFlag
 }
 export type IntegrationView =
   | { readonly _tag: "None" }
@@ -302,7 +349,12 @@ export type ChromeActions = {
   readonly onPlanBack: () => void
   readonly onDirection: (id: string, field: "title" | "brief", text: string) => void
   readonly onRemoveDirection: (id: string) => void
-  /** Accept/follow flush the editor first. Core owns confirmation and exact-take revalidation. */
+  /** Fold or unfold a chain's history. Selecting a step uses `onTake`. */
+  readonly onChainHistory: (chain: string, open: boolean) => void
+  /**
+   * Accept/follow flush the editor first. Core owns confirmation and exact-take revalidation.
+   * Phase 5: accept removes every take in the accepted take's chain; discard removes one take.
+   */
   readonly onAccept: (take: string) => void
   readonly onDiscard: (take: string) => void
   readonly onStop: (take: string) => void

@@ -88,6 +88,8 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     } : null)),
     onMarkReplace: record("onMarkReplace", id => markup(marks => editable(marks, id) ? { state: { mode: { _tag: "Replacing", id } } } : null)),
     onDraftOpen: record("onDraftOpen", draftOpen => markup(() => ({ state: { draftOpen } }))),
+    // Phase 5 Step 0: the gallery has no chain history yet; the UI worker adds chain fixtures.
+    onChainHistory: record("onChainHistory"),
     onSend: record("onSend", revision => {
       const ready = view.markup._tag === "Ready" && view.markup.revision === revision && view.markup.send._tag !== "Sending" && view.markup.send.availability._tag === "Enabled"
       if (ready) markup(marks => ({ state: { editor: null, send: { _tag: "Sending", label: `Sending ${marks.length} ${marks.length === 1 ? "mark" : "marks"}` } } }))

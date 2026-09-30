@@ -1,4 +1,6 @@
-import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin } from "../ui/contract"
+import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView } from "../ui/contract"
+import { acceptFlag, acceptNote, flagWords, historyLabel, lineageLabel, planChains } from "../../takes/chains.js"
+import type { AcceptFlag as ChainFlag, AcceptRecord, ChainTake } from "../../takes/chains.js"
 import type { Derivation, StateRef, TakeView } from "../../types"
 import { DEVICES } from "../device-frame.js"
 import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js"
@@ -13,6 +15,17 @@ export type MarkupRegion = {
 }
 export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
 const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }) }
+/**
+ * Phase 5 Step 0: the wire does not carry `chain`, `lineage` or the accept log
+ * yet, so every take is a chain of one and no take is flagged. The core worker
+ * adds them to `TakeView` and `TakesSnapshot` and passes them here.
+ */
+const chainTake = (take: TakeView): ChainTake => ({ take: take.take, created: take.created, part: take.part, state: take.state, files: take.files })
+const accepted: readonly AcceptRecord[] = []
+const flagView = (flag: ChainFlag): AcceptFlag => {
+  const words = flagWords(flag)
+  return flag._tag === "Before" && words ? { _tag: "Before", take: flag.take, ...words } : { _tag: "Current" }
+}
 export const enabled: Availability = { _tag: "Enabled" }
 export const disabled = (reason: string): Availability => ({ _tag: "Disabled", reason })
 export function takeSummary(state: AppState, take: TakeView): TakeSummary {
@@ -27,6 +40,15 @@ export function takeSummary(state: AppState, take: TakeView): TakeSummary {
     discard: state.operation._tag === "Working" ? disabled("A request is pending.") : state.connection._tag !== "Ready" ? disabled("Vite is not reachable.") : enabled,
     stop: take.run._tag === "Running" && state.connection._tag === "Ready" ? enabled : disabled("No agent is running."),
     prepareAlternate: block ? disabled(block) : take.integration ? disabled("This is already an alternate proposal.") : state.takes?.agent._tag !== "Ready" ? disabled("The agent is not ready.") : enabled,
+    ...chainFacts(state, take),
+  }
+}
+function chainFacts(state: AppState, take: TakeView): Pick<TakeSummary, "lineage" | "acceptNote" | "flag"> {
+  const chain = planChains((state.takes?.takes ?? []).map(chainTake), take).find(item => item.shown.take === take.take && item.shown.created === take.created)
+  return {
+    lineage: chain && (chain.parent || chain.discarded) ? lineageLabel(chain) : "",
+    acceptNote: chain ? acceptNote(chain, take) : "",
+    flag: flagView(acceptFlag(chainTake(take), accepted)),
   }
 }
 function setupRow<T>(label: string, value: Derivation<T>, show: (value: T) => string[]): SetupRow {
@@ -79,26 +101,40 @@ function canvas(state: AppState, markup: MarkupRegion): CanvasView {
   const part = currentPart(state), subject = subjectRef(state), preview = previewRef(state)
   if (!part || (subject && !stateExists(state.project?.parts ?? [], subject))) return { _tag: "Empty", message: currentTake(state) ? "This take's editing state is no longer available. Restore it or discard the take." : "Pick a part from the list." }
   const frames: FrameView[] = []
-  const add = (ref: StateRef, editing: StateRef, take: TakeView | null, label: string) => {
+  const add = (ref: StateRef, editing: StateRef, take: TakeView | null, label: string): string => {
     const key = frameKey(ref, take), report = state.reports.get(key)
     const marking = markup.frame(key, { take: take?.take ?? null, preview: ref })
     frames.push({ key, label, title: take ? take.files.join("\n") || "No changes yet" : `${refLabel(state, ref)} · ${ref.part}`, src: `frame?${new URLSearchParams({ part: ref.part, state: ref.state, ...(take ? { take: take.take } : {}) })}`, subject: editing, preview: ref, take: take?.take ?? null, selected: take ? take.take === state.take : state.take === null,
       ...(take ? { run: take.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [], marks: marking.marks, markable: marking.markable })
+    return key
   }
   if (state.shown._tag === "All" && part.states.length > 1) {
     for (const item of part.states) add({ part: part.file, state: item.export }, { part: part.file, state: item.export }, null, item.label)
-    return { _tag: "Frames", mode: "All", title: part.name, frames }
+    return { _tag: "Frames", mode: "All", title: part.name, frames, chains: [] }
   }
   const editing = subject ?? { part: part.file, state: "default" }
   const viewed = preview ?? editing
   const takes = partTakes(state)
   if (state.shown._tag === "Takes" && takes.length) {
     add(viewed, editing, null, sameState(viewed, editing) ? "Real files" : refLabel(state, viewed))
-    for (const take of takes) add(take.integration?._tag === "Review" ? take.integration.proposal.preview : viewed, editing, take, takeName(take))
-    return { _tag: "Frames", mode: "Takes", title: part.name, frames }
+    const addTake = (take: TakeView) => add(take.integration?._tag === "Review" ? take.integration.proposal.preview : viewed, editing, take, takeName(take))
+    const find = (identity: { take: string; created: number }) => takes.find(take => take.take === identity.take && take.created === identity.created)
+    const selected = currentTake(state)
+    const chains: ChainView[] = []
+    for (const chain of planChains(takes.map(chainTake), selected)) {
+      const shown = find(chain.shown), parent = chain.parent ? find(chain.parent) : undefined
+      if (!shown) continue
+      const parentKey = parent ? addTake(parent) : null
+      chains.push({
+        id: chain.id, shown: addTake(shown), parent: parentKey, take: shown.take, label: lineageLabel(chain),
+        history: chain.steps.length > 1 ? { _tag: "Folded", label: historyLabel(chain.steps.length) } : { _tag: "None" },
+        flag: flagView(acceptFlag(chainTake(shown), accepted)),
+      })
+    }
+    return { _tag: "Frames", mode: "Takes", title: part.name, frames, chains }
   }
   add(viewed, editing, null, sameState(viewed, editing) ? "Real files" : refLabel(state, viewed))
-  return { _tag: "Frames", mode: "One", title: part.name, frames }
+  return { _tag: "Frames", mode: "One", title: part.name, frames, chains: [] }
 }
 /** No I/O, DOM reads or state mutation. Controllers supply derived region snapshots. */
 export function toChromeView(state: AppState, regions: Regions): ChromeView {

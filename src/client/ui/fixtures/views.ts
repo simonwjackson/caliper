@@ -11,7 +11,7 @@
  */
 import type {
   Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, NavPart, NavState,
-  TakeSummary,
+  TakeSummary, ChainView,
 } from "../contract"
 import { DEVICES } from "../../device-frame.js"
 import { PICO_GAME_DETAIL } from "./pico"
@@ -55,6 +55,9 @@ function frame(take: string | null, overrides: Partial<FrameView> = {}): FrameVi
   }
 }
 
+/** Phase 5 Step 0: each take is a chain of one until the UI worker draws chains. */
+export const singles = (frames: readonly FrameView[]): ChainView[] => frames.flatMap(item => item.take ? [{ id: item.key, shown: item.key, parent: null, take: item.take, label: item.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const } }] : [])
+
 function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary {
   return {
     id, name: TAKE_NAMES[id] ?? `Take ${id}`, subjectLabel: "Default", deviceLabel: rg353m.name,
@@ -62,6 +65,7 @@ function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary 
     run: { _tag: "Idle" }, files: ["src/pages/PicoGameDetail.css", "src/pages/PicoGameDetail.tsx"], nameIssue: "",
     direction: id === "6" ? { title: "Cover at half, title beside it", brief: "Cover and title share the top half side by side; the actions move to one row under both." } : null,
     unavailableReason: "", accept: enabled, discard: enabled, stop: blocked("The take is not running"), prepareAlternate: enabled, kind: "Experiment",
+    lineage: "", acceptNote: "", flag: { _tag: "Current" },
     ...overrides,
   }
 }
@@ -99,6 +103,7 @@ const LOG: LogEntry[] = [
 
 /** The takes state of the mockup: the real files and five takes on the canvas, take 6 focused. */
 export function takesView(): ChromeView {
+  const TAKES_FRAMES = [frame(null), frame("1"), frame("6"), frame("2"), frame("5"), frame("3")]
   const take = summary("6")
   const view: ChromeView = {
     connection: { _tag: "Ready" },
@@ -130,7 +135,7 @@ export function takesView(): ChromeView {
     },
     devices: DEVICES, device: rg353m, pxPerMm: 3.875, calibrated: true,
     tools: { active: "takes", navOpen: true, codeOpen: false, side: "closed", codeShare: 0.46 },
-    canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames: [frame(null), frame("1"), frame("6"), frame("2"), frame("5"), frame("3")] },
+    canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames: TAKES_FRAMES, chains: singles(TAKES_FRAMES) },
     plan: { _tag: "None" },
     composer: {
       prompt: "", placeholder: "Describe a change to Game Detail", edit: enabled, attach: enabled, attachments: [], count: 1,
@@ -156,7 +161,7 @@ export function emptyView(): ChromeView {
   const nav = view.navigation.parts.map(item => item.file === PART ? { ...item, states: item.states.map(state => ({ ...state, takes: [], comparing: false, badge: undefined })) } : item)
   return {
     ...view, navigation: { ...view.navigation, parts: nav },
-    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [frame(null, { selected: false })] },
+    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [frame(null, { selected: false })], chains: [] },
     composer: { ...view.composer, follow: null }, focusedTake: null,
   }
 }
@@ -190,7 +195,7 @@ export function planView(): ChromeView {
   const prompt = "Give the cover more room and let the title breathe."
   return {
     ...view, focusedTake: null,
-    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [frame(null, { selected: false })] },
+    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [frame(null, { selected: false })], chains: [] },
     plan: {
       _tag: "Review", prompt, note: "", start: enabled, startLabel: "Start 3 takes",
       directions: [
@@ -228,7 +233,7 @@ export function runningView(): ChromeView {
   ]
   const frames = view.canvas._tag === "Frames" ? view.canvas.frames.map(item => item.take === "6" ? { ...item, run: { _tag: "Running" } as const } : item) : []
   return {
-    ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames }, focusedTake: take,
+    ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames, chains: singles(frames) }, focusedTake: take,
     record: { _tag: "Open", take, log, emptyLogMessage: "Working…", integration: { _tag: "None" } },
     composer: { ...view.composer, follow: { take: "6", label: "Send to take 6", availability: blocked("Take 6 is still working") } },
   }
@@ -239,7 +244,7 @@ export function failedTakeView(): ChromeView {
   const view = logView()
   const take = summary("6", { run: { _tag: "Failed", reason: "The model returned 529: overloaded. The take keeps its edits so far." } })
   const frames = view.canvas._tag === "Frames" ? view.canvas.frames.map(item => item.take === "6" ? { ...item, run: take.run } : item) : []
-  return { ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames }, focusedTake: take, record: { _tag: "Open", take, log: LOG.slice(0, 4), emptyLogMessage: "", integration: { _tag: "None" } } }
+  return { ...view, canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames, chains: singles(frames) }, focusedTake: take, record: { _tag: "Open", take, log: LOG.slice(0, 4), emptyLogMessage: "", integration: { _tag: "None" } } }
 }
 
 /** Not drawn in the mockup: the agent failed to load. The failure shows in the bar, where the prompt is. */
@@ -377,7 +382,7 @@ export function gridView(): ChromeView {
     ...frame(null, { key: `state:${state}`, label, title: `${label} · real files`, src: frameSource(FILTERS[filter]), subject: ref(state), preview: ref(state), selected: index === 0 }),
   }))
   const parts = view.navigation.parts.map(item => item.file === PART ? { ...item, states: item.states.map(state => ({ ...state, selected: false })) } : item)
-  return { ...view, navigation: { ...view.navigation, parts }, selection: { _tag: "All", part: PART }, canvas: { _tag: "Frames", mode: "All", title: "Game Detail", frames }, focusedTake: null }
+  return { ...view, navigation: { ...view.navigation, parts }, selection: { _tag: "All", part: PART }, canvas: { _tag: "Frames", mode: "All", title: "Game Detail", frames, chains: [] }, focusedTake: null }
 }
 
 const STACK = `TypeError: Cannot read properties of undefined (reading 'title')
@@ -397,7 +402,7 @@ export function errorView(): ChromeView {
   return {
     ...view, navigation: { ...view.navigation, parts },
     selection: { _tag: "State", subject: ref("ConfirmRemoval"), preview: ref("ConfirmRemoval"), label: "Confirm removal" },
-    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [failing] },
+    canvas: { _tag: "Frames", mode: "One", title: "Game Detail", frames: [failing], chains: [] },
   }
 }
 

@@ -1,8 +1,9 @@
 # Take markup, Run 2: build plan
 
 Status: phase 4 is merged (`8883251` to `5578e65`), deployed to Pico and
-pinned in the recovery tool. See "Phase 4 merge record". Phases 5 and 6 are
-not started. Phase cut B is confirmed. The user also confirmed that Send waits for every
+pinned in the recovery tool. See "Phase 4 merge record". Phase 5 Step 0 (the
+chain contract) is built; its workers have not started. Phase 6 is not
+started. Phase cut B is confirmed. The user also confirmed that Send waits for every
 marked take: lost marks and running parents block the entire pass.
 The remaining planner choices are not user-confirmed.
 
@@ -149,10 +150,34 @@ The user did not make these. Each one is reversible before its phase starts.
     for original marks to leave the draft, so the draft must say which one
     will happen.
 
-15. **Accept flag.** Accept appends `{ take, created, part, state, at }` to
-    `.caliper/accepted.json`. A take of the same part made before that time is
-    flagged "made before take N was accepted". Cost: a take whose part differs
-    but whose files overlap is not flagged.
+15. **Accept flag (user answered C on 2026-09-30).** Accept appends
+    `{ take, created, part, state, files, at }` to `.caliper/accepted.json`.
+    A take made before that time is flagged "made before take N was
+    accepted" when it has the same part **or** changes any of the accepted
+    files. The newest matching accept names the flag. The flag warns; it never
+    blocks. Cost: more flags than a part match alone. The overlap uses the
+    take's current files, so a flag can appear or go away as the take is
+    edited.
+
+Phase 5 Step 0 added these. They are not user-confirmed.
+
+16. **Which take a chain shows.** The pair shows the selected take when it is
+    in the chain, otherwise the chain's newest take. Selecting an older take
+    (from the history or the parts panel) moves it into the pair, next to its
+    own nearest ancestor. This is how decision 11's "you can open them" works.
+17. **Branches.** Two passes on one take give it two children in one chain.
+    The newest is the head; the other stays in the history. Accept still
+    removes the whole chain, both branches.
+18. **History steps.** Every take the chain has had, oldest first: present
+    takes, and discarded ancestors known from any member's `lineage`. A
+    discarded take that no present take descends from is not listed.
+19. **The small-screen fallback is UI layout.** When the canvas cannot hold
+    two frames and a gap at true size for the current device, the UI shows the
+    shown take and one control to show its parent instead. That toggle is UI
+    state, like the draft's disclosure; it does not reach core.
+20. **Accept says what it removes.** `TakeSummary.acceptNote` names the other
+    takes of the chain ("Accept also removes takes 1 and 4 of this chain."),
+    and core's accept confirmation repeats it.
 
 ## Phases
 
@@ -192,8 +217,9 @@ Gate:
 Contract: the Takes canvas groups frames into chains (head, parent or nearest
 existing ancestor, gap label, history count, accept flag). Actions:
 `onChainHistory`. Core: accept removes every take with the same `chain`;
-discard removes one take; `accepted.json`; the per-device fallback of decision
-35 (one pair needs two frames and a gap at true size).
+discard removes one take; `accepted.json`. UI: the chain heading, history
+strip, pair and flag as drawn, and the per-device fallback of decision 35
+(one pair needs two frames and a gap at true size; choice 19).
 
 Gate: accept and discard follow plan decisions 11 to 13, including a discarded
 middle take ("7 ← from 3 (5 discarded)"), a flagged chain after accept, and
@@ -348,8 +374,84 @@ Open after phase 4:
 - Planner choices 2, 3 and 5 to 11 are built as proposed. The user has
   confirmed only the blocking rule.
 
+## Phase 5 Step 0 record
+
+Built by the coordinator on 2026-09-30 in `markup/phase5-contract`, from
+`6cd5ae0`. It freezes the chain contract, the shared chain policy and the
+contract fixtures. No worker has started.
+
+Contract (`src/client/ui/contract.ts`): `CanvasView.Frames.chains`, a list of
+`ChainView` (opaque id, `shown` and `parent` frame keys, the shown take, its
+heading, history `None | Folded | Open` with `ChainStepView` steps, and an
+`AcceptFlag`). In Takes mode every take frame belongs to exactly one chain,
+as its `shown` or its `parent`; other modes have no chains. `TakeSummary` adds
+`lineage`, `acceptNote` and `flag`. One action, `onChainHistory(chain,
+open)`. A present step selects its take with the existing `onTake`. Four
+hooks: `chain`, `chain-history`, `chain-step`, `chain-flag`.
+
+Policy (`src/takes/chains.js`): `planChains`, `lineageLabel`, `acceptFlag`
+(choice 15, answer C), `acceptNote`, `historyLabel` and `flagWords`. Pure and
+browser-safe. Take identity is number plus creation time. The chrome's view,
+the fixtures and the server use the same module.
+
+Served chrome today: `view.ts` already builds frames and chains through
+`planChains`. The wire carries no `chain`, `lineage` or accept log yet, so
+every take is a chain of one, nothing is flagged, and `onChainHistory`
+reports "Chain history is not connected yet." Darkroom ignores `chains` and
+draws `frames` as before, so the served chrome does not change.
+
+### Worker tasks
+
+Core (`src/client/app/**`, server, agent):
+- Put `parent`, `chain` and `history.lineage` of each take record on the
+  wire `TakeView`, and pass them to `planChains` in `view.ts`.
+- `.caliper/accepted.json`: append on accept; send it with the takes stream;
+  pass it to `acceptFlag`.
+- Accept removes every take whose `chain` (or own identity) equals the
+  accepted take's chain, after copying the accepted take's files. The
+  confirmation names what else it removes (choice 20). Discard stays one take.
+- History open state per chain in `AppState`; `onChainHistory` sets it;
+  `view.ts` emits `Open` with steps.
+- Selecting an older take keeps the Takes canvas and moves it into the pair
+  (choice 16).
+
+UI (`src/client/ui/**`, `scripts/ui/**`):
+- Gallery fixtures with chains through `planChains` (pairs, a discarded middle
+  take, a flagged chain, an open history, a chain of one), so the hook union
+  covers the four new hooks. `scripts/ui/verify.mjs` fails that one gate
+  until then (225 of 226 at Step 0).
+- The chain heading, history strip, pair with the parent at 78 % opacity, and
+  the flag, as drawn in the `takes` mockup state.
+- The per-device fallback (choice 19), with every take reachable at the size
+  ladder.
+- `acceptNote` next to Accept, and `lineage` and `flag` in the take record.
+
+### Freeze
+
+Freeze `src/client/ui/contract.ts`, `src/client/ui/hooks.ts`,
+`src/takes/chains.js`, `test/chains.test.ts`, `test/fixtures/chrome-view.ts`,
+`test/fixtures/chrome-scenario.ts`, `test/chrome-contract-types.ts`,
+`test/chrome-contract.test.tsx`, `scripts/verify-chrome-contract.mjs` and the
+reference `src/client/ui/Chrome.tsx`. Requests go to the coordinator.
+
+### Verification at Step 0
+
+Typecheck passes. `test/chains.test.ts` 14 pass (every rule above, including
+reused take numbers, a discarded root and branches). Contract tests and Send
+policy: 33 pass. `verify:chrome-contract`: 19 scenarios, 110 hooks, including
+the pair order, no frame for a discarded take, one frame per take, the flag,
+history open and fold with the frames kept, a discarded step that cannot be
+selected, and the accept note. `verify-markup.mjs --darkroom` 7 of 7.
+`scripts/ui/verify.mjs` 225 of 226; the one failure is the hook union above.
+
+### Phase 5 gate (unchanged, plus)
+
+The gate above, plus: a real accept through the served Darkroom removes its
+chain and flags a take of another part that shares a file; a Vite restart
+keeps the flags.
+
 ## Next stop point
 
-Phase 4 is done. Phase 5 starts with its Step 0 contract. Confirm planner
-choice 15 (the accept flag) with the user before it. Phase 6 needs choices 13
-and 14 confirmed before its Step 0.
+Phase 5 Step 0 is done. Next: the phase 5 UI and core workers, in parallel
+worktrees from `main`. Phase 6 needs choices 13 and 14 confirmed before its
+Step 0.

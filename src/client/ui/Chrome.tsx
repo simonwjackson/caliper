@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import type {
-  Availability, ChromeActions, ChromeProps, ChromeView, FrameView, IntegrationView, KnobView, Notice, MarkPoint,
+  ChainView, Availability, ChromeActions, ChromeProps, ChromeView, FrameView, IntegrationView, KnobView, Notice, MarkPoint,
 } from "./contract"
 import { CAL } from "./hooks"
 import type { CalHook } from "./hooks"
@@ -21,7 +21,8 @@ export default function Chrome({ view, actions }: ChromeProps) {
     <main data-cal={CAL.canvas}>
       {view.canvas._tag === "Empty" ? <p>{view.canvas.message}</p> : <>
         <h1>{view.canvas.title}</h1>
-        {view.canvas.frames.map(frame => <DeviceFrame key={frame.key} frame={frame} view={view} actions={actions} />)}
+        {view.canvas.frames.filter(frame => !view.canvas._tag || !chained(view, frame.key)).map(frame => <DeviceFrame key={frame.key} frame={frame} view={view} actions={actions} />)}
+        {view.canvas.chains.map(chain => <Chain key={chain.id} chain={chain} view={view} actions={actions} />)}
       </>}
       <Plan view={view} actions={actions} />
       <p data-cal={CAL.caption}>
@@ -173,8 +174,25 @@ function Composer({ view, actions }: ChromeProps) {
     <Notices notices={composer.notices} />
   </form>
 }
+const chained = (view: ChromeView, key: string) => view.canvas._tag === "Frames" && view.canvas.chains.some(chain => chain.shown === key || chain.parent === key)
+/** Phase 5 reference: one chain as its heading, history and pair. Not the production layout. */
+function Chain({ chain, view, actions }: { chain: ChainView } & ChromeProps) {
+  const frames = view.canvas._tag === "Frames" ? view.canvas.frames : []
+  const pair = [chain.parent, chain.shown].flatMap(key => frames.filter(frame => frame.key === key))
+  return <section data-cal={CAL.chain} data-chain={chain.id} aria-label={`Chain of take ${chain.take}`}>
+    <h2>{chain.label}</h2>
+    {chain.flag._tag === "Before" && <p data-cal={CAL.chainFlag} title={chain.flag.detail}>{chain.flag.label}</p>}
+    {chain.history._tag !== "None" && <button type="button" data-cal={CAL.chainHistory} data-chain={chain.id} aria-expanded={chain.history._tag === "Open"}
+      onClick={() => actions.onChainHistory(chain.id, chain.history._tag !== "Open")}>{chain.history.label}</button>}
+    {chain.history._tag === "Open" && <ol>{chain.history.steps.map(step => <li key={`${step.take}-${step._tag}`}>{step._tag === "Present"
+      ? <button type="button" data-cal={CAL.chainStep} data-take={step.take} aria-current={step.selected} onClick={() => actions.onTake(step.take)}>{step.label}</button>
+      : <span data-cal={CAL.chainStep} data-take={step.take} aria-disabled="true">{step.label}</span>}</li>)}</ol>}
+    {pair.map(frame => <DeviceFrame key={frame.key} frame={frame} view={view} actions={actions} />)}
+  </section>
+}
 function TakeActions({ take, actions }: { take: NonNullable<ChromeView["focusedTake"]>; actions: ChromeActions }) {
   return <div data-take={take.id}>
+    {take.acceptNote && <p>{take.acceptNote}</p>}
     {take.kind === "Experiment" && <Action hook={CAL.accept} take={take.id} availability={take.accept} action={() => actions.onAccept(take.id)}>Accept</Action>}
     <Action hook={CAL.discard} take={take.id} availability={take.discard} action={() => actions.onDiscard(take.id)}>Discard</Action>
   </div>
@@ -184,6 +202,7 @@ function Record({ view, actions }: ChromeProps) {
   const { take, log, integration, emptyLogMessage } = view.record
   return <section data-cal={CAL.record} data-take={take.id} aria-label="Take record">
     <h2>{take.name} · Take {take.id}</h2><p>{take.subjectLabel} · {take.deviceLabel}</p><p>{take.createdLabel}</p>
+    {take.lineage && <p>{take.lineage}</p>}{take.flag._tag === "Before" && <p title={take.flag.detail}>{take.flag.label}</p>}
     <button type="button" data-cal={CAL.recordClose} onClick={actions.onRecordClose}>Close record</button>
     {take.run._tag === "Running" && <Action hook={CAL.stop} take={take.id} availability={take.stop} action={() => actions.onStop(take.id)}>Stop</Action>}
     {take.run._tag === "Failed" && <p role="alert">{take.run.reason}</p>}

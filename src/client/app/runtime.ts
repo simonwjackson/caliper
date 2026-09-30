@@ -237,6 +237,8 @@ export function createChromeApp(input: RuntimeInput) {
   }
   const actions: ChromeActions = {
     ...markup.actions,
+    // Phase 5 Step 0: every chain has one step until the wire carries lineage, so there is no history to open.
+    onChainHistory: () => notify(new Error("Chain history is not connected yet.")),
     onTool: tool => {
       const tools = { ...state.tools, active: tool }
       // An open pane that another pane covers comes to the front; only a pane already in front closes.

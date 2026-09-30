@@ -33,6 +33,26 @@ export function typeProbes(view: ChromeView, actions: ChromeActions): void {
   // @ts-expect-error A Sending state has no enabled action to authorize another Send.
   const sending: import("../src/client/ui/contract").MarkupSend = { _tag: "Sending", label: "Sending…", availability: { _tag: "Enabled" } }
   void sending
+  actions.onChainHistory("1@100", true)
+  // @ts-expect-error Opening or folding is explicit; there is no toggle.
+  actions.onChainHistory("1@100")
+  if (view.canvas._tag === "Frames") {
+    // @ts-expect-error UI cannot regroup core-owned chains.
+    view.canvas.chains.pop()
+    const chain = view.canvas.chains[0]
+    if (chain) {
+      // @ts-expect-error The pair's frames are core-owned.
+      chain.parent = null
+      // @ts-expect-error A flag must say which accept and why.
+      const flag: typeof chain.flag = { _tag: "Before", take: "8" }
+      void flag
+      if (chain.history._tag === "Open") {
+        const step = chain.history.steps[0]
+        // @ts-expect-error A discarded step cannot be selected.
+        if (step?._tag === "Discarded") void step.selected
+      }
+    }
+  }
   actions.onDirection("stable-id", "brief", "Use a quieter button")
   actions.onKnobCommit("gap", "12px")
   actions.onApplyAlternate("6", "reviewed-revision")

@@ -1,5 +1,6 @@
 import type { ChromeActions, ChromeView } from "../../src/client/ui/contract"
 import { planSend } from "../../src/takes/send-plan.js"
+import { chainsView } from "./chrome-view"
 
 export type ObservedCall = { [K in keyof ChromeActions]: { readonly name: K; readonly args: Parameters<ChromeActions[K]> } }[keyof ChromeActions]
 /** Local action implementation for contract tests. Records calls and updates explicit scenario inputs. */
@@ -15,6 +16,7 @@ export function createChromeScenario(initial: ChromeView) {
     onMarkMode: record("onMarkMode"), onMarkPoint: record("onMarkPoint"), onMarkRegion: record("onMarkRegion"),
     onMarkEdit: record("onMarkEdit"), onMarkNote: record("onMarkNote"), onMarkRemove: record("onMarkRemove"),
     onMarkReplace: record("onMarkReplace"), onDraftOpen: record("onDraftOpen"), onSend: record("onSend"),
+    onChainHistory: record("onChainHistory"),
     onTool: record("onTool"), onNavOpen: record("onNavOpen"), onFilter: record("onFilter"), onPart: record("onPart"), onPartExpanded: record("onPartExpanded"),
     onState: record("onState"), onCompare: record("onCompare"), onTake: record("onTake"), onContext: record("onContext"), onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"), onDevice: record("onDevice"),
     onPrompt: record("onPrompt"), onCount: record("onCount"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanBack: record("onPlanBack"), onDirection: record("onDirection"), onRemoveDirection: record("onRemoveDirection"),
@@ -26,6 +28,17 @@ export function createChromeScenario(initial: ChromeView) {
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,
+    onChainHistory(chain, open) {
+      observed.onChainHistory(chain, open)
+      if (view.canvas._tag !== "Frames") return
+      const opened = chainsView("open")
+      const stepsOf = (id: string) => opened.canvas._tag === "Frames" ? opened.canvas.chains.find(item => item.id === id)?.history : undefined
+      update({ ...view, canvas: { ...view.canvas, chains: view.canvas.chains.map(item => {
+        if (item.id !== chain || item.history._tag === "None") return item
+        const steps = stepsOf(chain)
+        return { ...item, history: open && steps?._tag === "Open" ? steps : { _tag: "Folded" as const, label: item.history.label } }
+      }) } })
+    },
     onMarkMode(on) { observed.onMarkMode(on); if (view.markup._tag === "Ready") update({ ...view, markup: { ...view.markup, mode: { _tag: on ? "Marking" : "Off" } } }) },
     onDraftOpen(draftOpen) { observed.onDraftOpen(draftOpen); if (view.markup._tag === "Ready") update({ ...view, markup: { ...view.markup, draftOpen } }) },
     onMarkEdit(id) {

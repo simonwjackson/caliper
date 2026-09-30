@@ -1,5 +1,7 @@
 import { planSend } from "../../src/takes/send-plan.js"
-import type { Availability, ChromeView, DraftMarkView, FrameView, MarkupView, TakeSummary } from "../../src/client/ui/contract"
+import { acceptFlag, acceptNote, flagWords, historyLabel, lineageLabel, planChains } from "../../src/takes/chains.js"
+import type { AcceptRecord, ChainTake } from "../../src/takes/chains.js"
+import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupView, TakeSummary } from "../../src/client/ui/contract"
 import { DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
 
 export const enabled: Availability = { _tag: "Enabled" }
@@ -14,6 +16,7 @@ const take: TakeSummary = {
   createdLabel: "Created in Page · Menu open. Shared source edits can affect other states.",
   run: { _tag: "Idle" }, files: ["src/Button.tsx", "src/Button.css"], nameIssue: "", direction: { title: "Quiet button", brief: "Use the shared inputs", strange: true },
   unavailableReason: "", accept: enabled, discard: enabled, stop: blocked, prepareAlternate: enabled, kind: "Experiment",
+  lineage: "", acceptNote: "", flag: { _tag: "Current" },
 }
 const frame: FrameView = {
   key: "6@1234", label: "Quiet button", title: "Changes src/Button.tsx", src: "/frame?take=6",
@@ -35,7 +38,8 @@ export function readyView(): ChromeView {
     },
     devices: DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
     tools: { active: "takes", navOpen: true, codeOpen: true, side: "record", codeShare: 0.45 },
-    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }, frame] },
+    canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }, frame],
+      chains: [{ id: "6@1234", shown: frame.key, parent: null, take: "6", label: "6", history: { _tag: "None" }, flag: { _tag: "Current" } }] },
     plan: { _tag: "None" }, composer: {
       prompt: "Make the button quiet", placeholder: "Describe a change", edit: enabled, attach: enabled,
       attachments: [{ id: "image-1", name: "reference.png", url: pixel, remove: enabled }], count: 3, start: enabled, startLabel: "Plan 3 takes",
@@ -83,7 +87,41 @@ export function markupView(state: "empty" | "ready" | "lost" | "blocked" | "send
   return { ...ready, markup, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [
     { ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } },
     ...sources.map(source => ({ ...frame, key: `${source.take}@${source.created}`, take: source.take, src: `/frame?take=${source.take}`, label: `Take ${source.take}`, run: { _tag: state === "blocked" && source.take === "7" ? "Running" as const : "Idle" as const }, marks: draftMarks.filter(mark => mark.name.startsWith(source.take)), markable: sending ? blocked : enabled })),
-  ] } }
+  ], chains: sources.map(source => ({ id: `${source.take}@${source.created}`, shown: `${source.take}@${source.created}`, parent: null, take: source.take, label: source.take, history: { _tag: "None" as const }, flag: { _tag: "Current" as const } })) } }
+}
+
+/**
+ * Phase 5 chains through the shared chain policy: take 6 from 1 across a
+ * discarded 4, take 5 from 2, and take 3 alone, made before take 8 was
+ * accepted. `history` opens every chain's history.
+ */
+export function chainsView(history: "folded" | "open" = "folded"): ChromeView {
+  const ready = readyView()
+  const at = (take: string, created: number) => ({ take, created })
+  const root = (take: string, created: number): ChainTake => ({ ...at(take, created), part: subject.part, state: subject.state, files: ["src/Button.css"] })
+  const one = root("1", 100), two = root("2", 200), three = root("3", 300)
+  const six: ChainTake = { ...root("6", 600), chain: at("1", 100), lineage: [at("1", 100), at("4", 400)] }
+  const five: ChainTake = { ...root("5", 500), chain: at("2", 200), lineage: [at("2", 200)] }
+  const takes = [one, two, three, five, six]
+  const accepted: AcceptRecord[] = [{ ...at("8", 700), part: subject.part, state: subject.state, files: ["src/Button.tsx"], at: 750 }]
+  const flagOf = (take: ChainTake): AcceptFlag => {
+    const flag = acceptFlag(take, accepted), words = flagWords(flag)
+    return flag._tag === "Before" && words ? { _tag: "Before", take: flag.take, ...words } : { _tag: "Current" }
+  }
+  const key = (identity: { take: string; created: number }) => `${identity.take}@${identity.created}`
+  const chains = planChains(takes, at("6", 600))
+  const frames: FrameView[] = [{ ...frame, key: "real", take: null, label: "Original", src: "/frame", selected: false, markable: { _tag: "Disabled", reason: "Original marks belong to phase 6" } }]
+  const views: ChainView[] = chains.map(chain => {
+    for (const identity of [chain.parent, chain.shown]) if (identity) frames.push({ ...frame, key: key(identity), take: identity.take, src: `/frame?take=${identity.take}`, label: `Take ${identity.take}`, selected: identity.take === "6" })
+    const steps: ChainStepView[] = chain.steps.map(step => step.present ? { _tag: "Present", take: step.take, label: `Take ${step.take}`, selected: step.take === chain.shown.take } : { _tag: "Discarded", take: step.take, label: `Take ${step.take}, discarded` })
+    return {
+      id: chain.id, shown: key(chain.shown), parent: chain.parent ? key(chain.parent) : null, take: chain.shown.take, label: lineageLabel(chain),
+      history: chain.steps.length < 2 ? { _tag: "None" } : history === "open" ? { _tag: "Open", label: historyLabel(chain.steps.length), steps } : { _tag: "Folded", label: historyLabel(chain.steps.length) },
+      flag: flagOf(/** shown */ takes.find(take => take.take === chain.shown.take)!),
+    }
+  })
+  const focused: TakeSummary = { ...take, id: "6", lineage: lineageLabel(chains[0]!), acceptNote: acceptNote(chains[0]!, at("6", 600)), flag: flagOf(six) }
+  return { ...ready, focusedTake: focused, record: ready.record._tag === "Open" ? { ...ready.record, take: focused } : ready.record, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames, chains: views } }
 }
 
 export function contractViews(): Record<string, ChromeView> {
@@ -103,7 +141,8 @@ export function contractViews(): Record<string, ChromeView> {
     markEmpty: markupView("empty"), markDraft: markupView("ready"), markLost: markupView("lost"),
     markBlocked: markupView("blocked"), markSending: markupView("sending"), markFailed: markupView("failed"),
     connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
-    failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
+    chainPairs: chainsView("folded"), chainHistory: chainsView("open"),
+    failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", chains: [], frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
     planning: { ...plan, plan: { _tag: "Planning", prompt: "Make it quiet", count: 3, message: "Planning 3 directions" } },
     loading: { ...ready, code: { _tag: "Loading", message: "Loading editor" }, knobs: { _tag: "Finding", target: "Real files" }, checks: { _tag: "Open", targetLabel: "Button", runSelected: blocked, runAll: blocked, notices: [], run: { _tag: "Loading" } } },
