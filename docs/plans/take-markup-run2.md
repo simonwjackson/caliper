@@ -497,8 +497,40 @@ Open from the UI worker (`docs/plans/take-markup-ui-notes.md`, Phase 5):
 - The canvas reserves scroll-bar space on both edges, and frames keep at
   least 6 rem of height, in every mode.
 
+## Phase 6 core landing (before its UI)
+
+The user asked on 2026-09-30 to land and deploy the phase 6 contract and core
+before the UI worker finished. Landed from `markup/p6` onto `38bb0da`.
+
+Planner choices 13 and 14: the user left both to the coordinator, who took A
+for both, as proposed.
+
+Core: `planSend` applies decisions 6 to 8 (`referencesIn`, `outcome`
+`NewTake | PointedTo`, the original as take "0"). Pointed-to marks go to the
+pointing take with a crop of their place and read access to their take
+(`record.references`; `read_file` and `list_files` take an optional `take`).
+An unnamed mark on the original makes one take from the real files. Marks on
+the original on the shown preview go with a typed prompt and leave the draft
+(`/marks/release`). All marks on the original in one Send must share one
+subject; the server refuses otherwise.
+
+Gates on the landed tree: typecheck; full suite 639 pass, 1 skip, 1 fail (the
+known `authored-execution` timeout); `verify:chrome-contract` 20 scenarios,
+114 hooks; `scripts/verify-references.mjs` 3 of 3 and `verify-markup.mjs` 7 of
+7 on both renderers; `verify-chains.mjs` 5 of 5 on Darkroom;
+`scripts/ui/verify.mjs` 267 of 268: the hook union lacks `draft-outcome`,
+`mark-reference` and `prompt-marks` until the UI worker lands. Real model
+(`scripts/verify-references-model.mjs`, scratch Pico): "Send · 2 new takes",
+answered in 0.8 s, agents done 42 s later; the take from 3A made the kicker
+red through Pico's palette token, the take from 0A made the title bold. The
+run did not show whether the agent read take 2; the tool log now names the take
+a read targets.
+
+Until the UI lands, Darkroom has no type-ahead, no outcome line per draft group
+and no prompt line. Typing "2A" in a note still works, and the original frame
+is markable.
+
 ## Next stop point
 
-Phase 5 is done. Phase 6 (references and marks on the original) is built on
-`markup/p6` by the coordinator: contract and core. Next: its UI worker, then
-its gate.
+Phase 5 is done. Phase 6 contract and core are on `main`. Next: the phase 6 UI
+worker's branch (`markup/p6-ui`), then the full phase 6 gate, re-pin and deploy.
