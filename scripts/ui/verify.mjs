@@ -351,11 +351,12 @@ await gate("keyboard: the phone drawer takes focus, Escape closes it and returns
     const toggle = page.locator(cal("parts-toggle"))
     await toggle.focus()
     await page.keyboard.press("Enter")
-    await page.locator(cal("parts")).waitFor()
+    await page.locator(cal("parts")).waitFor({ state: "visible" })
     assert(await page.evaluate(() => Boolean(document.activeElement?.closest(".dr-parts"))), "Focus moves into the drawer")
     assert.equal(await page.locator('.dr-tools [aria-pressed="true"]').count(), 0, "While the drawer is in front, only Parts is marked")
     await page.keyboard.press("Escape")
-    assert.equal(await page.locator(cal("parts")).count(), 0)
+    // The panel stays mounted (its filter and scroll survive); closed means hidden.
+    await page.locator(cal("parts")).waitFor({ state: "hidden" })
     assert(await toggle.evaluate(node => node === document.activeElement), "Focus returns to Parts")
     assert.deepEqual(await page.locator('.dr-tools [aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => node.getAttribute("data-tool"))), ["takes"])
   } finally { await close() }
