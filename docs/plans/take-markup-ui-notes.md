@@ -115,3 +115,147 @@ writes `scripts/ui/out/<fixture>-<size>-<scheme>.png`, and for `mark` and
 - Touch on the Fold. The surface sets `touch-action: none`, so a drag marks
   instead of scrolling; the canvas scrolls outside the frames. Not tried on
   the device.
+
+# Phase 5: chains on the canvas (branch `markup/p5-ui`)
+
+Run 2, phase 5, UI worker, from `main` at `78df06c` on the frozen Step 0
+contract (`6a6ec00`, `78df06c`). Commit `020c61b`. Behaviour: plan decisions
+11 to 13, planner choices 15 to 20. Appearance: decision 35, mockup state
+`takes`.
+
+The served chrome still gets a chain of one for every take from core, so
+until the core worker lands it shows each take as "N no follow-up". That is
+true of the wire today. Everything below runs on the gallery's fixtures.
+
+## What is built
+
+| Area | Files |
+|---|---|
+| Chain (organism) | `canvas/Chain.tsx`: the head, the history when open, and the pair, parent then shown take. It spans the three rows of its band with subgrid, and two subgrid columns when it holds a pair |
+| Chain head | `canvas/ChainHead.tsx`: bold take, "← from 1" in ink 2, "(1 discarded)" in ink 3, "no follow-up" for a chain of one, the flag, the swap and "3 in chain" |
+| Chain history | `canvas/ChainHistory.tsx`: steps oldest first with arrows; present steps are buttons that call `onTake`; discarded steps are struck `span`s with `aria-disabled` |
+| Accept flag (atom) | `atoms/Flag.tsx`: `Fold` in the chain head is a `details` whose summary is the label (warn ink, dotted underline, title with the reason) and opens to the reason; `Full` in the record writes the reason out |
+| Fit rule | `layout.ts` `pairFits(frame, gap, canvas)`: two frames at true size and one gap against the canvas width |
+| Canvas | `canvas/Canvas.tsx`: loose frames first, then chains; reads `--dr-gap-now` (now a registered length) for the rule; `data-pairs="fit" \| "solo"` on the canvas |
+| Device frame | `canvas/DeviceFrame.tsx`: `before` draws the page at 78 %; `hidden` keeps a frame mounted but not drawn |
+| Take record | `side/TakeRecord.tsx`: the lineage line and the full flag. No accept note (choice 20) |
+| Fixtures | `fixtures/chains.ts` (take records and an accept log through `planChains`, as core does); three families in `fixtures/views.ts`; `onChainHistory`, `onChainSolo` and `onTake` rebuild the chains in `fixtures/scenario.ts` |
+| Parts | `Chain`, `ChainHead`, `ChainHistory`, `Flag`, and chain states on `Canvas`, `DeviceFrame`, `TakeRecord` and the Darkroom page |
+| Gates | chain rules in `scripts/ui/applicable.ts` (the swap applies only while `data-pairs` is `solo`); 9 chain gates in `scripts/ui/verify.mjs`; `test/ui-chains.test.ts`; `pairFits` tests in `test/ui-layout.test.ts` |
+
+### Fixtures
+
+| Fixture | What it holds |
+|---|---|
+| `takes` (changed) | The mockup: 6 ← from 1 (1 discarded, take 4), 5 ← from 2, and 3 alone, flagged because take 8 of the Button changed `PicoButton.css`, which take 3 also changes (reason `Files`). The frames and their keys are the same as before, so the phase 4 marks still sit on them |
+| `chainHistory` | The same takes an hour later plus take 7, a second pass on take 1: a branch. Take 1's history is open: Take 1, Take 4 (struck), Take 6, Take 7 |
+| `chainsAccepted` | After take 8 of Game Detail was accepted: chains 1, 2 and 7 ← from 3 (1 discarded, take 5) are all flagged. Chain 3 → 7 remembers `solo: "Parent"`. Take 7's record is open |
+| `chainsOdin` | The mockup's chains on the ODIN 2 PORTAL |
+
+## Choices for undrawn states
+
+| State | Choice |
+|---|---|
+| Where the grid puts things | Bands of three rows (heads, open histories, frames). Every item spans three rows with subgrid, so heads line up and every frame's top lines up with the real files, which have no head. A loose frame keeps one wrapper in every mode (`display: contents` outside Takes), so a mode change does not remount it |
+| The open history | A line of text steps under the head, in its own band row, so frames in the band stay aligned. No thumbnails (see requests) |
+| The flag's reason on the canvas | A disclosure: tap, click or Enter opens the reason on its own line under the head. The summary also has the reason as its title |
+| The fallback | One frame per chain, the one `chain.solo` names. The other frame stays mounted and hidden, so a swap or a resize keeps the state reached in it. "Show take 1" or "Show take 6" sits in the head beside "3 in chain", as a link in ink 2. A parent shown alone keeps its 78 % |
+| A flagged chain | Its frames at 60 %, as the mockup draws. After an accept on the same part every chain is flagged, so every take frame is at 60 % (`chainsAccepted`) |
+| A head too narrow for one line | A spacer pushes the flag and the controls to the right while the line holds them; what wraps starts the next line at the left. No width threshold |
+| Scroll bar | The canvas reserves its scroll bar gutter on both edges, so a scroll bar that comes and goes cannot flip the fit back and forth |
+| A very short canvas | Frames are fitted to at least 6 rem of height. Before, a 240 × 180 chrome scaled frames almost to nothing, and a take's name under its frame went with it; the canvas now scrolls. This changes the `wide-short` and `tiny` ladder renders for every canvas |
+
+## Contract requests (for the coordinator; the UI did not change the contract)
+
+1. **What "(N discarded)" means.** The plan (decision 13), decision 35, the
+   mockup ("6 ← from 1 (4 discarded)") and this brief ("7 ← from 3 (5
+   discarded)") read N as the discarded take's number. `lineageLabel` counts
+   discarded takes, and `test/chains.test.ts` expects "6 ← from 1 (1
+   discarded)". The UI draws the label core sends, so the brief's fixture
+   reads "7 ← from 3 (1 discarded)" with take 5 struck in the history.
+   Decide which reading is meant; if it is the take number, `lineageLabel`
+   and its test change (both frozen).
+2. **A picture per history step.** The mockup draws a 28 px thumbnail on each
+   step. `ChainStepView` has no image, so the strip is text. A present step
+   could carry its frame's `src` or a render URL; a discarded step has none.
+3. **Discarded step labels.** Screen readers do not announce strike-through.
+   Proposal: document that a `Discarded` step's label says so in words, as
+   the contract fixture does ("Take 4, discarded"). The gallery does.
+
+## Gates and evidence
+
+Run in `.worktree/p5-ui` at `020c61b`:
+
+| Gate | Result |
+|---|---|
+| `nix develop -c bun run typecheck` | passes |
+| `nix develop -c bun test test/ui-parts.test.ts test/ui-layout.test.ts test/ui-markup.test.ts test/ui-chains.test.ts test/chrome-contract.test.tsx test/chains.test.ts` | 119 pass, 0 fail |
+| `nix develop -c bun run build` | builds |
+| `nix develop -c node scripts/ui/verify.mjs` | 268 of 268 (225 of 226 at `78df06c`): 37 fixtures at 3 sizes, 111 hooks, the union, actions, 9 chain gates, keyboard, preservation, 15 fixtures at 8 sizes of reachability |
+| `nix develop -c bun run verify:chrome-contract` (frozen) | 19 scenarios, 111 hooks, passes |
+
+The chain gates prove, on the gallery:
+
+- Desk, `takes`: one group per chain in the view's order; each heading's
+  text is the chain's label; its frames are parent then shown; every frame
+  key is drawn once and the real files are in no chain; the parent's page
+  is at 0.78 and a flagged chain's at 0.6; the real files and the first
+  pair start on one line; heads of one band line up.
+- History: "3 in chain" opens with Take 1, Take 4, discarded, Take 6 and
+  folds again; a frame keeps its tap count and mounts once; the discarded
+  step is a struck `span` and a click on it calls nothing. In
+  `chainHistory`, picking Take 7 calls `onTake("7")`, the head reads
+  "7 ← from 1" and the bar says Take 7.
+- Flag: one flag on take 3's head, in the warn colour, with the reason in
+  its title; Enter opens the reason. The record writes lineage and reason
+  out; the bar has neither an accept note nor a flag.
+- RG353M: the Fold (1000 × 680) holds pairs and has no swap; the phone
+  (416 × 640) shows the shown take, keeps the parent mounted, and "Show
+  take 1" calls `onChainSolo(id, "Parent")`; the parent shows, nothing
+  remounts, and it swaps back. A chain of one has no swap.
+  `chainsAccepted` on the phone shows the parent core remembered.
+- ODIN 2 PORTAL: the desk (1600 × 1000) holds an RG353M pair; switching to
+  the ODIN 2 PORTAL turns both parented chains to one frame with a swap; a
+  1920 × 1200 chrome holds the ODIN pair.
+- Every take reachable, for `takes`, `chainHistory`, `chainsAccepted` and
+  `chainsOdin` at the 8 ladder sizes: the fit matches the rule from the
+  measured canvas; each chain's history toggle is in reach; each shown or
+  parent frame's name is in reach or one swap away; every present step of
+  every unfolded history is in reach; every take the state lists is on the
+  canvas or a step.
+
+Four existing gates changed because a parent is now hidden where its pair
+does not fit, or for a race:
+
+- The phone markup gate presses on take 3, a chain of one, not on take 1.
+- The actions gate clicks take 3's name after switching to the ODIN 2 PORTAL.
+- The Re-place gate presses higher on take 3: take 3 is now in the second
+  band, and the open draft covers the lower part of it.
+- The token list gate waits for its `requestAnimationFrame` focus. It failed
+  once in a full run beside a parallel build and passed 3 of 3 alone.
+
+### Screenshots
+
+`nix develop -c node scripts/ui/shoot.mjs takes chainHistory chainsAccepted chainsOdin`
+writes them (the folder is ignored by git). Looked at:
+
+- `scripts/ui/out/compare/takes-desk-dark.png`: the mockup and this build side by side.
+- `scripts/ui/out/takes-desk-dark.png`, `takes-phone-dark.png`, `takes-phone-light.png`
+- `scripts/ui/out/chainHistory-desk-dark.png`, `chainHistory-fold-light.png`
+- `scripts/ui/out/chainsAccepted-desk-light.png`, `chainsAccepted-phone-dark.png`
+- `scripts/ui/out/chainsOdin-desk-dark.png`
+
+## What is not proved, and limits
+
+- Anything with core data: lineage on the wire, the accept log, the
+  remembered side across a reload, accept removing a chain. Those are the
+  core worker's and the phase 5 gate's.
+- The scroll bar gutter costs up to 30 px of canvas width where a browser
+  draws classic scroll bars. The gates run headless with hidden scroll
+  bars, so that cost is not measured.
+- The bands need CSS subgrid.
+- If the fallback hides the frame whose mark has the note editor open, the
+  editor is hidden with it until the swap, Escape or the draft.
+- Every chain at 60 % after an accept on the same part is the mockup's
+  dimming applied to choice 15's answer C. Worth a look by the user.
+- Not tried on a real Fold, or with touch.
