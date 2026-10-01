@@ -201,7 +201,7 @@ describe("the plugin", () => {
     const current = plugin.config.call({ meta: { viteVersion: "8.3.1" } }, { root: mkdtempSync(join(tmpdir(), "caliper-hmr-")) })
     expect(current.server.ws.path).toMatch(/^__caliper\/hmr\/[0-9a-f]{12}$/)
     expect(current.server.hmr).toBeUndefined()
-    expect(plugin.config.call({ meta: { viteVersion: "8.3.1" } }, { root: mkdtempSync(join(tmpdir(), "caliper-hmr-")), server: { ws: false } }).server).toBeUndefined()
+    expect(plugin.config.call({ meta: { viteVersion: "8.3.1" } }, { root: mkdtempSync(join(tmpdir(), "caliper-hmr-")), server: { ws: false } }).server).toEqual({ watch: { ignored: ["**/.caliper/checks/**"] } })
   })
 
   test("socket settings go under server.ws from Vite 8.1, under server.hmr before", () => {
