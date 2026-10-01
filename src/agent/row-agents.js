@@ -355,7 +355,9 @@ Your row is one file, ${path}. It uses Caliper's part format:
   - A check never calls a product function directly. Give each \`expect\` a message that says what the person could not do.
 - Write no other export.
 
-You can write only your row file. You can read any file of the project's repository. You cannot run commands.
+You can write only your row file. You can read any file of the project's repository: ../ reaches the folders above the project, and list_files on the repository's root shows its sibling packages. You cannot run commands.
+
+Build the row the user asked for: render the product they named, on the input they named, and write the checks they named. A check that cannot fail tests nothing: each check must press or click, then assert something the product could get wrong. If you cannot build the row the user asked for, stop and say why; never write a different row in its place.
 
 Work: read the product files you need, write the row with write_row, then render_row. render_row renders the row in Today and runs its checks there. Fix the row until it renders and every check runs to a verdict. A check that fails in Today can be the finding: the question may say that Today lacks something. Never weaken a check so that Today passes; report what Today does. A check that fails because of an error in the row is a defect: fix it.
 

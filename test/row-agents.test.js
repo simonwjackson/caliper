@@ -113,6 +113,8 @@ describe("a row agent", () => {
       expect(text).toContain("../../../../src/")
       expect(text).toContain("src/Home.page.part.tsx")
       expect(system).toContain("Never weaken a check so that Today passes")
+      expect(system).toContain("A check that cannot fail tests nothing")
+      expect(system).toContain("If you cannot build the row the user asked for, stop and say why")
       expect(system).toContain(String(MAX_ROW_TURNS))
       expect(view.log.map(entry => entry._tag === "Tool" ? `${entry.name}:${entry.outcome}` : entry._tag)).toEqual(["User", "read_file:Done", "write_row:Done", "render_row:Done", "Assistant"])
       const rendered = view.log.find(entry => entry._tag === "Tool" && entry.name === "render_row")
