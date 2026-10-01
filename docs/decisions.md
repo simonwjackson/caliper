@@ -1,9 +1,9 @@
 # Decisions
 
-These decisions shaped the fresh start on 2026-09-26. The `legacy` branch holds
-the earlier Caliper: a multi-project launcher, per-project descriptors and
-adapters, and a design studio. It grew to about 40,800 lines, and loading a
-project stopped being reliable. Change a decision below only with new evidence,
+These decisions shaped the fresh start on 2026-09-26. The earlier Caliper was a
+multi-project launcher, per-project descriptors and adapters, and a design
+studio. It grew to about 40,800 lines, and loading a project stopped being
+reliable. It was discarded, not kept as a branch. Change a decision below only with new evidence,
 and record the change here.
 
 | # | Decision | Why |

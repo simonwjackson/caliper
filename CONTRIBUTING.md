@@ -236,5 +236,4 @@ layout as deferred on the reference. It writes screenshots to
 `/tmp/caliper-verify`.
 
 The design decisions behind this shape are in
-[`docs/decisions.md`](docs/decisions.md). The previous, larger Caliper is on
-the `legacy` branch.
+[`docs/decisions.md`](docs/decisions.md).

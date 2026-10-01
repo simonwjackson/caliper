@@ -145,8 +145,7 @@ drifting from the code.
 - Support for older protocol numbers.
 - Routing a product's own WebSockets.
 - Separate storage for each product.
-- Porting code from the `legacy` branch or `feat-zero-touch-onboarding`. Read
-  them only for ideas.
+- Porting code from the earlier Caliper.
 
 ## Open questions
 
