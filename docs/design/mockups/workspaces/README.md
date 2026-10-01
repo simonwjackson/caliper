@@ -1,6 +1,6 @@
 # Workspaces, slice 1: high-fidelity mockup
 
-Status: a mockup for review, 2026-10-01. Nothing here is built into Caliper.
+Status: approved by the user on 2026-10-01, as decision 45. The build follows it.
 The plan is [`docs/plans/workspaces.md`](../../../plans/workspaces.md). Slice 1
 is the path from a question to an answer: the workspace, its question, state
 rows, the planner and ideas, the board on one device, questions and answers,
@@ -52,7 +52,7 @@ Two findings came from the real renders, not from the design:
 
 ## What the mockup decides
 
-These need your approval before slice 1 is built.
+The user approved these on 2026-10-01 with "no notes".
 
 1. **Workspaces live in the parts panel**, above Pages. There is no new rail
    tool. The selected workspace replaces the canvas with its board.
