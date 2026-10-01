@@ -746,6 +746,8 @@ You can close the Checks window while it runs. Its latest report survives page
 reloads during the same Vite session. Restarting Vite clears the displayed report;
 accepted baselines remain in `<project>/.caliper/baselines`. UI evidence stays in
 `<project>/.caliper/checks` until you remove it. **Download report** saves its JSON.
+Caliper excludes this generated evidence from Vite's watcher. Writing an image
+must not trigger HMR; product files and `.caliper/takes` copies remain watched.
 The UI does not freeze files while checks run or discover every affected consumer.
 
 The same reporting engine is available through the CLI and the agent's render

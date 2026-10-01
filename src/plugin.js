@@ -105,6 +105,9 @@ export function caliper(options = {}) {
         // the served CSS's sourcemap (decision 23). Served CSS gets larger.
         css: { devSourcemap: true },
         ...socket,
+        // Evidence is output, not product source. Creating a PNG must not
+        // wake Vite's unresolved-import retries and reload another frame.
+        server: { ...socket.server, watch: { ignored: ["**/.caliper/checks/**"] } },
       }, checkDelivery.config())
     },
 

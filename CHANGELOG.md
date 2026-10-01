@@ -7,6 +7,9 @@ break things.
 
 ## Unreleased
 
+- Generated check images no longer trigger Vite's unresolved-import retries and
+  reload unchanged preview frames. Product files and take copies remain watched.
+
 The first public release.
 
 ### Fixed
