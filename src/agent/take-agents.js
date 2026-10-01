@@ -10,6 +10,7 @@ import { skillPrompt, skillSession } from "./skills.js"
 import { imageContent } from "./images.js"
 import { identityKey } from "../takes/chains.js"
 import { isIdea } from "../takes/store.js"
+import { createWorkspaceStore } from "../takes/workspaces.js"
 
 /**
  * The chain a take belongs to: its record's `chain`, or the take itself.
@@ -24,9 +25,12 @@ const chainKey = ({ take, created, chain }) => identityKey(chain ?? { take, crea
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").TakeRun} TakeRun
  * @typedef {import("../types").TakeLogEntry} TakeLogEntry
- * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
+ * @typedef {({ part: string, state: string, device: string, context?: import("../types").StateRef, subject?: undefined } | { subject: import("../takes/store.js").IdeaSubject, device: string, part?: undefined, state?: undefined, context?: undefined }) & { direction?: import("../takes/store.js").Direction, others?: string[] }} TakeAsk
+ *   A take of a part and state, or an idea of a workspace (decision 45).
  *   `direction` is the planner's way for this take to answer the prompt;
  *   `others` are the titles of the directions its sibling takes got.
+ * @typedef {import("../takes/store.js").TakeRecord} TakeRecord
+ * @typedef {import("../takes/workspaces.js").Workspace} Workspace
  * @typedef {import("./images.js").AttachedImage} AttachedImage
  * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
  * @typedef {ReturnType<typeof skillSession>} SkillSession
@@ -49,10 +53,11 @@ export const MAX_TURNS = 40
  * @param {{
  *   store: TakeStore,
  *   engine: () => Engine,
- *   renderFor: (take: string, ask: TakeAsk) => RenderTake,
+ *   renderFor: (take: string, ask: TakeRecord) => RenderTake,
  *   onChange: () => void,
  *   skills?: () => SkillCatalog | Promise<SkillCatalog>,
  *   integration?: import("./host-types").AgentIntegration,
+ *   workspaces?: import("./host-types").AgentWorkspaces,
  *   devices?: (signal?: AbortSignal) => readonly import("../client/device-frame.js").Device[] | Promise<readonly import("../client/device-frame.js").Device[]>,
  * }} input
  *   `devices` is the project's device list, read when a take's agent starts;
@@ -62,7 +67,13 @@ export const MAX_TURNS = 40
  *   is read when a take's agent starts, so a new or changed skill reaches the
  *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(/** @type {import("../takes/store.js").TakeStore} */ (store)), devices = () => STANDARD_DEVICES }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(/** @type {import("../takes/store.js").TakeStore} */ (store)), workspaces = createWorkspaceStore(store.root), devices = () => STANDARD_DEVICES }) {
+  /** The workspace an idea answers, as it is now. @param {{ subject: import("../takes/store.js").IdeaSubject }} idea @returns {Promise<Workspace>} */
+  const workspaceOf = async idea => {
+    const workspace = await workspaces.read(idea.subject.workspace)
+    if (workspace === null) throw new Error(`Workspace ${idea.subject.workspace} does not exist.`)
+    return workspace
+  }
   /** @type {Map<string, Live>} */
   const live = new Map()
   /** @type {Map<string, AbortController>} */
@@ -364,7 +375,6 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       entry.log[userIndex] = { ...user, ...(kept.length ? { images: kept.map(image => image.file) } : {}) }
       const record = await store.record(take)
       if (record === null) throw new Error(`Take ${take} does not exist.`)
-      if (isIdea(record)) throw new Error(`Take ${take} is an idea. Ideas start from their workspace.`)
       signal.throwIfAborted()
       const renderTake = renderFor(take, record)
       /** @type {RenderTake} */
@@ -388,7 +398,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
         ? [{ type: /** @type {const} */ ("text"), text: prompt }, ...attachedImages.map(image => ({ type: /** @type {const} */ ("image"), data: image.bytes.toString("base64"), mimeType: image.mimeType }))]
         : first
         ? [
-          ...await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take),
+          ...await (isIdea(record)
+            ? ideaFirstMessage(record, await workspaceOf(record), `${named}${handNote(edited, true)}`, prompt, render, store, take)
+            : firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take)),
           // A new agent in an old take, after a restart, has not seen the take's earlier images.
           ...imageContent(await earlierImages(store, take, attachedImages), "earlier prompts in this take"),
           ...attached,
@@ -416,25 +428,27 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
 
   /**
    * @param {string} take
-   * @param {TakeAsk} ask
+   * @param {TakeRecord} ask
    * @param {RenderTake} render
    * @param {Live} entry
    * @param {readonly import("../client/device-frame.js").Device[]} devices the project's
    */
   const createAgent = async (take, ask, render, entry, devices) => {
     const { models, model, reasoning } = engine()
-    const preview = ask.context ?? ask
+    const idea = isIdea(ask) ? await workspaceOf(ask) : null
+    const preview = isIdea(ask) ? { part: idea?.rows[0]?.part, state: idea?.rows[0]?.state ?? "default" } : ask.context ?? ask
     const catalog = await skills()
     const session = skillSession(catalog)
     entry.skills = session
     const tools = [
-      ...takeTools({ store, take, render, defaults: { part: preview.part, state: preview.state, device: ask.device } }),
-      ...await metadataTools({ store, take, onChange, integration }),
+      ...takeTools({ store, take, render, defaults: { part: preview.part, state: preview.state, device: ask.device }, scope: idea ? "Idea" : "Take" }),
+      ...await metadataTools({ store, take, onChange, integration, workspaces }),
       ...session.tools,
     ]
+    const prompt = idea ? ideaSystemPrompt(take, idea.id, devices) : systemPrompt(take, devices)
     let turns = 0
     const agent = new Agent({
-      initialState: { systemPrompt: `${systemPrompt(take, devices)}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
+      initialState: { systemPrompt: `${prompt}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
       streamFn: models.streamSimple.bind(models),
       sessionId: `caliper-take-${take}-${Date.now()}`,
       toolExecution: "sequential",
@@ -649,6 +663,36 @@ How to work:
 Do not ask the user questions. When a request is unclear, make a sensible choice and say which one.`
 }
 
+/**
+ * @param {string} take
+ * @param {string} workspace
+ * @param {readonly import("../client/device-frame.js").Device[]} projectDevices
+ */
+function ideaSystemPrompt(take, workspace, projectDevices) {
+  const devices = projectDevices.map(device => `${device.id} (${device.name}, ${device.cssWidth}x${device.cssHeight} CSS px)`).join(", ")
+  return `You are the design agent inside Caliper, a tool that shows a React project's UI parts at the true size of the devices it targets.
+
+You work on idea ${take} of workspace ${workspace}. A workspace is a scratch area for one question about the product. An idea is one answer to it. Your edits go into the idea, never into the real project. The user compares the ideas on a board: each row is a state of the product, shown by the real files and by every idea. Nothing you change reaches the product unless the user promotes the idea later.
+
+Terms:
+- A part is a file named *.part.tsx. Its default export and its other exported components are its states: example renders with realistic data.
+- An idea can reuse the project's parts, change them, or add new components, CSS and parts. Choose what the question needs. To show something new, you may add a part file and render it by name.
+- The board's rows are the test every idea is judged by. You cannot change which rows the board shows. Keep the real composition and fixture data of each row.
+- Your writes are fenced to your idea's folder. Other ideas do not see your edits.
+- Devices: ${devices}. Every size you see is the device's CSS viewport.
+
+Tools: read_file, list_files, edit_file and write_file work on project files as this idea sees them. render shows the idea in a headless browser and returns a verdict and screenshots. ask_question adds an open question to the workspace for the user.
+
+How to work:
+1. Read the files you need before you change them. Keep the project's structure, naming and CSS style.
+2. Make the change your direction needs.
+3. Call render after each change. Before finishing, call render with rows:true to check every row of the board. Fix errors, and explain intentional Empty results or spill.
+4. When the question leaves a decision open that the user must make, or you find a problem the user must know about, call ask_question once for each. Ask only what the user must decide.
+5. State what you checked and what remains unverified. Screenshots do not prove interactions such as key presses. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
+
+Do not ask questions in your reply; use ask_question. When something is unclear, make a sensible choice and say which one.`
+}
+
 const INTEGRATION_PROMPT = `Prepare this experiment as an additional supported choice, not a replacement. You are working in a separate proposal take copied from the experiment. No real files have changed.
 
 Read the original files with read_original. Preserve every existing caller's default behavior and every existing part state's output. Reuse an existing variant mechanism when the design fits it; otherwise add a separate named component sharing unchanged dependencies. Do not blindly duplicate behavior or change a global token for the alternate. Use reset_file to remove experiment edits that would change existing callers.
@@ -662,23 +706,65 @@ Render the alternate and original states. Then call submit_integration with stra
  * takes started from one prompt try different things.
  *
  * @param {TakeAsk} ask
+ * @param {"take" | "idea"} [noun]
  */
-function directionText(ask) {
+function directionText(ask, noun = "take") {
   if (ask.direction === undefined) return ""
   const others = ask.others?.length
-    ? `\nOther takes of this prompt try: ${ask.others.map(title => `"${title}"`).join(", ")}. Stay clearly apart from them; the user compares the takes side by side.`
+    ? `\nOther ${noun}s of this prompt try: ${ask.others.map(title => `"${title}"`).join(", ")}. Stay clearly apart from them; the user compares the ${noun}s side by side.`
     : ""
+  const pattern = noun === "idea" ? "the product's" : "the part's"
   const strange = ask.direction.strange
-    ? "\nThis is the strange direction: it breaks the part's current pattern on purpose. Do not drift back to the usual pattern, and keep it a real answer that works on the device."
+    ? `\nThis is the strange direction: it breaks ${pattern} current pattern on purpose. Do not drift back to the usual pattern, and keep it a real answer that works on the device.`
     : ""
-  return `\n\nThis take's direction: ${ask.direction.title}. ${ask.direction.brief}${others}${strange}\nFollow this direction, even where another answer would be more obvious. If it cannot work, say why in your summary.`
+  return `\n\nThis ${noun}'s direction: ${ask.direction.title}. ${ask.direction.brief}${others}${strange}\nFollow this direction, even where another answer would be more obvious. If it cannot work, say why in your summary.`
+}
+
+/**
+ * An idea's first message (decision 45): the workspace's question, the
+ * idea's direction, the board's rows with the source of each row's part, and
+ * how every row renders now.
+ *
+ * @param {TakeAsk & { device: string }} ask
+ * @param {Workspace} workspace
+ * @param {string} lead skills the prompt names, and files edited by hand
+ * @param {string} prompt the question, or your own description of the idea
+ * @param {RenderTake} render
+ * @param {TakeStore} store
+ * @param {string} take
+ * @returns {Promise<Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>>}
+ */
+async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, take) {
+  const described = prompt.trim() === workspace.question.trim() ? "" : `\n\nThe user describes this idea: ${prompt}`
+  const rows = workspace.rows.length ? workspace.rows.map(row => `- ${row.part}, state "${row.state}"`).join("\n") : "- none yet"
+  const sources = await Promise.all([...new Set(workspace.rows.map(row => row.part))].map(async file => {
+    try { return `<file path="${file}">\n${await store.read(take, file)}\n</file>` }
+    catch (error) { return `Caliper could not read ${file}: ${error instanceof Error ? error.message : String(error)}` }
+  }))
+  /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
+  const content = [{
+    type: "text",
+    text: `${lead}The workspace's question: ${workspace.question}${described}${directionText(ask, "idea")}\n\nThe board's rows. The user compares every idea on each of them, on ${ask.device}:\n${rows}\n\n${sources.join("\n\n")}`,
+  }]
+  const first = workspace.rows[0]
+  if (first === undefined) return content
+  try {
+    const results = await render({ state: first.state, devices: [ask.device], related: true })
+    for (const { png, ...verdict } of results.slice(0, 4)) {
+      content.push({ type: "text", text: `How ${verdict.part}, state "${verdict.state}", renders now:\n${JSON.stringify(verdict, null, 2)}` })
+      content.push({ type: "image", data: readFileSync(png).toString("base64"), mimeType: "image/png" })
+    }
+  } catch (error) {
+    content.push({ type: "text", text: `Caliper could not render the rows before you started: ${error instanceof Error ? error.message : String(error)}` })
+  }
+  return content
 }
 
 /**
  * The first message: the request, the take's direction, the part's source,
  * and how the part renders now.
  *
- * @param {TakeAsk} ask
+ * @param {Extract<TakeAsk, { part: string }>} ask a take of a part
  * @param {string} prompt
  * @param {RenderTake} render
  * @param {TakeStore} store

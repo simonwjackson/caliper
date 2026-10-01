@@ -65,7 +65,7 @@ import { AcceptRecordSchema, MAX_ACCEPTED } from "./accepted-contract.js"
 /**
  * Whether a take is an idea of a workspace, not a take of a part.
  *
- * @template {NewTakeRecord} T
+ * @template {{ subject?: IdeaSubject | undefined }} T
  * @param {T} record
  * @returns {record is T & IdeaFields}
  */

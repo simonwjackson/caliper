@@ -1,7 +1,7 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai"
-import { cleanPlan, planDirections } from "../src/agent/planner.js"
+import { cleanPlan, planDirections, planIdeas } from "../src/agent/planner.js"
 
 /** @param {import("@earendil-works/pi-ai").FauxResponseStep[]} responses */
 function engineWith(responses) {
@@ -146,5 +146,55 @@ describe("the planner", () => {
       .toEqual({ directions: plain, note: "A precise fix has no strange answer." })
     expect(cleanPlan({ directions: [...plain.slice(0, 2), { ...plain[2], strange: true }], note: "Not needed." }, 3))
       .toEqual({ directions: [...plain.slice(0, 2), { ...plain[2], strange: true }] })
+  })
+})
+
+describe("the planner for a workspace", () => {
+  const question = {
+    question: "A person can open Settings using only the d-pad, A and B.",
+    count: 3,
+    rows: [{ part: "src/Home.page.part.tsx", state: "default" }, { part: "src/Settings.page.part.tsx", state: "default" }],
+    device: "rg353m",
+    context: [{ type: /** @type {const} */ ("text"), text: "<file path=\"src/Home.page.part.tsx\">…</file>" }],
+  }
+
+  test("plans ideas from the question and its rows, and names the workspace", async () => {
+    /** @type {any} */
+    let seen = null
+    const engine = engineWith([context => {
+      seen = context
+      return fauxAssistantMessage([fauxToolCall("propose_ideas", {
+        name: "Settings with the d-pad",
+        directions: [
+          { title: "A row of places", brief: "Find and Settings under the shelf." },
+          { title: "Places in every header", brief: "Find and Settings beside the clock." },
+          { title: "Settings is a cart", brief: "Stand Settings on the shelf.", strange: true },
+        ],
+      })], { stopReason: "toolUse" })
+    }])
+    const plan = await planIdeas({ engine, ...question })
+    expect(plan).toEqual({
+      name: "Settings with the d-pad",
+      directions: [
+        { title: "A row of places", brief: "Find and Settings under the shelf." },
+        { title: "Places in every header", brief: "Find and Settings beside the clock." },
+        { title: "Settings is a cart", brief: "Stand Settings on the shelf.", strange: true },
+      ],
+    })
+    const user = seen.messages.find((/** @type {any} */ message) => message.role === "user")
+    expect(user.content[0].text).toContain("A person can open Settings using only the d-pad, A and B.")
+    expect(user.content[0].text).toContain("src/Home.page.part.tsx, state \"default\"")
+    expect(user.content[0].text).toContain("src/Settings.page.part.tsx, state \"default\"")
+    expect(user.content[1].text).toContain("src/Home.page.part.tsx")
+    const system = JSON.stringify(seen.systemPrompt ?? seen.messages)
+    expect(system).toContain("reuse")
+    expect(system).toContain("strange direction")
+  })
+
+  test("leaves the name out when the model gives none, and fails visibly with no directions", async () => {
+    const engine = engineWith([fauxAssistantMessage([fauxToolCall("propose_ideas", { directions: [{ title: "A", brief: "one" }, { title: "B", brief: "two" }] })], { stopReason: "toolUse" })])
+    expect(await planIdeas({ engine, ...question, count: 2 })).toEqual({ directions: [{ title: "A", brief: "one" }, { title: "B", brief: "two" }] })
+    await expect(planIdeas({ engine: engineWith([fauxAssistantMessage([fauxText("Some ideas.")])]), ...question }))
+      .rejects.toThrow("The planner did not propose any ideas.")
   })
 })

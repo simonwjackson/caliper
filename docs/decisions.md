@@ -1000,3 +1000,15 @@ Costs:
   its ideas. Protocol 4.
 - `takes/<n>/*` refuses an idea with 409. The take store refuses to accept an
   idea, an alternate cannot start from one, and marks cannot go on one.
+- The planner for a question is `planIdeas`, with the tool `propose_ideas`.
+  It sees the question, the source of each row's part, up to four renders of
+  the rows as the real files show them, and every part's file and name. It
+  keeps decision 33's strange direction and also names the workspace.
+- As for takes, the chrome asks `workspaces/<id>/plan` for directions, then
+  starts each idea with `workspaces/<id>/ideas`, so Cancel starts nothing. A
+  new idea can also start from a description you write, with no plan.
+- An idea's agent gets the question, its direction, the rows, their sources
+  and how each row renders now. Its `render` tool renders any state the
+  idea's files declare, including a part the idea adds, and `rows: true`
+  renders every row once. `ask_question` adds an open question to the
+  workspace in the idea's name.

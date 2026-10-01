@@ -55,6 +55,33 @@ describe("the workspaces API", () => {
     })
   })
 
+  test("a plan and a new idea need the question and a row, and a running agent", async () => {
+    await withProject({ files }, async ({ url, root }) => {
+      const { workspace } = await (await post(url, "/__caliper/workspaces", { question: "" })).json()
+      const base = `/__caliper/workspaces/${workspace}`
+      const device = "iphone-16"
+      const noQuestion = await post(url, `${base}/plan`, { count: 3, device })
+      expect(noQuestion.status).toBe(400)
+      expect((await noQuestion.json()).error).toContain("Write the question first")
+      await post(url, `${base}/question`, { question: "Can the chip read warmer?" })
+      const noRows = await post(url, `${base}/ideas`, { device, prompt: "Try red" })
+      expect((await noRows.json()).error).toContain("Pin a state first")
+      await post(url, `${base}/rows`, { part: chip, state: "default", pinned: true })
+      expect((await (await post(url, `${base}/plan`, { count: 9, device })).json()).error).toContain("2 to 4 ideas")
+      expect((await (await post(url, `${base}/plan`, { count: 3, device: "toaster" })).json()).error).toContain("toaster")
+      const off = await post(url, `${base}/plan`, { count: 3, device })
+      expect(off.status).toBe(400)
+      expect((await off.json()).error).toContain("The agent is off")
+      // Without an agent an idea is made, and its run fails with the reason.
+      const started = await post(url, `${base}/ideas`, { device, prompt: "Try red" })
+      expect(started.status).toBe(201)
+      const { take } = await started.json()
+      expect(createTakeStore(root).record(take)).toMatchObject({ subject: { _tag: "Idea", workspace }, device, prompt: "Try red" })
+      const elsewhere = await post(url, `/__caliper/workspaces/${workspace}/ideas/99/prompt`, { prompt: "More" })
+      expect(elsewhere.status).toBe(404)
+    })
+  })
+
   test("an idea shows only on its workspace; discard deletes it and keeps the questions; a take of a part stays", async () => {
     await withProject({ files }, async ({ root, url, get }) => {
       const { workspace } = await (await post(url, "/__caliper/workspaces", { question: "Can the chip read warmer?" })).json()

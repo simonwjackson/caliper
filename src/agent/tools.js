@@ -24,10 +24,12 @@ const READ_LIMIT = 200_000
 const IMAGE_LIMIT = 4
 
 /**
- * @param {{ store: TakeStore, take: string, render: RenderTake, defaults: { part?: string, state: string, device: string } }} input
+ * @param {{ store: TakeStore, take: string, render: RenderTake, defaults: { part?: string, state: string, device: string }, scope?: "Take" | "Idea" }} input
+ *   `scope` "Idea" is an idea of a workspace (decision 45): render defaults to
+ *   the board's first row, and `rows` renders every row.
  * @returns {AgentTool[]}
  */
-export function takeTools({ store, take, render, defaults }) {
+export function takeTools({ store, take, render, defaults, scope = "Take" }) {
   /** @param {string} value */
   const text = value => ({ type: /** @type {const} */ ("text"), text: value })
 
@@ -126,6 +128,40 @@ export function takeTools({ store, take, render, defaults }) {
   }
 
   /** @type {AgentTool} */
+  const ideaRender = {
+    name: "render",
+    label: "Render",
+    description: [
+      "Render a state as this idea changes it, in a headless browser at each device's CSS viewport. Returns a JSON verdict per part, state and device, and screenshots.",
+      "Use rows:true to render every row of the workspace's board, once each: the states every idea is judged by. Any other part and state you name renders too, including a part file this idea adds.",
+      '`frame` is "Rendered", "Empty" or "Failed". `problems` are load and render errors with stacks. `console` holds browser errors. `spill` is null when the part fits the screen; otherwise it names the elements past the edge.',
+      "Render after each change, and read the verdict before you look at the picture.",
+    ].join(" "),
+    parameters: Type.Object({
+      part: Type.Optional(Type.String({ description: `A part file. Default: the board's first row${defaults.part ? ` (${defaults.part})` : ""}.` })),
+      state: Type.Optional(Type.String({ description: `A state export, or "*" for every state of the part. Default: "${defaults.state}", or "default" when part changes.` })),
+      device: Type.Optional(Type.String({ description: `A device id, or "*" for every device. Default: "${defaults.device}"` })),
+      rows: Type.Optional(Type.Boolean({ description: "Render every row of the board. Ignores part and state." })),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
+      const { state, device, part, rows } = /** @type {{ state?: string, device?: string, part?: string, rows?: boolean }} */ (params)
+      const results = await render({
+        state: state ?? (part !== undefined && part !== defaults.part ? "default" : defaults.state),
+        devices: [device ?? defaults.device],
+        ...(part === undefined || rows ? {} : { part }),
+        ...(rows ? { related: true } : {}),
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const shown = results.map(result => result.png).slice(0, IMAGE_LIMIT)
+      const images = shown.map(path => ({ type: /** @type {const} */ ("image"), data: readFileSync(path).toString("base64"), mimeType: "image/png" }))
+      const omitted = results.length > images.length ? `\n${results.length - images.length} screenshots omitted.` : ""
+      return { content: [text(`${JSON.stringify(results, null, 2)}\nAttached images, in order: ${JSON.stringify(shown)}${omitted}`), ...images], details: { results } }
+    },
+  }
+
+  /** @type {AgentTool} */
   const renderTool = {
     name: "render",
     label: "Render",
@@ -172,5 +208,5 @@ export function takeTools({ store, take, render, defaults }) {
     },
   }
 
-  return [readFile, listFiles, editFile, writeFile, renderTool]
+  return [readFile, listFiles, editFile, writeFile, scope === "Idea" ? ideaRender : renderTool]
 }

@@ -13,7 +13,7 @@ import { checkJobs } from "../render/checks.js"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
 import { isIdea, isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
-import { planDirections } from "./planner.js"
+import { planDirections, planIdeas } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
 import { verifyIntegration } from "./verify-integration.js"
 import { skillsStatus } from "./skills.js"
@@ -135,17 +135,28 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     return trackRender(() => renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium, signal: shutdown.signal }))
   }
 
+  const workspaceStore = host.workspaces ?? createWorkspaceStore(store.root)
   const agents = createTakeAgents({
     store,
+    workspaces: workspaceStore,
     ...(host.integration ? { integration: host.integration } : {}),
     engine,
     renderFor: (take, ask) => async request => {
       const signal = request.signal ? AbortSignal.any([shutdown.signal, request.signal]) : shutdown.signal
       signal.throwIfAborted()
       const original = await project(signal)
-      validateTakeContext(original.parts, ask)
       const viewed = { ...original, parts: await proposedParts(take) }
-      const jobs = planTakeRenders(viewed, ask, request, take, Boolean((await store.record(take))?.integration))
+      /** @type {import("../render/plan.js").RenderJob[]} */
+      let jobs
+      if (isIdea(ask)) {
+        // The rows as they are now: you can pin and unpin while the idea works.
+        const workspace = await workspaceStore.read(ask.subject.workspace)
+        if (workspace === null) throw new Error(`Workspace ${ask.subject.workspace} does not exist.`)
+        jobs = planIdeaRenders(viewed, workspace.rows, request, take)
+      } else {
+        validateTakeContext(original.parts, ask)
+        jobs = planTakeRenders(viewed, ask, request, take, Boolean((await store.record(take))?.integration))
+      }
       if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
       const url = await serverUrl(signal)
       signal.throwIfAborted()
@@ -166,10 +177,30 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   })
 
   const workspaces = createWorkspacesApi({
-    workspaces: host.workspaces ?? createWorkspaceStore(store.root),
+    workspaces: workspaceStore,
     agents,
     project,
     onChange,
+    plan: async ({ workspace, count, device, images }) => {
+      const connected = engine()
+      const { parts } = await project()
+      /** @type {import("./planner.js").Content[]} */
+      const context = await Promise.all([...new Set(workspace.rows.map(row => row.part))].map(async file => ({
+        type: /** @type {const} */ ("text"), text: `<file path="${file}">\n${await readProjectFile(file)}\n</file>`,
+      })))
+      context.push({ type: "text", text: `The project's parts, by file and name:\n${parts.map(part => `- ${part.file} (${part.name}, ${part.states.length} states)`).join("\n")}` })
+      for (const row of workspace.rows.slice(0, MAX_TAKES)) {
+        try {
+          const [result] = await renderPart(row.part, { state: row.state, devices: [device] })
+          if (result === undefined) continue
+          context.push({ type: "text", text: `How ${row.part}, state "${row.state}", renders now:` })
+          context.push({ type: "image", data: readFileSync(result.png).toString("base64"), mimeType: "image/png" })
+        } catch (error) {
+          context.push({ type: "text", text: `Caliper could not render ${row.part}, state "${row.state}": ${error instanceof Error ? error.message : String(error)}` })
+        }
+      }
+      return planIdeas({ engine: connected, question: workspace.question, count, rows: workspace.rows, device, context, images, skills: await skills() })
+    },
   })
 
   const markup = createMarkupApi({
@@ -505,6 +536,30 @@ export function planTakeRenders(project, ask, request, take, integration = false
     for (const job of plan.jobs) jobs.set(JSON.stringify([job.part, job.state, job.device]), job)
   }
   return [...jobs.values()]
+}
+
+/**
+ * What an idea of a workspace renders (decision 45). `related` renders every
+ * row of the board, once each. Otherwise the idea renders the part and state
+ * it names, or the first row: any state its own files declare, including a
+ * part the idea adds, because a workspace is a scratch area. A row whose
+ * state is gone is an error that names it.
+ *
+ * @param {Project} project the project as the idea's files declare it
+ * @param {readonly import("../types").StateRef[]} rows the board's rows
+ * @param {Parameters<import("./tools.js").RenderTake>[0]} request
+ * @param {string} take
+ * @returns {import("../render/plan.js").RenderJob[]}
+ */
+export function planIdeaRenders(project, rows, request, take) {
+  const targets = request.related ? rows
+    : [{ part: request.part ?? rows[0]?.part ?? "", state: request.state }]
+  if (targets.length === 0 || targets[0]?.part === "") throw new Error("The board has no rows yet. Name a part to render.")
+  return targets.flatMap(target => {
+    const plan = planRenders(project, { part: target.part, state: target.state, devices: request.devices, take })
+    if (plan._tag === "Invalid") throw new Error(plan.reason)
+    return plan.jobs
+  })
 }
 
 /**

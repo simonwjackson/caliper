@@ -30,18 +30,24 @@ export const STRANGE_FROM = 3
 const title = Type.String({ description: "Two to five words that name the direction" })
 const brief = Type.String({ description: "One to three sentences: what this take changes, where, and how it differs from the others" })
 
+/** The tool the planner answers through for a workspace's question. */
+export const IDEAS_TOOL = "propose_ideas"
+
 /**
  * The tool the planner answers through. It offers the strange mark only
- * when the plan has room for a strange direction.
+ * when the plan has room for a strange direction. A workspace's plan also
+ * names the workspace.
  *
  * @param {number} count
+ * @param {boolean} [ideas] the plan is for a workspace's ideas, not takes of a part
  */
-function planTool(count) {
+function planTool(count, ideas = false) {
   const withStrange = count >= STRANGE_FROM
   return {
-    name: PLAN_TOOL,
-    description: "Propose the directions for the takes. Call it exactly once.",
+    name: ideas ? IDEAS_TOOL : PLAN_TOOL,
+    description: ideas ? "Propose the directions for the ideas, and name the workspace. Call it exactly once." : "Propose the directions for the takes. Call it exactly once.",
     parameters: Type.Object({
+      ...(ideas ? { name: Type.Optional(Type.String({ description: "Two to five words that name the question, for the list of workspaces" })) } : {}),
       directions: Type.Array(withStrange
         ? Type.Object({ title, brief, strange: Type.Optional(Type.Boolean({ description: "True only on the one strange direction" })) })
         : Type.Object({ title, brief }), { minItems: 1 }),
@@ -99,6 +105,56 @@ export async function planDirections({ engine, prompt, count, part, state, devic
 }
 
 /**
+ * Turn a workspace's question into one direction per idea (decision 45). The
+ * planner sees the question, the board's rows, the source and a render of
+ * each row as the real files show it, and the names of every part. An idea
+ * can reuse parts, change them or add new ones.
+ *
+ * @param {{
+ *   engine: Engine,
+ *   question: string,
+ *   count: number,
+ *   rows: readonly import("../types").StateRef[],
+ *   device: string,
+ *   context: Content[],
+ *   images?: readonly import("./images.js").AttachedImage[],
+ *   skills?: import("./skills.js").SkillCatalog,
+ *   signal?: AbortSignal,
+ * }} input
+ *   `context` holds the rows' sources and renders, and the list of parts.
+ * @returns {Promise<TakePlan & { name?: string }>}
+ */
+export async function planIdeas({ engine, question, count, rows, device, context, images = [], skills, signal }) {
+  const { models, model, reasoning } = engine
+  const listed = rows.map(row => `- ${row.part}, state "${row.state}"`).join("\n")
+  const message = await models.completeSimple(model, {
+    systemPrompt: `${ideasSystemPrompt(count)}${skills ? plannerSkillNote(skills) : ""}`,
+    tools: [planTool(count, true)],
+    messages: [{
+      role: "user",
+      timestamp: Date.now(),
+      content: [
+        { type: "text", text: `The user's question: ${question}\n\nPropose up to ${count} ideas. The board compares them on ${device}, on these rows:\n${listed}` },
+        ...context,
+        ...imageContent(images, "this prompt"),
+      ],
+    }],
+  }, {
+    ...(reasoning === "off" ? {} : { reasoning }),
+    ...(signal === undefined ? {} : { signal }),
+  })
+  if (message.stopReason === "error" || message.stopReason === "aborted") {
+    throw new Error(`The planner failed: ${message.errorMessage ?? message.stopReason}`)
+  }
+  const call = message.content.find(block => block.type === "toolCall" && block.name === IDEAS_TOOL)
+  if (call === undefined || call.type !== "toolCall") throw new Error("The planner did not propose any ideas.")
+  const plan = cleanPlan(call.arguments, count)
+  const raw = /** @type {{ name?: unknown }} */ (call.arguments ?? {}).name
+  const name = typeof raw === "string" ? raw.trim().replace(/\s+/g, " ").slice(0, TITLE_LIMIT) : ""
+  return name === "" ? plan : { name, ...plan }
+}
+
+/**
  * Keep the planner's answer inside the contract: 1 to `count` directions,
  * each with a title and a brief, no two with the same title. At most one
  * direction is strange, and none when `count` is below `STRANGE_FROM`. The
@@ -134,6 +190,25 @@ export function cleanPlan(raw, count) {
 const strangeRule = `
 Make one of the directions the strange direction, and set strange to true on it. The other directions are the answers a careful designer would expect. The strange direction is the answer they would not expect: it breaks the part's current pattern on purpose, for example a different structure, a different way to show the data, or a different interaction. It is still a real answer to the request that works on the device, never a joke or a strawman, and it keeps the rules above. It uses one of the takes, not an extra one. Leave it out only when the request has one sensible answer, and then say why in note.
 `
+
+/** @param {number} count */
+function ideasSystemPrompt(count) {
+  return `You plan ideas inside Caliper, a tool that shows a React project's UI parts at the true size of the devices it targets. The user asks a question about the product. An idea is one answer to it. An AI agent makes each idea on its own, in parallel, in its own copy of the project's files. The user compares the ideas on a board: each row is a state of the product, shown by the real files and by every idea.
+
+An idea can reuse the parts the project has, change them, add new parts, or do all three. Choose what the question needs. Nothing an idea changes reaches the product until the user promotes it, so an idea may try something the product does not do yet.
+
+Propose up to ${count} directions, one per idea. A good set of directions:
+- Each direction is a real, reasonable answer to the question, not a strawman.
+- They differ in approach, not only in degree: a different place in the product, a different structure, a different interaction or trade-off.
+- Each brief says concretely what that idea changes or adds (which component, CSS, part or example data) and how it differs from the others. Each agent sees only its own brief and the titles of the others.
+- An idea is judged on the board's rows. Say which rows it changes, if not all.
+
+Also name the question in two to five words, for the list of workspaces.
+
+Return fewer directions when the question has only one or two sensible answers. Never invent a direction only to fill the count. When you return fewer, say why in one sentence in note.
+${count >= STRANGE_FROM ? strangeRule.replaceAll("the part's current pattern", "the product's current pattern") : ""}
+You see the question, the source of each row's part, how each row renders now, and the names of the project's parts. You cannot read other files; the agents will. Call ${IDEAS_TOOL} exactly once, and write nothing else.`
+}
 
 /** @param {number} count */
 function systemPrompt(count) {
