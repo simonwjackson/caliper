@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { createSourceRevision } from "../src/checks/source-revision.js"
 import { createTakeStore } from "../src/takes/store.js"
@@ -26,6 +26,39 @@ test("source revisions retain observed edits after content is restored and exclu
     revision.invalidate(join(root, ".caliper/checks/report.json"))
     expect(revision.revision({})).toEqual(restored)
   } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("direnv cache links do not enter source identity while linked product sources still do", () => {
+  const root = mkdtempSync("/tmp/caliper-direnv-revision-")
+  const external = mkdtempSync("/tmp/caliper-direnv-input-")
+  try {
+    const input = join(external, "input.nix")
+    writeFileSync(input, "initial input")
+    mkdirSync(join(root, ".direnv/flake-inputs"), { recursive: true })
+    symlinkSync(external, join(root, ".direnv/flake-inputs/source"), "dir")
+    writeFileSync(join(root, "flake.lock"), "initial lock")
+    const revision = createSourceRevision({ root, store: createTakeStore(root) })
+    const initial = revision.revision({})
+    writeFileSync(input, "changed input")
+    revision.invalidate(join(root, ".direnv/flake-inputs/source/input.nix"))
+    expect(revision.revision({})).toEqual(initial)
+
+    symlinkSync(external, join(root, "shared"), "dir")
+    const linked = revision.revision({})
+    writeFileSync(input, "changed linked product source")
+    revision.invalidate(join(root, "shared/input.nix"))
+    expect(revision.revision({}).fingerprint).not.toBe(linked.fingerprint)
+    expect(revision.stamp({}).generation).toBeGreaterThan(linked.generation)
+
+    const beforeLock = revision.revision({})
+    writeFileSync(join(root, "flake.lock"), "changed lock")
+    revision.invalidate(join(root, "flake.lock"))
+    expect(revision.revision({}).fingerprint).not.toBe(beforeLock.fingerprint)
+    expect(revision.stamp({}).generation).toBeGreaterThan(beforeLock.generation)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+    rmSync(external, { recursive: true, force: true })
+  }
 })
 
 test("take revisions include selected overlay edits without invalidating an unrelated take", () => {

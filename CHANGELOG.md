@@ -9,6 +9,11 @@ break things.
 
 The first public release.
 
+### Fixed
+
+- Checks skip the generated `.direnv` cache instead of hashing linked Nix
+  package trees, which could block the dev server and time out checks.
+
 ### Added
 
 - The `caliper()` Vite plugin. It finds `*.part.tsx` files, the app entry, the

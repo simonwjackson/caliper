@@ -4,7 +4,8 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from
 import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import { TAKES_DIR } from "../takes/store.js"
 
-const ignored = new Set(["node_modules", ".git", ".caliper", ".vite", ".worktree", ".worktrees"])
+// direnv's generated cache links to entire Nix input trees, not product sources.
+const ignored = new Set(["node_modules", ".git", ".caliper", ".vite", ".direnv", ".worktree", ".worktrees"])
 const generated = new Set(["dist", "build", "coverage"])
 /** Content identity and observed changes share one exclusion policy across callers.
  * @param {{root:string, cacheDir?:string, store:import('../takes/store.js').TakeStore}} input

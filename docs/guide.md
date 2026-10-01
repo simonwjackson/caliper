@@ -953,6 +953,10 @@ frozen filesystem snapshot. Cancellation before a complete visual result does
 not fabricate images or imply success. Old v1 reports remain visual evidence,
 not authored-check coverage.
 
+Source identity excludes the generated `.direnv` cache, including its links to
+Nix package trees. Cache changes do not invalidate reports. `flake.nix`,
+`flake.lock`, and linked product sources still count as source inputs.
+
 Costs: each check adds a render and browser work. Authors must maintain scenario
 inputs, action behavior, and assertions. Coverage includes only the declared
 states, devices, and checks; it does not prove hermeticity, network isolation,

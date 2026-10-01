@@ -199,8 +199,8 @@ test("watcher noise does not stale reports, but real changes stay visible and bl
   expect((await (await f.get("/checks")).json()).report).toEqual(ready.report)
 }))
 
-test("Vite output and worktrees do not enter fingerprints or invalidate actual checks", () => fixture(async f => {
-  const outputDirs = [".vite", "optimizer-output", ".worktree", ".worktrees"]
+test("Vite output, direnv caches and worktrees do not enter fingerprints or invalidate actual checks", () => fixture(async f => {
+  const outputDirs = [".vite", "optimizer-output", ".direnv", ".worktree", ".worktrees"]
   const changeOutput = () => {
     for (const directory of outputDirs) {
       const folder = join(f.root, directory)
