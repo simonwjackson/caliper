@@ -11,6 +11,8 @@ The first public release.
 
 ### Fixed
 
+- Caliper's self-hosting dev server skips generated direnv caches and other
+  worktrees, so its file watcher does not scan Nix package trees at startup.
 - Checks skip the generated `.direnv` cache instead of hashing linked Nix
   package trees, which could block the dev server and time out checks.
 - A slow project host call no longer blocks the take-agent worker. Stop can

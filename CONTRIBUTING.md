@@ -112,6 +112,12 @@ this checkout, never the tool you use to undo it. The pin moves only by hand:
 commit the change, run `scripts/tool-pin-hashes.mjs <commit>`, put the four
 values in `src/build/tool.js`, and install with `--repair`.
 
+The checkout's Vite watcher skips `.direnv`, `.worktree` and `.worktrees`.
+Edits inside those folders do not reload this subject. Start a separate dev
+server to edit another worktree. Run
+`nix develop -c node scripts/verify-selfhost-watch.mjs` to verify that generated
+cache links are skipped while linked product sources remain watched.
+
 ## Verify in a real browser
 
 `nix develop -c node scripts/verify-central.mjs` checks the app with the real

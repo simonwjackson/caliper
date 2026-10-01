@@ -13,5 +13,9 @@ export default defineConfig({
   plugins: [caliper({ entry: "src/client/ui/Chrome.tsx", css: [], wrap: false })],
   // Vite answers 403 for host names it does not know. List extra names, comma separated, in
   // CALIPER_ALLOWED_HOSTS, for example a machine's name on a private network.
-  server: { allowedHosts: (process.env.CALIPER_ALLOWED_HOSTS ?? "").split(",").map(host => host.trim()).filter(Boolean) },
+  server: {
+    allowedHosts: (process.env.CALIPER_ALLOWED_HOSTS ?? "").split(",").map(host => host.trim()).filter(Boolean),
+    // Generated Nix links and other worktrees are not this editing subject.
+    watch: { ignored: ["**/.direnv/**", "**/.worktree/**", "**/.worktrees/**"] },
+  },
 })
