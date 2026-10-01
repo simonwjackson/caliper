@@ -1,4 +1,5 @@
 // @ts-check
+import { NO_CHROMIUM } from "../render/chromium.js"
 import { createHash, randomUUID } from "node:crypto"
 import { lstatSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
@@ -113,7 +114,7 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
         // Let the caller return Running before any synchronous runner failure.
         await Promise.resolve()
         try {
-          if (!chromium) throw new Error("Set CHROMIUM to a Chromium executable before running checks.")
+          if (!chromium) throw new Error(`Caliper cannot run checks. ${NO_CHROMIUM}`)
           const url = serverUrl()
           if (!url) throw new Error("The dev server is not listening yet.")
           const result = await run({ url, project: original.name, jobs: plan.jobs, out, executablePath: chromium, baselines, signal,

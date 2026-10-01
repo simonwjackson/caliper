@@ -15,6 +15,7 @@ import { checkSource } from "./authored/source.js"
 import { authoredCheckDelivery } from "./authored/delivery.js"
 import { listeningOrigin } from "./server-origin.js"
 import { hmrSocketConfig } from "./hmr-socket.js"
+import { chromiumExecutable } from "./render/chromium.js"
 import { reportLateChanges } from "./late-changes.js"
 import { framePage } from "./pages.js"
 import { json } from "./http.js"
@@ -310,7 +311,7 @@ function createSession(server, root, options, env, overlay) {
     store,
     project: async () => (await load()).project,
     serverUrl: () => listeningOrigin(server),
-    chromium: env.CHROMIUM,
+    chromium: chromiumExecutable(env),
     cacheDir: server.config.cacheDir,
     onChange: () => {
       const data = JSON.stringify(checks.snapshot())

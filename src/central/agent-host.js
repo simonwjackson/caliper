@@ -10,6 +10,7 @@ import { resolveAgent } from "../agent/config.js"
 import { discoverSkills } from "../agent/skills.js"
 import { remoteHost } from "./remote-host.js"
 import { pluginUrl } from "./servers.js"
+import { chromiumExecutable } from "../render/chromium.js"
 import { syncCaller } from "./sync-call.js"
 
 /**
@@ -59,7 +60,7 @@ const api = createTakesApi({
     return response.json()
   },
   serverUrl: () => { try { return entry().url.replace(/\/$/, "") } catch { return null } },
-  chromium: data.env.CHROMIUM,
+  chromium: chromiumExecutable(data.env),
   onChange: takesChanged,
   onMarks: draft => main.postMessage({ type: "marks", data: draft }),
   skills: () => discoverSkills({ root: data.root, home: data.home, option: data.agent?.skills, project: host.projectSkills() }),

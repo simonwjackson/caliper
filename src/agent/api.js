@@ -1,4 +1,5 @@
 // @ts-check
+import { NO_CHROMIUM } from "../render/chromium.js"
 import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -110,7 +111,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     const viewed = take === undefined ? original : { ...original, parts: proposedParts(take) }
     const plan = planRenders(viewed, { part, state, devices, ...(take === undefined ? {} : { take }) })
     if (plan._tag === "Invalid") throw new Error(plan.reason)
-    if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+    if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
     const url = serverUrl()
     if (url === null) throw new Error("The dev server is not listening yet.")
     return trackRender(() => renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium, signal: shutdown.signal }))
@@ -125,7 +126,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
       validateTakeContext(original.parts, ask)
       const viewed = { ...original, parts: proposedParts(take) }
       const jobs = planTakeRenders(viewed, ask, request, take, Boolean(store.record(take)?.integration))
-      if (!chromium) throw new Error("Caliper cannot render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+      if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
       const url = serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
       const signal = request.signal ? AbortSignal.any([shutdown.signal, request.signal]) : shutdown.signal
@@ -150,7 +151,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     project,
     validateTake: validateTakeContext,
     render: async jobs => {
-      if (!chromium) throw new Error("Caliper cannot draw marks on a render: set CHROMIUM to a Chromium executable in the shell that starts Vite, or in .env.local.")
+      if (!chromium) throw new Error(`Caliper cannot draw marks on a render. ${NO_CHROMIUM}`)
       const url = serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
       return trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `marks-${Date.now()}`), executablePath: chromium, signal: shutdown.signal }))
@@ -175,7 +176,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         if (original.parts.find(part => part.file === proposal.preview.part)?.states.some(state => state.export === proposal.preview.state)) {
           throw new Error("The alternate needs a new named state or part that opts into the new choice. Existing states must stay unchanged.")
         }
-        if (!chromium) throw new Error("Set CHROMIUM before checking an integration.")
+        if (!chromium) throw new Error(`Caliper cannot check an integration. ${NO_CHROMIUM}`)
         const url = serverUrl()
         if (!url) throw new Error("The dev server is not listening yet.")
         const jobs = original.parts.flatMap(part => part.states.flatMap(state => DEVICES.map(device => ({ part: part.file, state: state.export, device: device.id }))))

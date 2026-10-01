@@ -6,6 +6,7 @@ import { DEVICES } from "../src/client/device-frame.js"
 import { planRenders } from "../src/render/plan.js"
 import { renderJobs } from "../src/render/render.js"
 import { approveBaselines, checkJobs } from "../src/render/checks.js"
+import { chromiumExecutable, NO_CHROMIUM } from "../src/render/chromium.js"
 
 const interruption = new AbortController()
 let interruptedExit = 0
@@ -39,7 +40,7 @@ Options:
   --take     Render the part as take <n> changes it: the files in .caliper/takes/<n>/
              replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
-  --chromium Chromium executable. Default: the CHROMIUM environment variable
+  --chromium Chromium executable. Default: the CHROMIUM environment variable, then Playwright's Chromium
   --list     Print states, composition, expectations, authoredChecks, authoredCheckProblems,
              and devices as JSON. --take selects take-aware discovery.
   --check    Report render, browser, spill, axe, repeat-render, baseline and authored checks.
@@ -166,8 +167,8 @@ const plan = planRenders(project, {
 })
 if (plan._tag === "Invalid") stop(plan.reason)
 
-const executablePath = args.chromium ?? process.env.CHROMIUM
-if (!executablePath) stop("Set CHROMIUM, or pass --chromium, to a Chromium executable. `nix develop` in the Caliper checkout sets it.")
+const executablePath = args.chromium ?? chromiumExecutable(process.env)
+if (!executablePath) stop(`Pass --chromium. ${NO_CHROMIUM}`)
 
 if (args.check) {
   try {

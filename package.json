@@ -4,11 +4,19 @@
   "description": "A dev-only Vite plugin that renders a project's own UI parts at true physical device size.",
   "license": "MIT",
   "author": "Simon W. Jackson",
-  "private": true,
   "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/simonwjackson/caliper.git"
+  },
+  "homepage": "https://github.com/simonwjackson/caliper#readme",
+  "bugs": "https://github.com/simonwjackson/caliper/issues",
+  "keywords": ["vite-plugin", "react", "devtools", "design", "true-size"],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "exports": {
     ".": {
@@ -17,7 +25,8 @@
     },
     "./checks": {
       "types": "./src/authored/checks.d.ts"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "caliper": "./bin/caliper.mjs",
