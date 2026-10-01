@@ -93,11 +93,14 @@ A cell loads its row with `?take=<n>` in an idea column, and with no tag in Toda
 
 Verified in `src/takes/overlay.js`: `resolveId` copies the tag of the importer to each import, and `load` serves the take's copy of a file when one exists. So a row that imports `src/Home.tsx` gets the copy of `Home.tsx` from idea 2 in the column of idea 2.
 
-Inferred, not tested:
+Checked on 2026-10-01 on a copy of Pico with Vite 8.3.1. The row file was `.caliper/workspaces/1/rows/home-dpad.part.tsx`, and Pico's take 1 edits `src/pages/PicoHome.tsx`:
 
-- The overlay's `isProjectSource` excludes only `.caliper/takes`. It therefore treats a scratch row as project source and tags its imports.
-- A scratch row that imports a file that only an idea adds resolves through `addedModule`.
-- The Vite watcher ignores only `.caliper/checks/**` (`src/plugin.js`). An edit to a row therefore reaches HMR.
+- Vite serves the row file. With `?take=1`, its imports carry `?take=1`, both `/src/...` and relative ones, and Vite serves take 1's copy of `PicoHome.tsx`. So the overlay treats a scratch row as project source.
+- An edit to the row file reaches HMR. Vite sent an update for the row with the tag and without it.
+- Discovery does not list the row. `project.json` has no part under `.caliper/`.
+- The frame route refuses the row with 404. It serves only discovered parts and the parts of a take. Slice 2 must change this.
+
+Inferred, not tested: a scratch row that imports a file that only an idea adds resolves through `addedModule`.
 
 A cell shows one of three things:
 
