@@ -227,7 +227,7 @@ describe("the plugin", () => {
       const call = async (target, method, args) => (await fetch(new URL("__caliper/host", viteUrl), {
         method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ target, method, args: encode(args) }),
       })).json()
-      const take = (await call("store", "create", [{ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "p" }])).value
+      const take = (await call("store", "create", [{ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", prompt: "p" }])).value
       expect(take).toBe("1")
       expect((await call("store", "write", [take, "src/Chip.part.tsx", "changed"])).value).toBe("src/Chip.part.tsx")
       for (const escape of ["../outside.txt", "/etc/passwd"]) expect((await call("store", "write", [take, escape, "x"])).error).toBeString()

@@ -39,7 +39,7 @@ try {
     await page.addInitScript(() => localStorage.setItem("caliper:px-per-mm", "4"))
     const errors: string[] = []
     page.on("pageerror", error => errors.push(error.message))
-    await page.goto(`${url}__caliper/#${new URLSearchParams({ part: home, state: "Busy", device: "rg353m" })}`)
+    await page.goto(`${url}__caliper/#${new URLSearchParams({ part: home, state: "Busy", device: "iphone-16" })}`)
     const nav = page.locator(cal.nav)
     const homeButton = nav.locator(`${cal.part}[data-part="${home}"]`)
     const homeStates = nav.locator(`${cal.state}[data-part="${home}"]`)
@@ -61,7 +61,7 @@ try {
     await waitFrames(page, 3)
     assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("state"), "*")
     assert.equal(await homeButton.evaluate(node => node === document.activeElement), true)
-    for (const iframe of await page.locator(cal.frame).all()) assert.equal(await iframe.evaluate(node => (node as HTMLIFrameElement).contentWindow?.innerWidth), 640)
+    for (const iframe of await page.locator(cal.frame).all()) assert.equal(await iframe.evaluate(node => (node as HTMLIFrameElement).contentWindow?.innerWidth), 393)
 
     const allUrl = page.url()
     await toggle.focus()
@@ -119,7 +119,7 @@ try {
       assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("state"), "Busy")
       await (await reveal(page, homeButton)).click()
       await waitFrames(page, 3)
-      for (const iframe of await page.locator(cal.frame).all()) assert.equal(await iframe.evaluate(node => (node as HTMLIFrameElement).contentWindow?.innerWidth), 640)
+      for (const iframe of await page.locator(cal.frame).all()) assert.equal(await iframe.evaluate(node => (node as HTMLIFrameElement).contentWindow?.innerWidth), 393)
       await page.screenshot({ path: `/tmp/caliper-navigation/${size.width}x${size.height}.png` })
     }
     assert.deepEqual(errors, [])

@@ -128,7 +128,7 @@ try {
   /** @type {string[]} */
   const errors = []
   page.on("pageerror", error => errors.push(error.message))
-  await page.goto(`${new URL("__caliper/", url).href}#part=src/Card.part.tsx&device=rg353m`)
+  await page.goto(`${new URL("__caliper/", url).href}#part=src/Card.part.tsx&device=iphone-16`)
   await page.locator(`${cal.prompt}:not([disabled])`).waitFor()
 
   /**

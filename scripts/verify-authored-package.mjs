@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parseArgs, promisify } from "node:util"
-import { DEVICES } from "../src/client/device-frame.js"
+import { STANDARD_DEVICES as DEVICES } from "../src/client/device-frame.js"
 
 const { values } = parseArgs({ options: { out: { type: "string" }, keep: { type: "boolean", default: false } } })
 assert(process.env.CHROMIUM, "Set CHROMIUM to a Chromium executable")
@@ -156,7 +156,7 @@ try {
     // Seed a genuine on-disk take before startup. The server and CLI read it
     // through their normal take discovery; no private runtime import is used.
     write(join(root, ".caliper/.gitignore"), "*\n")
-    write(join(root, ".caliper/takes/1.json"), JSON.stringify({ part, state: "default", device: "rg353m", created: Date.now() }))
+    write(join(root, ".caliper/takes/1.json"), JSON.stringify({ part, state: "default", device: "iphone-16", created: Date.now() }))
     write(join(root, ".caliper/takes/1", part), brokenSource)
     copyFileSync(fileURLToPath(new URL("./fixtures/authored-package-server.mjs", import.meta.url)), join(root, "verify-server.mjs"))
 
@@ -253,7 +253,7 @@ try {
     assert(checkRequests.some((/** @type {string} */ url) => /check[-_]libraries/.test(url)), "The named CLI checks must actually fetch Vite's helper bundle")
     await stopServer()
     results.push({ mode, installation: ready, declaration, previewRequestCount: previewRequests.length, helperRequests: checkRequests.filter(libraryRequest), reportPaths })
-    console.log(`PASS ${mode}: public discovery; ${DEVICES.length} previews without test libraries; named success and unchanged-check broken take on both devices`)
+    console.log(`PASS ${mode}: public discovery; ${DEVICES.length} previews without test libraries; named success and unchanged-check broken take on every standard device`)
   }
   write(join(evidence, "summary.json"), JSON.stringify({ status: "Passed", tarballSha256, fixtureDependencies, results }, null, 2))
   console.log(`PASS: linked and isolated packed package gates. Evidence: ${evidence}`)

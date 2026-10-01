@@ -5,10 +5,9 @@ import { AddedMarkSchema, DraftResponseSchema, DraftSchema, SentSchema } from ".
 import { anchorAt, anchorIn, locateAnchor } from "../../takes/anchor.js"
 import { ORIGINAL, isOriginal, planSend, referencesIn } from "../../takes/send-plan.js"
 import { sameState } from "../scenarios.js"
-import { DEVICES } from "../device-frame.js"
 import { parseWire } from "./wire"
 import type { AppState } from "./state"
-import { frameKey, previewRef, refLabel, subjectRef, takeName } from "./state"
+import { deviceName, deviceOf, devicesOf, frameKey, previewRef, refLabel, subjectRef, takeName } from "./state"
 
 /** A mark's frame: its take's, or the real files' for a mark on the original. */
 const frameOf = (source: TakeIdentity) => isOriginal(source) ? null : source
@@ -107,7 +106,7 @@ export function createMarkupController(input: MarkupInput) {
   function locate(mark: Mark): Found {
     const state = input.state(), name = nameOf(mark)
     const unresolved = (reason: string): Found => ({ location: { _tag: "Unresolved", reason }, rect: viewportRect(mark.anchor.rect, null) })
-    if (mark.device !== state.device.id) return unresolved(`${name} was placed on ${deviceName(mark.device)}. Switch to it to check ${name}.`)
+    if (mark.device !== deviceOf(state).id) return unresolved(`${name} was placed on ${deviceName(state, mark.device)}. Switch to it to check ${name}.`)
     const node = input.frames().get(frameKey(mark.preview, frameOf(mark.source)))
     if (!node) return unresolved(`Show ${isOriginal(mark.source) ? "the real files" : `take ${mark.source.take}`} in ${refLabel(state, mark.preview)} to check ${name}.`)
     let document: Document | null = null
@@ -153,12 +152,12 @@ export function createMarkupController(input: MarkupInput) {
     const input_ = afterInput.get(key) ?? false
     const anchored = gesture._tag === "Point" ? anchorAt(document, gesture.point, input_) : anchorIn(document, gesture.rect, input_)
     if (anchored._tag === "Refused") return input.notify(new Error(anchored.reason))
-    const device = input.state().device.id, source: TakeIdentity = take ? { take: take.take, created: take.created } : ORIGINAL
+    const device = deviceOf(input.state()).id, source: TakeIdentity = take ? { take: take.take, created: take.created } : ORIGINAL
     if (mode._tag === "Replacing") {
       const id = mode.id, mark = current.marks.find(item => item.id === id)
       if (!mark) { mode = resume; input.changed(); return }
       if (!sameTake(mark.source, source) || !sameState(mark.preview, frame.preview) || mark.device !== device) {
-        return input.notify(new Error(`Re-place ${nameOf(mark)} on ${isOriginal(mark.source) ? "the real files" : `take ${mark.source.take}`} in ${refLabel(input.state(), mark.preview)}, on ${deviceName(mark.device)}.`))
+        return input.notify(new Error(`Re-place ${nameOf(mark)} on ${isOriginal(mark.source) ? "the real files" : `take ${mark.source.take}`} in ${refLabel(input.state(), mark.preview)}, on ${deviceName(input.state(), mark.device)}.`))
       }
       mode = resume
       void write(`marks/${encodeURIComponent(id)}`, { anchor: anchored.anchor }, DraftResponseSchema).catch(input.notify)
@@ -273,7 +272,7 @@ export function createMarkupController(input: MarkupInput) {
     if (take === undefined) return []
     const source = take ? { take: take.take, created: take.created } : ORIGINAL
     return (ready()?.marks ?? []).flatMap(mark => {
-      if (!sameTake(mark.source, source) || !sameState(mark.preview, frame.preview) || mark.device !== state.device.id) return []
+      if (!sameTake(mark.source, source) || !sameState(mark.preview, frame.preview) || mark.device !== deviceOf(state).id) return []
       const where = found.get(mark.id) ?? locate(mark)
       return frameKey(mark.preview, frameOf(mark.source)) === key ? [{ id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where.rect, location: where.location }] : []
     })
@@ -290,7 +289,7 @@ export function createMarkupController(input: MarkupInput) {
     const markView = (mark: Mark): DraftMarkView => ({
       id: mark.id, letter: mark.letter, kind: mark.anchor.kind, rect: where(mark).rect, location: where(mark).location,
       name: nameOf(mark), note: shownNote(mark), references: referencesIn(shownNote(mark), mark.source.take, names),
-      previewLabel: refLabel(state, mark.preview), deviceLabel: deviceName(mark.device),
+      previewLabel: refLabel(state, mark.preview), deviceLabel: deviceName(state, mark.device),
       edit: busy, remove: busy, replace: sending ? busy : isOriginal(mark.source) || takeOf(mark.source) ? enabled : disabled(`Take ${mark.source.take} is gone. Remove ${nameOf(mark)}.`),
     })
     const prompt = withPrompt(state)
@@ -342,14 +341,14 @@ export function createMarkupController(input: MarkupInput) {
     if (!state.prompt.trim() || !preview || !subject) return { ids: [], names: [] }
     const names = marks.map(nameOf)
     const named = new Set(marks.flatMap(mark => referencesIn(shownNote(mark), mark.source.take, names)))
-    const going = marks.filter(mark => isOriginal(mark.source) && sameState(mark.preview, preview) && mark.device === state.device.id
+    const going = marks.filter(mark => isOriginal(mark.source) && sameState(mark.preview, preview) && mark.device === deviceOf(state).id
       && (!mark.subject || sameState(mark.subject, subject)) && !named.has(nameOf(mark)) && (found.get(mark.id) ?? locate(mark)).location._tag === "Located")
     return { ids: going.map(mark => mark.id), names: going.map(nameOf) }
   }
   /** Every mark on another source that the note on `editing` can point to, with a crop of its place. */
   function referenceOptions(editing: Mark, state: AppState): ReferenceOption[] {
     return (ready()?.marks ?? []).filter(mark => mark.source.take !== editing.source.take).map(mark => {
-      const take = takeOf(mark.source), device = DEVICES.find(item => item.id === mark.device)
+      const take = takeOf(mark.source), device = devicesOf(state).find(item => item.id === mark.device)
       const lost = (found.get(mark.id) ?? locate(mark)).location._tag === "Lost"
       const src = `frame?${new URLSearchParams({ part: mark.preview.part, state: mark.preview.state, ...(isOriginal(mark.source) ? {} : { take: mark.source.take }) })}`
       return {
@@ -407,7 +406,6 @@ export function createMarkupController(input: MarkupInput) {
   }
 }
 
-function deviceName(id: string) { return DEVICES.find(device => device.id === id)?.name ?? id }
 /** Document-origin to the frame's viewport. Without a document the stored place is the best guess. */
 function viewportRect(rect: MarkRect, document: Document | null): MarkRect {
   const view = document?.defaultView

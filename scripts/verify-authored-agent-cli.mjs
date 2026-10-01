@@ -14,6 +14,8 @@ import { createTakeStore } from "../src/takes/store.js"
 import { createTakeAgents } from "../src/agent/take-agents.js"
 import { checkJobs } from "../src/render/checks.js"
 import { renderJobs } from "../src/render/render.js"
+import { withViewport } from "../src/render/plan.js"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 const { values } = parseArgs({ options: { modules: { type: "string" } } })
 assert(values.modules && process.env.CHROMIUM, "Pass --modules <React consumer node_modules> and set CHROMIUM")
@@ -72,9 +74,9 @@ try {
   await server.listen()
   const url = server.resolvedUrls?.local[0]
   assert(url)
-  const common = ["--url", url, "--part", part, "--device", "rg353m", "--out", join(root, ".caliper/checks"), "--chromium", executablePath]
+  const common = ["--url", url, "--part", part, "--device", "iphone-16", "--out", join(root, ".caliper/checks"), "--chromium", executablePath]
   const store = createTakeStore(root)
-  const take = store.create({ part, state: "default", device: "rg353m" })
+  const take = store.create({ part, state: "default", device: "iphone-16" })
   store.write(take, part, source.replace("export const checks = {", "export function Extra() { return <p>Take only</p> }\nexport const checks = { Extra: { 'take only': ({ canvas, expect }) => expect(canvas.getByText('Take only')).toBeVisible() },"))
   const listed = await command(["--url", url, "--take", take, "--list"]).done
   assert.equal(listed.code, 0)
@@ -95,7 +97,7 @@ try {
   /** @type {string | undefined} */
   let reportPath
   const agents = createTakeAgents({ store, engine: () => ({ models, model: faux.getModel(), reasoning: "off" }), onChange: () => {}, renderFor: take => async request => {
-    const input = { url, jobs: [{ part, state: request.state, device: "rg353m", take }], out: join(root, ".caliper/checks/agent"), executablePath, signal: request.signal }
+    const input = { url, jobs: [withViewport({ devices: STANDARD_DEVICES }, { part, state: request.state, device: "iphone-16", take })], out: join(root, ".caliper/checks/agent"), executablePath, signal: request.signal }
     if (!request.checks) return renderJobs(input)
     const checked = await checkJobs({ ...input, project: "agent-gate" })
     reportPath = checked.reportPath
@@ -109,7 +111,7 @@ try {
       ])
       reportPath = undefined
       const started = once(events, "started", { signal: AbortSignal.timeout(30_000) })
-      const take = agents.start({ part, state: "Hang", device: "rg353m", prompt: "Check the scenario" })
+      const take = agents.start({ part, state: "Hang", device: "iphone-16", prompt: "Check the scenario" })
       await started
       const interruptedAt = Date.now()
       if (action === "stop") await agents.stop(take)

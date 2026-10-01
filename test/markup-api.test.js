@@ -51,12 +51,12 @@ async function settled(get, take) {
 describe("the draft of marks on the dev server", () => {
   test("validates the marked take, refuses stale writes and keeps the draft on disk", () => withProject({ files, options }, async ({ url, root }) => {
     const store = createTakeStore(root)
-    const take = store.create({ part, state: "default", device: "rg353m", prompt: "Warm" })
+    const take = store.create({ part, state: "default", device: "iphone-16", prompt: "Warm" })
     const created = /** @type {number} */ (store.record(take)?.created)
     const alternate = createIntegrationReview(store).begin(take)
     const { post, draft } = client(url)
     expect(await draft()).toEqual({ revision: 0, marks: [] })
-    const mark = { revision: 0, source: { take, created }, preview, device: "rg353m", anchor: anchorOn("#caliper-host .chip", "Chip default") }
+    const mark = { revision: 0, source: { take, created }, preview, device: "iphone-16", anchor: anchorOn("#caliper-host .chip", "Chip default") }
     expect((await post("marks", { ...mark, source: { take, created: created + 1 } })).body.error).toContain("no longer the take you marked")
     expect((await post("marks", { ...mark, source: { take: alternate, created: store.record(alternate)?.created } })).body.error).toContain("alternate")
     expect((await post("marks", { ...mark, preview: { part, state: "Busy" } })).body.error).toContain("does not show")
@@ -79,7 +79,7 @@ describe("the draft of marks on the dev server", () => {
 
   test("the event stream sends the draft to every chrome", () => withProject({ files, options }, async ({ url, root }) => {
     const store = createTakeStore(root)
-    const take = store.create({ part, state: "default", device: "rg353m" })
+    const take = store.create({ part, state: "default", device: "iphone-16" })
     const controller = new AbortController()
     const stream = await fetch(new URL("__caliper/events", url), { signal: controller.signal })
     const reader = /** @type {ReadableStreamDefaultReader<Uint8Array>} */ (stream.body?.getReader())
@@ -88,7 +88,7 @@ describe("the draft of marks on the dev server", () => {
       while (!seen.includes(needle)) seen += new TextDecoder().decode((await reader.read()).value)
     }
     await until("event: marks\ndata: {\"revision\":0")
-    await client(url).post("marks", { revision: 0, source: { take, created: store.record(take)?.created }, preview, device: "rg353m", anchor: anchorOn("#caliper-host .chip", "Chip default") })
+    await client(url).post("marks", { revision: 0, source: { take, created: store.record(take)?.created }, preview, device: "iphone-16", anchor: anchorOn("#caliper-host .chip", "Chip default") })
     await until("event: marks\ndata: {\"revision\":1")
     controller.abort()
   }), 30_000)
@@ -98,13 +98,13 @@ describe("Send", () => {
   test("makes one new take per marked take, with its marks, picture and history, and empties the draft", () => withProject({ files, options, modules: resolve("node_modules") }, async ({ url, root, get }) => {
     if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM")
     const store = createTakeStore(root)
-    const [one, two, three] = ["Warm", "Cool", "Plain"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
+    const [one, two, three] = ["Warm", "Cool", "Plain"].map(prompt => store.create({ part, state: "default", device: "iphone-16", prompt }))
     const identity = (/** @type {string} */ take) => ({ take, created: /** @type {number} */ (store.record(take)?.created) })
     store.write(/** @type {string} */ (one), "src/chip.css", ".chip { color: red; padding: 8px }\n")
     const { post, draft } = client(url)
     let revision = 0
     const add = async (/** @type {string} */ take, /** @type {string} */ note, /** @type {any} */ anchor) => {
-      const added = await post("marks", { revision, source: identity(take), preview, device: "rg353m", anchor })
+      const added = await post("marks", { revision, source: identity(take), preview, device: "iphone-16", anchor })
       const noted = await post(`marks/${added.body.id}`, { revision: added.body.draft.revision, note })
       revision = noted.body.draft.revision
       return added.body.id

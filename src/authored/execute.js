@@ -4,7 +4,6 @@ import { mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Type } from "typebox"
 import { Check } from "typebox/value"
-import { DEVICES } from "../client/device-frame.js"
 import { bounded, openBrowserSession } from "../render/browser-session.js"
 
 const InputSchema = Type.Object(
@@ -91,12 +90,10 @@ export async function runAuthoredJobs({ url, jobs, out, executablePath, source, 
           activeCase = result
           onProgress?.({ phase: `Checking ${job.state}: ${declaration.name}`, completed, total })
           session ??= await openBrowserSession(executablePath, signal)
-          const device = DEVICES.find(device => device.id === job.device)
-          if (!device) throw new Error(`Unknown device ${job.device}`)
           const context = await bounded(
             () =>
               /** @type {NonNullable<typeof session>} */ (session).browser.newContext({
-                viewport: { width: device.cssWidth, height: device.cssHeight },
+                viewport: { width: job.viewport.width, height: job.viewport.height },
                 deviceScaleFactor: 1,
               }),
             { signal },

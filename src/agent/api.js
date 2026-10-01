@@ -6,9 +6,8 @@ import { join } from "node:path"
 import { Check } from "typebox/value"
 import { StateRefSchema } from "../scenario-contract.js"
 import { discoverParts, PART_SUFFIX } from "../derive/parts.js"
-import { DEVICES } from "../client/device-frame.js"
 import { contextsFor, relatedStates, sameState, stateExists } from "../client/scenarios.js"
-import { planRenders } from "../render/plan.js"
+import { planRenders, unknownDevice, withViewport } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
 import { checkJobs } from "../render/checks.js"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
@@ -142,6 +141,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     },
     onChange,
     skills,
+    devices: async () => (await project()).devices,
   })
 
   const markup = createMarkupApi({
@@ -150,7 +150,9 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     agents,
     project,
     validateTake: validateTakeContext,
-    render: async jobs => {
+    render: async requested => {
+      const viewed = await project()
+      const jobs = requested.map(job => withViewport(viewed, job))
       if (!chromium) throw new Error(`Caliper cannot draw marks on a render. ${NO_CHROMIUM}`)
       const url = serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
@@ -179,7 +181,7 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
         if (!chromium) throw new Error(`Caliper cannot check an integration. ${NO_CHROMIUM}`)
         const url = serverUrl()
         if (!url) throw new Error("The dev server is not listening yet.")
-        const jobs = original.parts.flatMap(part => part.states.flatMap(state => DEVICES.map(device => ({ part: part.file, state: state.export, device: device.id }))))
+        const jobs = original.parts.flatMap(part => part.states.flatMap(state => original.devices.map(device => withViewport(original, { part: part.file, state: state.export, device: device.id }))))
         const originals = () => trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `check-${take}-original`), executablePath: chromium, signal: shutdown.signal }))
         const proposed = () => trackRender(() => renderJobs({ url, jobs: jobs.map(job => ({ ...job, take })), out: join(renderDir, `check-${take}-proposed`), executablePath: chromium, signal: shutdown.signal }))
         return verifyIntegration({ originals, proposed, alternate: () => renderPart(proposal.preview.part, { state: proposal.preview.state, devices: ["*"], take }) })
@@ -344,13 +346,14 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
    */
   const validTarget = async body => {
     const { part, state, device, context } = /** @type {Record<string, unknown>} */ (body ?? {})
-    const parts = (await project()).parts
+    const viewed = await project()
+    const parts = viewed.parts
     const known = parts.find(candidate => candidate.file === part)
     if (known === undefined) throw new Error(`"${part}" is not a part.`)
     const stateName = typeof state === "string" ? state : "default"
     if (!known.states.some(candidate => candidate.export === stateName)) throw new Error(`${known.file} has no state "${stateName}".`)
-    const deviceId = typeof device === "string" ? device : DEVICES[0]?.id ?? ""
-    if (!DEVICES.some(candidate => candidate.id === deviceId)) throw new Error(`Caliper has no device "${deviceId}".`)
+    const deviceId = typeof device === "string" ? device : viewed.devices[0]?.id ?? ""
+    if (!viewed.devices.some(candidate => candidate.id === deviceId)) throw new Error(unknownDevice(viewed, deviceId))
     const target = { part: known.file, state: stateName, device: deviceId, ...(context === undefined ? {} : { context: readContext(context) }) }
     validateTakeContext(parts, target)
     return target

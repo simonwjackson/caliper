@@ -4,7 +4,6 @@ import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { aborted, bounded, openBrowserSession } from "./browser-session.js"
 import { runNodeWorker } from "./node-worker.js"
-import { DEVICES } from "../client/device-frame.js"
 import { FRAME_WATCHDOG_MS } from "../pages.js"
 import { auditAccessibility, axeVersion } from "./accessibility.js"
 import { drawMarks, locateAnchor } from "../takes/anchor.js"
@@ -125,9 +124,7 @@ export async function renderJobs({ url, jobs, out, executablePath, audit = false
  */
 async function renderOne(session, url, job, out, audit, signal) {
   const { browser } = session
-  const device = DEVICES.find(candidate => candidate.id === job.device)
-  if (device === undefined) throw new Error(`Unknown device ${job.device}`)
-  const viewport = { width: device.cssWidth, height: device.cssHeight }
+  const viewport = { width: job.viewport.width, height: job.viewport.height }
   const context = await bounded(() => browser.newContext({ viewport, deviceScaleFactor: 1 }), { signal })
   try {
     return await bounded(async () => {

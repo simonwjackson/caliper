@@ -10,6 +10,11 @@ import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
 import { checkJobs } from "../src/render/checks.js"
 import { createTakeStore } from "../src/takes/store.js"
+import { withViewport } from "../src/render/plan.js"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
+
+/** @template {import("../src/render/plan.js").DeviceJob} J @param {J} job */
+const onDevice = job => withViewport({ devices: STANDARD_DEVICES }, job)
 
 const { values } = parseArgs({
   options: { modules: { type: "string" }, out: { type: "string", default: "/tmp/caliper-authored-verification" } },
@@ -128,7 +133,7 @@ try {
     const result = await checkJobs({
       url,
       project: "authored-gate",
-      jobs: [{ part, state, device: "rg353m" }],
+      jobs: [onDevice({ part, state, device: "iphone-16" })],
       out,
       executablePath,
       ...extra,
@@ -136,8 +141,8 @@ try {
     assert(result.report.version === 2)
     return { ...result, report: result.report, results: result.report.results }
   }
-  for (const device of ["rg353m", "odin2portal"]) {
-    const result = await run("default", { jobs: [{ part, state: "default", device }] })
+  for (const device of ["iphone-16", "pixel-7"]) {
+    const result = await run("default", { jobs: [onDevice({ part, state: "default", device })] })
     assert.deepEqual(
       result.results[0].authored.checks.map(check => check.status),
       ["Passed", "Passed", "Passed", "Passed", "Passed", "Failed", "Failed", "Failed", "Failed"],
@@ -156,16 +161,16 @@ try {
   }
   await assert.rejects(run("default", { out: join(root, "screenshots") }), /must be under .caliper\/checks/)
   const store = createTakeStore(root)
-  const broken = store.create({ part, state: "default", device: "rg353m" })
+  const broken = store.create({ part, state: "default", device: "iphone-16" })
   store.write(broken, part, source.replace("setLoaded(true)", "setLoaded(false)"))
-  const changed = store.create({ part, state: "default", device: "rg353m" })
+  const changed = store.create({ part, state: "default", device: "iphone-16" })
   store.write(changed, part, source.replace("loaded?'Library'", "loaded?'Take library'"))
   store.write(changed, "src/heading.ts", 'export const expectedHeading = "Take library"')
   for (const [take, expected] of [
     [broken, "Failed"],
     [changed, "Passed"],
   ]) {
-    const result = await run("default", { jobs: [{ part, state: "default", device: "rg353m", take }] })
+    const result = await run("default", { jobs: [onDevice({ part, state: "default", device: "iphone-16", take })] })
     assert.equal(result.results[0].authored.checks[0].status, expected)
     assert.equal(result.results[0].authored.provenance.kind, "Take")
     assert(result.results[0].authored.provenance.files.includes(part))
@@ -174,7 +179,7 @@ try {
     ["src/Invalid.part.tsx", "Failed"],
     ["src/Plain.part.tsx", "NotRun"],
   ]) {
-    const result = await run("default", { jobs: [{ part: file, state: "default", device: "rg353m" }] })
+    const result = await run("default", { jobs: [onDevice({ part: file, state: "default", device: "iphone-16" })] })
     assert.equal(result.results[0].authored.status, expected)
   }
   for (const state of ["Hang", "Loop"]) {

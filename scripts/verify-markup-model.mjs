@@ -32,7 +32,7 @@ cpSync(subject, root, { recursive: true, filter: source => !/\/(node_modules|\.c
 symlinkSync(join(subject, "node_modules"), join(root, "node_modules"), "dir")
 
 const store = createTakeStore(root)
-const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => /** @type {string} */ (store.create({ part, state: "default", device: "rg353m", prompt })))
+const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => /** @type {string} */ (store.create({ part, state: "default", device: "iphone-16", prompt })))
 // Take 1 carries a hand edit, so the new take must copy it.
 store.write(one, css, `${readFileSync(join(root, css), "utf8")}\n.pico-card-kicker { text-decoration: underline }\n`)
 
@@ -60,7 +60,7 @@ let failed = false
 try {
   const agent = await api("takes.json")
   assert(agent.agent._tag === "Ready", `the agent is not ready: ${JSON.stringify(agent.agent)}`)
-  await page.goto(new URL(`__caliper/#part=${part}&state=takes:default&take=${one}&device=rg353m`, url).href)
+  await page.goto(new URL(`__caliper/#part=${part}&state=takes:default&take=${one}&device=iphone-16`, url).href)
   for (const take of [one, two, three]) await page.frameLocator(`iframe[data-take="${take}"]`).locator(title).first().waitFor({ timeout: 90_000 })
   await page.locator('[data-cal="mark-mode"]').waitFor({ timeout: 30_000 })
 

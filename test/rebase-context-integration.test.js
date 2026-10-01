@@ -1,4 +1,5 @@
 // @ts-check
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 import { describe, expect, test } from "bun:test"
 import { planTakeRenders } from "../src/agent/api.js"
 import { createTakeStore } from "../src/takes/store.js"
@@ -8,19 +9,21 @@ import { manifest, withProject } from "./project-server.js"
 const subject = { part: "src/Chip.atom.part.tsx", state: "Missing" }
 const context = { part: "src/Home.page.part.tsx", state: "NoArtwork" }
 const alternate = { part: "src/Alternate.page.part.tsx", state: "default" }
+const phone = { width: 393, height: 852 }
 /** @type {import("../src/types").Project} */
 const project = {
   name: "composed alternate",
   entry: { _tag: "Failed", reason: "unused", hint: "unused" },
   css: { _tag: "Failed", reason: "unused", hint: "unused" },
   wrapper: { _tag: "Failed", reason: "unused", hint: "unused" },
+  devices: STANDARD_DEVICES,
   parts: [
     { file: subject.part, name: "Chip", layer: "atom", states: [{ export: "default", label: "Default" }, { export: subject.state, label: "Missing" }] },
     { file: context.part, name: "Home", layer: "page", states: [{ export: "default", label: "Default" }, { export: context.state, label: "No artwork" }], composition: { [context.state]: [subject] } },
     { file: alternate.part, name: "Alternate", layer: "page", states: [{ export: "default", label: "Default" }] },
   ],
 }
-const ask = { ...subject, context, device: "rg353m" }
+const ask = { ...subject, context, device: "iphone-16" }
 
 const files = {
   "package.json": manifest(),
@@ -45,9 +48,9 @@ const post = (url, take, action, body = {}) => fetch(new URL(`__caliper/takes/${
 describe("composed context and alternate integration coexist", () => {
   test("an integration keeps its composed default and explicitly renders a new alternate", () => {
     expect(planTakeRenders(project, ask, { state: context.state, devices: [ask.device] }, "2", true))
-      .toEqual([{ ...context, device: ask.device, take: "2" }])
+      .toEqual([{ ...context, device: ask.device, viewport: phone, take: "2" }])
     expect(planTakeRenders(project, ask, { ...alternate, devices: [ask.device] }, "2", true))
-      .toEqual([{ ...alternate, device: ask.device, take: "2" }])
+      .toEqual([{ ...alternate, device: ask.device, viewport: phone, take: "2" }])
     expect(() => planTakeRenders(project, ask, { ...alternate, devices: [ask.device] }, "1"))
       .toThrow("not the take's subject")
   })

@@ -1,7 +1,7 @@
 // @ts-check
 import { readFileSync } from "node:fs"
 import { Check } from "typebox/value"
-import { DEVICES } from "../client/device-frame.js"
+import { unknownDevice } from "../render/plan.js"
 import { contextsFor, sameState } from "../client/scenarios.js"
 import { json, readJson, refuse } from "../http.js"
 import { isOriginal, planSend } from "../takes/send-plan.js"
@@ -22,7 +22,7 @@ import { markupMessage, promptMarksText } from "./markup-message.js"
  * @typedef {import("../takes/marks-contract.js").Mark} Mark
  * @typedef {import("../takes/store.js").TakeRecord} TakeRecord
  * @typedef {import("../takes/store.js").TakeIdentity} TakeIdentity
- * @typedef {import("../render/plan.js").RenderJob} RenderJob
+ * @typedef {import("../render/plan.js").DeviceJob} DeviceJob
  * @typedef {import("../render/render.js").RenderResult} RenderResult
  */
 
@@ -33,7 +33,7 @@ import { markupMessage, promptMarksText } from "./markup-message.js"
  *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "views" | "fork" | "create" | "startMarkup">,
  *   project: () => Promise<import("../types").Project>,
  *   validateTake: (parts: readonly import("../types").Part[], record: TakeRecord) => void,
- *   render: (jobs: RenderJob[]) => Promise<RenderResult[]>,
+ *   render: (jobs: DeviceJob[]) => Promise<RenderResult[]>,
  *   onDraft: (draft: Draft) => void,
  *   agentProblem: () => string | null,
  * }} input
@@ -55,18 +55,19 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     if (isOriginal(source)) {
       // Plan decision 8: the original frame shows the real files at a subject's state or a declared scenario of it.
       if (!subject) throw new Error("A mark on the original needs the subject it edits.")
-      const { parts } = await project()
+      const viewed = await project()
+      const { parts } = viewed
       if (!parts.some(part => part.file === subject.part && part.states.some(state => state.export === subject.state))) throw new Error(`${subject.part} · ${subject.state} does not exist.`)
       if (!sameState(preview, subject) && !contextsFor(parts, subject).some(context => sameState(context, preview))) throw new Error(`${preview.part} · ${preview.state} is not a declared scenario of ${subject.part} · ${subject.state}.`)
-      if (!DEVICES.some(candidate => candidate.id === device)) throw new Error(`Caliper has no device "${device}".`)
+      if (!viewed.devices.some(candidate => candidate.id === device)) throw new Error(unknownDevice(viewed, device))
       return
     }
     const record = store.record(source.take)
     if (record === null || record.created !== source.created) throw new Error(`Take ${source.take} is no longer the take you marked. Reload the takes.`)
     if (record.integration) throw new Error(`Take ${source.take} is an alternate. Alternates have their own review and cannot be marked.`)
-    const { parts } = await project()
-    if (!sameState(preview, record) && !contextsFor(parts, record).some(context => sameState(context, preview))) throw new Error(`Take ${source.take} does not show ${preview.part} · ${preview.state}.`)
-    if (!DEVICES.some(candidate => candidate.id === device)) throw new Error(`Caliper has no device "${device}".`)
+    const viewed = await project()
+    if (!sameState(preview, record) && !contextsFor(viewed.parts, record).some(context => sameState(context, preview))) throw new Error(`Take ${source.take} does not show ${preview.part} · ${preview.state}.`)
+    if (!viewed.devices.some(candidate => candidate.id === device)) throw new Error(unknownDevice(viewed, device))
   }
 
   /** @param {Draft} draft */
@@ -143,7 +144,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     try {
       const draft = marks.current(revision)
       const plan = check(draft)
-      const { parts } = await project()
+      const { parts, devices } = await project()
       const byId = (/** @type {string} */ id) => /** @type {Mark} */ (draft.marks.find(mark => mark.id === id))
       const groups = plan.groups.map(group => {
         const own = group.marks.map(byId)
@@ -230,7 +231,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
             references: group.pointsTo.map(mark => ({ source: mark.source, mark, crop: crops.has(mark.id) })),
             pictures: shots.map(({ on, result, annotated }) => ({
               preview: { part: result.part, state: result.state }, previewLabel: labels(result.part, result.state),
-              deviceLabel: DEVICES.find(device => device.id === result.device)?.name ?? result.device,
+              deviceLabel: devices.find(device => device.id === result.device)?.name ?? result.device,
               width: result.viewport.width, height: result.viewport.height,
               drawn: on.map(mark => mark.letter),
               missing: on.filter((_, position) => !annotated.marks[position]?.found).map(mark => mark.letter),

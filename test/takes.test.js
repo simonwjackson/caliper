@@ -23,7 +23,7 @@ async function inFolder(files, run) {
   }
 }
 
-const ask = { part: "src/Chip.part.tsx", state: "default", device: "rg353m" }
+const ask = { part: "src/Chip.part.tsx", state: "default", device: "iphone-16" }
 
 describe("fenceProjectPath", () => {
   test("accepts a project file and normalises the path", async () => {

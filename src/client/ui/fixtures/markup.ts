@@ -15,7 +15,6 @@
 import type { Availability, ChromeView, ComposerView, DraftMarkView, FrameView, MarkMode, MarkPin, MarkRect, MarkupGroup, MarkupOutcome, MarkupSend, MarkupView, ReferenceOption } from "../contract"
 import { ORIGINAL, isOriginal, planSend, referencesIn } from "../../../takes/send-plan.js"
 import type { MarkLocation, SendPlan, TakeIdentity } from "../../../takes/send-plan.js"
-import { DEVICES } from "../../device-frame.js"
 
 /** One mark as the fixtures hold it. `frame` is the key of the frame that shows it, or null when no frame on the canvas does. */
 export type LocalMark = {
@@ -155,7 +154,7 @@ export function withMarkup(view: ChromeView, marks: readonly LocalMark[], state:
 function referenceOptions(view: ChromeView, marks: readonly LocalMark[], editing: LocalMark): ReferenceOption[] {
   return marks.filter(mark => mark.source.take !== editing.source.take).map(mark => {
     const shown = (mark.frame ? frames(view).find(frame => frame.key === mark.frame) : undefined) ?? frames(view).find(frame => sameSource(sourceOf(frame), mark.source))
-    const device = DEVICES.find(item => item.name === mark.deviceLabel)
+    const device = view.devices.find(item => item.name === mark.deviceLabel)
     return {
       id: mark.id, name: nameOf(mark), note: mark.note,
       label: isOriginal(mark.source) ? `Original · ${mark.previewLabel}` : `Take ${mark.source.take}${shown?.take ? ` · ${shown.label}` : ""}`,

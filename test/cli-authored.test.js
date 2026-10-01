@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url"
 const cli = fileURLToPath(new URL("../bin/caliper-render.mjs", import.meta.url))
 const authoredChecks = { default: [{ name: "retry", line: 2, hash: "abc" }] }
 const authoredCheckProblems = ["Example.part.tsx:3: Invalid declaration"]
-const project = { name: "consumer", parts: [{ file: "Example.part.tsx", name: "Example", states: [{ export: "default", name: "Default" }], authoredChecks, authoredCheckProblems }] }
+const devices = [{ id: "kiosk", name: "Kiosk", widthMm: 300, heightMm: 200, cssWidth: 1200, cssHeight: 800, viewportNote: "" }]
+const project = { name: "consumer", parts: [{ file: "Example.part.tsx", name: "Example", states: [{ export: "default", name: "Default" }], authoredChecks, authoredCheckProblems }], devices }
 
 /** @param {(request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => void} handle */
 async function serve(handle) {
@@ -29,6 +30,19 @@ test("CLI list requests the selected take and exposes authored declarations and 
     expect(await child.exited).toBe(0)
     expect(requested).toBe("/__caliper/project.json?take=7")
     expect(output.parts[0]).toMatchObject({ authoredChecks, authoredCheckProblems })
+    expect(output.devices).toEqual([{ id: "kiosk", name: "Kiosk", cssWidth: 1200, cssHeight: 800, widthMm: 300 }])
+  } finally { server.close() }
+})
+
+test("CLI says to restart a dev server whose older plugin sends no device list", async () => {
+  const server = await serve((_request, response) => {
+    response.setHeader("Content-Type", "application/json")
+    response.end(JSON.stringify({ ...project, devices: undefined }))
+  })
+  try {
+    const child = Bun.spawn([process.execPath, cli, "--url", server.url, "--list"], { stdout: "pipe", stderr: "pipe" })
+    expect(await child.exited).toBe(2)
+    expect((await new Response(child.stdout).json()).error).toContain("older Caliper plugin that sends no device list. Restart it.")
   } finally { server.close() }
 })
 

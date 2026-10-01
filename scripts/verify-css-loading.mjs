@@ -124,7 +124,7 @@ try {
   assert.equal(await badge.evaluate(() => document.documentElement.dataset.cssCheck), "same document")
   assert.deepEqual(await sheets(badge), ["badge.css", "global.css", "tokens.css"])
 
-  const take = store.create({ part: "src/Button.part.tsx", state: "default", device: "rg353m" })
+  const take = store.create({ part: "src/Button.part.tsx", state: "default", device: "iphone-16" })
   store.write(take, "src/button.css", '.button { letter-spacing: 7px; color: inherit; }')
   const taken = await frame(url, "Button", take)
   assert.equal(await value(taken, "button", "letter-spacing"), "7px")
@@ -142,7 +142,7 @@ try {
 
   // A cached, flattened stylesheet must be rechecked if its entry import goes
   // away. Otherwise Vite can reuse the stripped CSS while no frame loads its children.
-  const cachedTake = store.create({ part: "src/Button.part.tsx", state: "default", device: "rg353m" })
+  const cachedTake = store.create({ part: "src/Button.part.tsx", state: "default", device: "iphone-16" })
   store.write(cachedTake, "src/button.css", '@import "./legacy-child.css"; .button { color: inherit; }')
   write("src/index.ts", `${files["src/index.ts"]}\nimport "./button.css"`)
   await waitInjection(button, "src/button.css", true)
@@ -153,7 +153,7 @@ try {
   const noLongerGlobal = await frame(url, "Button", cachedTake, "Failed")
   assert.match(await noLongerGlobal.locator("#caliper-problem").textContent() ?? "", /did not load/)
 
-  const badTake = store.create({ part: "src/Button.part.tsx", state: "default", device: "rg353m" })
+  const badTake = store.create({ part: "src/Button.part.tsx", state: "default", device: "iphone-16" })
   store.write(badTake, "src/button.css", '@import "./legacy-child.css";')
   const failed = await frame(url, "Button", badTake, "Failed")
   assert.match(await failed.locator("#caliper-problem").textContent() ?? "", /did not load/)

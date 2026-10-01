@@ -105,7 +105,7 @@ describe("resolveAgent", () => {
   })
 })
 
-const ask = { part: "src/Chip.part.tsx", state: "default", device: "rg353m" }
+const ask = { part: "src/Chip.part.tsx", state: "default", device: "iphone-16" }
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7])
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 8])
 const projectFiles = {
@@ -234,8 +234,8 @@ describe("a take's agent", () => {
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("blue")
       // One render before the first request, one from the tool.
       expect(renders).toEqual([
-        { take, state: "default", devices: ["rg353m"] },
-        { take, state: "default", devices: ["rg353m"] },
+        { take, state: "default", devices: ["iphone-16"] },
+        { take, state: "default", devices: ["iphone-16"] },
       ])
       expect(view.log.map(entry => entry._tag === "Tool" ? `${entry.name} ${entry.subject} ${entry.outcome}` : entry._tag)).toEqual([
         "User", "edit_file src/chip.css Done", "render as asked Done", "Assistant",
@@ -334,9 +334,9 @@ describe("a take's agent", () => {
       expect(seen).toContain("<main>home</main>")
       expect(seen).toContain("export default function Part()")
       expect(renders).toEqual([
-        { take, state: "Ready", devices: ["rg353m"] },
-        { take, state: "Ready", devices: ["rg353m"] },
-        { take, part: ask.part, state: "default", devices: ["rg353m"] },
+        { take, state: "Ready", devices: ["iphone-16"] },
+        { take, state: "Ready", devices: ["iphone-16"] },
+        { take, part: ask.part, state: "default", devices: ["iphone-16"] },
         { take, state: "Ready", devices: ["*"], related: true },
       ])
       expect(view.log.some(entry => entry._tag === "Tool" && entry.subject === "all declared related scenarios")).toBe(true)

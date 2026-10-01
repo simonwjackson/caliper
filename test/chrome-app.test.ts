@@ -17,7 +17,7 @@ describe("the server snapshot to rendering boundary", () => {
   test("converts real project and takes snapshots without changing the wire values", async () => {
     await withProject({ files }, async ({ get, root }) => {
       const store = createTakeStore(root)
-      const id = store.create({ part, state: "Busy", device: "rg353m" })
+      const id = store.create({ part, state: "Busy", device: "iphone-16" })
       store.write(id, "src/note.ts", "export const note = 'review'\n")
       const project = parseProject(await (await get("/__caliper/project.json")).json())
       const takes = parseTakes(await (await get("/__caliper/takes.json")).json())
@@ -37,7 +37,7 @@ describe("the server snapshot to rendering boundary", () => {
   test("removed subjects retain review and discard but cannot authorize replacement or prompts", async () => {
     await withProject({ files }, async ({ get, root, write }) => {
       const store = createTakeStore(root)
-      const id = store.create({ part, state: "Busy", device: "rg353m" })
+      const id = store.create({ part, state: "Busy", device: "iphone-16" })
       store.write(id, "src/note.ts", "export const note = 'review'\n")
       write(part, "export default function Chip() { return <span>chip</span> }")
       const project = parseProject(await (await get("/__caliper/project.json")).json())
@@ -110,7 +110,7 @@ describe("the server snapshot to rendering boundary", () => {
     expect(() => parseWire(FrameReportSchema, { source: "caliper-frame", state: "Passed" })).toThrow()
   })
   test("reused take ids produce different frame identity", () => {
-    const take: TakeView = { take: "1", part, state: "default", created: 1, device: "rg353m", files: [], images: [], log: [], run: { _tag: "Idle" } }
+    const take: TakeView = { take: "1", part, state: "default", created: 1, device: "iphone-16", files: [], images: [], log: [], run: { _tag: "Idle" } }
     expect(frameKey(take, take)).not.toBe(frameKey(take, { ...take, created: 2 }))
   })
 })

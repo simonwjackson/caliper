@@ -137,7 +137,7 @@ Make one of the directions the strange direction, and set strange to true on it.
 
 /** @param {number} count */
 function systemPrompt(count) {
-  return `You plan takes inside Caliper, a tool that shows a React project's UI parts at the true size of handheld devices. A take is one proposed version of a part; an AI agent makes each take on its own, in parallel, and the user compares them side by side.
+  return `You plan takes inside Caliper, a tool that shows a React project's UI parts at the true size of the devices it targets. A take is one proposed version of a part; an AI agent makes each take on its own, in parallel, and the user compares them side by side.
 
 The user asked for ${count} takes of one request. Your job is to make them different in a way that is useful to compare. Propose up to ${count} directions, one per take.
 

@@ -46,7 +46,7 @@ test("accessibility findings use plain text and do not repeat the same rule for 
 
 test("visual approval requires matching real renders but does not hide other findings", () => {
   /** @type {import('../src/render/check-contract.js').CheckReport['results'][number]} */
-  const result = { part: "Button.part.tsx", state: "default", device: "rg353m", frame: "Rendered", viewport: { width: 640, height: 480 }, png: "first.png", repeatPng: "repeat.png", sha256: "", repeatSha256: "", checks: [
+  const result = { part: "Button.part.tsx", state: "default", device: "iphone-16", frame: "Rendered", viewport: { width: 640, height: 480 }, png: "first.png", repeatPng: "repeat.png", sha256: "", repeatSha256: "", checks: [
     { name: "render", status: "Passed", detail: "" }, { name: "browser", status: "Passed", detail: "" },
     { name: "determinism", status: "Passed", detail: "" }, { name: "accessibility", status: "Failed", detail: "" },
   ] }

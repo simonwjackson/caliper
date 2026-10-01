@@ -3,12 +3,12 @@ import type { StateRef, TakeView, CodeChange } from "../../types"
 import { Check } from "typebox/value"
 import { Type } from "typebox"
 import { ChecksViewSchema, CodeChangeSchema, FrameReportSchema, PlanSchema, parseProject, parseTakes, parseWire } from "./wire"
-import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable } from "./state"
+import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable, deviceOf, devicesOf } from "./state"
 import type { AppState, Ask, Plan, Preferences, Submission } from "./state"
 import { toChromeView, takeSummary, disabled, acceptConfirmNote, chainHasParent } from "./view"
 import { identityKey } from "../../takes/chains.js"
 import { sameState, subjectsOf, stateExists } from "../scenarios.js"
-import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
+import { DEFAULT_PX_PER_MM } from "../device-frame.js"
 import { imageName, imageProblem, MAX_IMAGES } from "../images.js"
 import { createCodeController } from "./code"
 import { createKnobsController } from "./knobs"
@@ -175,7 +175,7 @@ export function createChromeApp(input: RuntimeInput) {
     if (!subject) return
     const images = wireImages()
     const going = markup.withPrompt(state).ids
-    const ask: Ask = { ...subject, device: state.device.id, prompt: state.prompt.trim(), ...(state.context ? { context: state.context } : {}), ...(images.length ? { images } : {}), ...(going.length ? { marks: going } : {}) }
+    const ask: Ask = { ...subject, device: deviceOf(state).id, prompt: state.prompt.trim(), ...(state.context ? { context: state.context } : {}), ...(images.length ? { images } : {}), ...(going.length ? { marks: going } : {}) }
     const submitted = submission()
     if (state.count === 1) return launch(ask, [undefined], submitted)
     const id = ++generation, count = state.count
@@ -279,7 +279,7 @@ export function createChromeApp(input: RuntimeInput) {
     onContext: key => { const scenario = snapshot.navigation.scenario; const choice = scenario._tag === "Selected" ? scenario.choices.find(choice => choice.key === key) : null; if (choice) selected({ ...state, context: choice.context, contextNote: "" }) },
     onSubject: ref => { const preview = previewRef(state); if (preview && subjectsOf(state.project?.parts ?? [], preview).some(child => sameState(child, ref))) selected({ ...state, part: ref.part, shown: { _tag: "One", export: ref.state }, context: preview, contextNote: "", take: null, expanded: new Map(state.expanded).set(ref.part, true) }) },
     onWholeScenario: () => { const preview = state.context; if (preview) selected({ ...state, part: preview.part, shown: { _tag: "One", export: preview.state }, context: null, contextNote: "", take: null }) },
-    onDevice: id => { const device = DEVICES.find(device => device.id === id); if (device) { set({ ...state, device }); remember("device", id); save(); markup.schedule() } },
+    onDevice: id => { if (devicesOf(state).some(device => device.id === id)) { set({ ...state, device: id }); remember("device", id); save(); markup.schedule() } },
     onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onAttach: files => immediate(() => attach(files)),
     onRemoveAttachment: id => { if (state.plan._tag !== "None") return; const image = state.attachments.find(image => image.id === id); if (image) input.revokeImage?.(image.url); set({ ...state, attachments: state.attachments.filter(image => image.id !== id), notices: [] }) },
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),

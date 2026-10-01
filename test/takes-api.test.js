@@ -86,11 +86,11 @@ describe("the takes API", () => {
 
   test("a take started without an agent fails visibly, and discard removes it", async () => {
     await withProject({ files }, async ({ url, get, root }) => {
-      const created = await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", device: "rg353m" })
+      const created = await post(url, "/__caliper/takes", { part: "src/Chip.part.tsx", prompt: "Red", device: "iphone-16" })
       expect(created.status).toBe(201)
       const { take } = await created.json()
       const view = await settledTake(get, take)
-      expect(view).toMatchObject({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", files: [] })
+      expect(view).toMatchObject({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", files: [] })
       expect(view.run._tag === "Failed" && view.run.reason).toContain("The agent is off")
       expect(existsSync(join(root, ".caliper/takes", take))).toBe(true)
       expect((await post(url, `/__caliper/takes/${take}/discard`, {})).status).toBe(200)
@@ -114,7 +114,7 @@ describe("the takes API", () => {
   test("serves take-only preview parts and states without adding them to the real project", async () => {
     await withProject({ files }, async ({ root, get, project }) => {
       const store = createTakeStore(root)
-      const take = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m" })
+      const take = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16" })
       store.write(take, "src/Alternate.part.tsx", "export default () => <button>Alternate</button>\nexport const Quiet = () => <button>Quiet</button>")
       expect((await get(`/__caliper/frame?part=src/Alternate.part.tsx&state=Quiet&take=${take}`)).status).toBe(200)
       expect((await get(`/__caliper/frame?part=src/Alternate.part.tsx&state=Quiet`)).status).toBe(404)
@@ -134,7 +134,7 @@ describe("the takes API", () => {
     await withProject({ files }, async ({ root, url }) => {
       const store = createTakeStore(root)
       const integration = createIntegrationReview(store)
-      const source = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m" })
+      const source = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16" })
       store.write(source, "src/app.css", ".chip { color: red }")
       const take = integration.begin(source)
       store.reset(take, "src/app.css")

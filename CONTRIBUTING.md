@@ -198,7 +198,7 @@ five size-ladder shapes, embedded-container containment and focus restoration.
 These assertions remain in the script; the reference explicitly defers them.
 
 `scripts/verify-checks.mjs` uses a temporary React consumer to check the public
-CLI, both device sizes, render errors, browser errors, empty states, spill,
+CLI, every standard device size, render errors, browser errors, empty states, spill,
 accessibility failures, unstable images, saved-baseline approval, take comparison,
 and the agent tool's findings. It also proves that reports do not block Replace.
 It makes no model calls or changes to the supplied project.

@@ -3,7 +3,7 @@ import {
   BAR_H, BAR_W, CANVAS_W, CODE_H, CODE_SHARE, DOCK_W, GUTTER, PARTS_W, RAIL_W, SIDE_W, STAGE_H, STAGE_SHARE,
   codeHeight, fitComposer, fitTools, frontSheet, pairFits, planLayout,
 } from "../src/client/ui/layout"
-import { DEVICES } from "../src/client/device-frame.js"
+import { HANDHELD_DEVICES } from "../src/client/device-frame.js"
 
 /** The Darkroom chrome keeps the browser's 16 px rem. */
 const px = (value: number) => value / 16
@@ -116,7 +116,7 @@ describe("frontSheet: a pressed tool names the sheet in front", () => {
 
 describe("pairFits: two frames and a gap at true size, per device (decision 35, choice 19)", () => {
   const pxPerMm = 3.875
-  const [rg353m, odin] = DEVICES
+  const [rg353m, odin] = HANDHELD_DEVICES
   const width = (device: typeof rg353m) => device!.widthMm * pxPerMm
   test("the RG353M needs 598 px on a desk gap of 40 px", () => {
     expect(pairFits(width(rg353m), 40, 598)).toBe(true)

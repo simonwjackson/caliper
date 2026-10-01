@@ -42,7 +42,7 @@ await build({ entryPoints: [join(checkout, "scripts/fixtures/markup-harness.tsx"
 const styles = existsSync(join(root, "public/markup-harness.css")) ? '<link rel="stylesheet" href="/markup-harness.css">' : ""
 put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf-8"><base href="__caliper/"><title>Type-ahead harness</title>${styles}</head><body><div id="caliper"></div><script type="module" src="/markup-harness.js"></script></body></html>`)
 const store = createTakeStore(root)
-const [one, two] = ["Warm it", "Space it"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
+const [one, two] = ["Warm it", "Space it"].map(prompt => store.create({ part, state: "default", device: "iphone-16", prompt }))
 const vite = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "silent", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper({ wrap: false })] })
 await vite.listen()
 // The Caliper app serves takes and marks (decision 37); the harness runs under the project's path in it.
@@ -61,7 +61,7 @@ try {
   const errors = []
   page.on("pageerror", error => errors.push(error.message))
   await installRouting(page, app)
-  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&take=${one}&device=rg353m`, url).href)
+  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&take=${one}&device=iphone-16`, url).href)
   /** @param {string} predicate a function of the ChromeView, as source */
   const until = (predicate, timeout = 20_000) => page.waitForFunction(`(${predicate})(window.caliperHarness?.snapshot())`, undefined, { timeout, polling: 50 })
   await until(`view => view?.markup?._tag === "Ready" && view.canvas._tag === "Frames" && view.canvas.frames.length === 3 && view.canvas.frames.every(frame => frame.verdict._tag === "Rendered")`, 30_000)

@@ -46,7 +46,7 @@ function post(url, path, body) {
  * @param {string} content
  */
 async function takeWith(root, url, file, content) {
-  const take = createTakeStore(root).create({ part: "src/ui/Chip.part.tsx", state: "default", device: "rg353m" })
+  const take = createTakeStore(root).create({ part: "src/ui/Chip.part.tsx", state: "default", device: "iphone-16" })
   const saved = await post(url, `/__caliper/takes/${take}/file`, { file, content })
   expect(saved.status).toBe(200)
   return take

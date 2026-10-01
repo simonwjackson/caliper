@@ -6,8 +6,9 @@ import { CheckReportSchema, CheckSchema } from "./check-contract.js"
 import { MarkAnchorSchema } from "../takes/marks-contract.js"
 
 const Text = Type.String()
+const Viewport = Type.Object({ width: Type.Number(), height: Type.Number() })
 const Job = Type.Object({
-  part: Text, state: Text, device: Text, take: Type.Optional(Text),
+  part: Text, state: Text, device: Text, viewport: Viewport, take: Type.Optional(Text),
   annotations: Type.Optional(Type.Array(Type.Object({ letter: Text, anchor: MarkAnchorSchema, crop: Type.Optional(Type.Boolean()) }))),
 })
 const Annotated = Type.Object({
@@ -52,7 +53,6 @@ const Spill = Type.Object({
 })
 export const RenderTransportSchema = Type.Object({
   ...Job.properties,
-  viewport: Type.Object({ width: Type.Number(), height: Type.Number() }),
   frame: Type.Union([Type.Literal("Rendered"), Type.Literal("Empty"), Type.Literal("Failed")]),
   png: Text,
   problems: Type.Array(

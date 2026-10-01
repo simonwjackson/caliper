@@ -17,12 +17,12 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 30))
 /** Real HTTP to a live dev server. Without frames, every mark is unresolved in this chrome. */
 test("the app wiring loads the draft, keeps frames' markability honest and blocks an unchecked Send", () => withProject({ files, options }, async ({ url, root, get }) => {
   const store = createTakeStore(root)
-  const take = store.create({ part, state: "default", device: "rg353m", prompt: "Warm" })
+  const take = store.create({ part, state: "default", device: "iphone-16", prompt: "Warm" })
   const created = store.record(take)!.created
   const alternate = createIntegrationReview(store).begin(take)
   const notices: string[] = []
   const app = createChromeApp({
-    hash: `#part=${part}&state=takes:default&take=${take}&device=rg353m`,
+    hash: `#part=${part}&state=takes:default&take=${take}&device=iphone-16`,
     request: async <T,>(path: string, data?: object): Promise<T> => {
       const response = await fetch(new URL(`__caliper/${path}`, url), data === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) })
       const value = await response.json()
@@ -50,7 +50,7 @@ test("the app wiring loads the draft, keeps frames' markability honest and block
     expect(notices).toContain("Wait for the frame to render, then mark it.")
 
     // A mark from another chrome arrives on the stream.
-    const added = await (await fetch(new URL("__caliper/marks", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: 0, source: { take, created }, preview: { part, state: "default" }, device: "rg353m", anchor }) })).json()
+    const added = await (await fetch(new URL("__caliper/marks", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: 0, source: { take, created }, preview: { part, state: "default" }, device: "iphone-16", anchor }) })).json()
     app.receiveMarks(added.draft)
     await settle()
     const marked = app.getSnapshot().markup
@@ -71,8 +71,8 @@ test("the app wiring loads the draft, keeps frames' markability honest and block
 
     // Phase 6: a mark on the original needs its subject; a note that names it makes it a reference.
     const post = (path: string, body: object) => fetch(new URL(`__caliper/${path}`, url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
-    expect((await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, device: "rg353m", anchor })).status).toBe(400)
-    const onOriginal = await (await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, subject: { part, state: "default" }, device: "rg353m", anchor })).json()
+    expect((await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, device: "iphone-16", anchor })).status).toBe(400)
+    const onOriginal = await (await post("marks", { revision: 2, source: { take: "0", created: 0 }, preview: { part, state: "default" }, subject: { part, state: "default" }, device: "iphone-16", anchor })).json()
     app.receiveMarks(onOriginal.draft)
     app.actions.onMarkEdit(added.id)
     app.actions.onMarkNote(added.id, "love this, use 0A")

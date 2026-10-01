@@ -743,3 +743,46 @@ the server started; two test fixtures that linked React after startup now link
 it first. The late-change fix (decision 24) still depends on chokidar 3's
 `raw` event; `scripts/verify-fast-saves.mjs` passed 10 of 10 on Vite 8.3.1.
 Vite 7 is tested only by the delivery gate, not by the unit tests.
+
+## 42. Standard devices by default; a project lists its own
+
+Decided 2026-09-30. The user asked that the default list of devices be
+standard devices and screens. Before this, every project got the two
+handhelds Pico targets, the RG353M and the ODIN 2 PORTAL, and nothing else. A
+web project had no phone, tablet, laptop or monitor to look at, and no way to
+add one.
+
+- **The default list is five standard devices**, in
+  `STANDARD_DEVICES` (`src/client/device-frame.js`): iPhone 16, Pixel 7,
+  iPad Air 11″ upright, MacBook Air 13″ and a 24″ 1920 × 1080 monitor. The
+  iPhone is first, so it is the default device. Physical sizes come from the
+  makers' published resolution and density (Apple, Google) or active area
+  (Dell P2422H). The CSS viewport is the whole screen, as in Chrome DevTools'
+  device mode; the iPad's and the Mac's are Apple's default scale.
+- **`caliper({ devices })` replaces the list.** A string names a known
+  device: the five, or `rg353m` and `odin2portal`, which stay in
+  `HANDHELD_DEVICES`. An object declares the project's own device. The plugin
+  refuses a wrong list when `vite.config` loads (decision 8). Pico lists its
+  two handhelds.
+- **The project's device list travels in `project.json`.** The chrome, the
+  agent's prompt, the render CLI, checks and marks read the project's list.
+  No code reads a built-in list except as the default. A render job carries
+  its device's CSS viewport, so the browser worker needs no list.
+  `PROTOCOL` is 3, because a protocol 2 plugin sends no list.
+- **A device the project no longer lists** falls back to its first device in
+  the chrome. A take or mark keeps the old id and its name shows as the id. A
+  render on that device fails and names the project's devices.
+
+Why: decision 2 asks for near-zero config, and the default needs none. A
+project that targets other screens says so in one line, the same place as
+`entry`, `css` and `wrap`. Devices stay data with true millimetres, so
+decision 6 (true size per device) holds for every device.
+
+Costs: checks render every state on every device. A project on the default
+list renders 5 devices instead of 2, about 2.5 times the check time. The
+caption's device switch wraps to a second line at narrow widths; with many
+declared devices it can take several lines. A phone frame shows the whole
+screen, so it is taller than the page a browser gives with its bars. The
+sizes are from spec sheets, not measured. Every running dev server must
+restart once for protocol 3. Not done: device groups, landscape and portrait
+of one device, and a device pixel ratio for renders (renders stay at 1).

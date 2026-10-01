@@ -179,6 +179,45 @@ are relative to the Vite root. `css: []` injects no global styles, but component
 still load their own CSS. Setup shows whether CSS came from entry imports or
 this option. An invalid override appears in Setup and as a frame warning.
 
+### Devices
+
+Without a `devices` option, a project gets five standard devices. The first is
+the default device.
+
+| Id | Device | CSS viewport | Screen |
+|---|---|---|---|
+| `iphone-16` | iPhone 16 | 393 × 852 | 65.1 × 141.1 mm |
+| `pixel-7` | Pixel 7 | 412 × 915 | 65.9 × 146.5 mm |
+| `ipad-air-11` | iPad Air 11″, upright | 820 × 1180 | 157.8 × 227.1 mm |
+| `macbook-air-13` | MacBook Air 13″ | 1470 × 956 | 290.3 × 188.7 mm |
+| `monitor-24` | 24″ monitor | 1920 × 1080 | 527.04 × 296.46 mm |
+
+The screen sizes come from each maker's published resolution and pixel density
+(Apple, Google), or from the panel's active area (Dell P2422H). The CSS
+viewport is the whole screen, as Chrome DevTools gives it. A real browser's
+bars make the page shorter.
+
+`devices` replaces the list. A string names a device Caliper knows: the five
+above, or the handhelds `rg353m` (RG353M) and `odin2portal` (ODIN 2 PORTAL).
+An object declares a device of the project's own:
+
+```ts
+caliper({
+  devices: [
+    "rg353m",
+    { id: "kiosk", name: "Lobby kiosk", widthMm: 344, heightMm: 194, cssWidth: 1280, cssHeight: 720,
+      viewportNote: "Measured on the unit" },
+  ],
+})
+```
+
+The `id` is stored in takes and marks, so keep it stable. Caliper refuses an
+unknown id, a repeated id or a device without positive sizes when `vite.config`
+loads. Checks render every state on every device, so each device adds check
+time. A take or mark made on a device the project no longer lists still opens;
+the chrome shows the project's first device, and renders on the removed device
+fail with the list of devices.
+
 ### CSS ownership
 
 Caliper injects global styles before importing the selected part. Vite then
@@ -417,7 +456,7 @@ lines show above the lines that replace them, and long unchanged runs fold away.
 **Open in Code** opens that file of the proposal in the code pane. The comparison
 frame shows the new alternate state, even before that state exists in production.
 
-**Check original and alternate** renders every existing state on both devices
+**Check original and alternate** renders every existing state on every device
 twice to establish a stable baseline. It compares the proposal's existing states
 against that baseline, then checks the alternate for render errors and spill.
 An unstable baseline or changed existing state blocks apply. Intentional empty
@@ -627,7 +666,7 @@ after a knob's write replaces it.
 ## How a part renders
 
 Each part renders in an `iframe` for one device. The `iframe` has the device's
-CSS viewport size, for example 640 × 480 px for the RG353M. It is then scaled to
+CSS viewport size, for example 393 × 852 px for the iPhone 16. It is then scaled to
 the device's physical width on the calibrated monitor. Media queries, `vw` and
 `window.innerWidth` inside the frame therefore see the device, not the monitor.
 
@@ -667,7 +706,7 @@ the agent's skills folder.
 
 Open **Checks** in Caliper's bar, or in **More controls** when the bar is narrow.
 **Check selected preview** checks the scenario on the stage. **Check all states**
-checks every declared state. Both commands use both built-in device sizes. When
+checks every declared state. Both commands use every device of the project. When
 a take is selected, the commands check its overlay and name the take explicitly.
 They require no model connection.
 
@@ -944,9 +983,10 @@ report, not that all behavior is safe.
 - The wrapper must be DOM elements with literal class names. A provider
   component or a computed `className` needs the `wrap` option, and a provider
   that parts need cannot be recreated yet.
-- The device list is built in: RG353M and ODIN 2 PORTAL. Their CSS viewports
-  are inferred from each panel's resolution and Sway's default scale of 1. They
-  are not yet measured on the devices.
+- The standard devices' sizes come from spec sheets, not from measuring the
+  devices. The RG353M and ODIN 2 PORTAL CSS viewports are inferred from each
+  panel's resolution and Sway's default scale of 1. A frame shows the whole
+  screen; it does not take away a browser's bars.
 - Only Vite projects can use Caliper: Vite 6, 7 or 8. The delivery gate runs
   Vite 6.4.2, 7.3.6 and 8.3.1 consumers; Caliper itself builds with 8.3.1.
 - A take cannot show a change that goes through a conditional CSS `@import`

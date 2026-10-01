@@ -2,7 +2,7 @@
 // @ts-check
 import { parseArgs } from "node:util"
 import { writeSync } from "node:fs"
-import { DEVICES } from "../src/client/device-frame.js"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 import { planRenders } from "../src/render/plan.js"
 import { renderJobs } from "../src/render/render.js"
 import { approveBaselines, checkJobs } from "../src/render/checks.js"
@@ -35,8 +35,9 @@ Options:
   --url      Origin of the project's Vite dev server, for example http://localhost:5173
   --part     A part file, relative to the Vite root, as --list prints it; '*' selects all parts
   --state    An exported state of the part. Default: "default". "*": every state
-  --device   A device id. Repeat it, or pass "*" for every device. Default: ${DEVICES[0]?.id}
-             Devices: ${DEVICES.map(device => `${device.id} (${device.name}, ${device.cssWidth}x${device.cssHeight} CSS px)`).join(", ")}
+  --device   A device id. Repeat it, or pass "*" for every device. Default: the project's
+             first device. --list prints the project's devices; caliper({ devices }) sets them.
+             Without it: ${STANDARD_DEVICES.map(device => device.id).join(", ")}
   --take     Render the part as take <n> changes it: the files in .caliper/takes/<n>/
              replace the real files. Default: the real files
   --out      Folder for the PNG files. Default: /tmp/caliper-render
@@ -140,6 +141,7 @@ const project = await fetch(discoveryUrl, { signal: interruption.signal })
     return response.json()
   })
   .catch(error => stop(`No Caliper at ${url} (${error.message ?? error}). Start the project's Vite dev server with the caliper() plugin.`))
+if (!Array.isArray(project.devices)) stop(`The dev server at ${url} runs an older Caliper plugin that sends no device list. Restart it.`)
 
 if (args.list) {
   await print({
@@ -153,7 +155,7 @@ if (args.list) {
       authoredChecks: part.authoredChecks ?? {},
       authoredCheckProblems: part.authoredCheckProblems ?? [],
     })),
-    devices: DEVICES.map(device => ({ id: device.id, name: device.name, cssWidth: device.cssWidth, cssHeight: device.cssHeight, widthMm: device.widthMm })),
+    devices: project.devices.map(device => ({ id: device.id, name: device.name, cssWidth: device.cssWidth, cssHeight: device.cssHeight, widthMm: device.widthMm })),
   })
   process.exit(0)
 }

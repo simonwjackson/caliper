@@ -5,6 +5,7 @@ import type { Request, RuntimeInput } from "../src/client/app/runtime"
 import type { Direction, Project, TakesSnapshot, TakeView } from "../src/types"
 import type { FrameView } from "../src/client/ui/contract"
 import type { FrameReport } from "../src/client/app/wire"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 const part = "src/Chip.atom.part.tsx"
 const page = "src/Checkout.page.part.tsx"
@@ -22,10 +23,11 @@ function project(): Project {
     entry: { _tag: "Derived", value: { file: "src/main.tsx" }, source: { file: "index.html", line: 6 }, via: "module script" },
     css: { _tag: "Derived", value: { stylesheets: [{ file: "src/global.css", importedAt: { file: "src/main.tsx", line: 1 } }], unresolved: [] }, source: { file: "src/main.tsx", line: 1 }, via: "entry imports" },
     wrapper: { _tag: "Overridden", value: { elements: [{ tag: "main", className: "app" }] }, option: "wrap" },
+    devices: STANDARD_DEVICES,
   }
 }
 function take(overrides: Partial<TakeView> = {}): TakeView {
-  return { take: "1", part, state: "Busy", device: "rg353m", created, name: "Clearer busy chip", files: ["src/Chip.tsx"], images: [], run: { _tag: "Idle" }, log: [{ _tag: "User", text: "Make the busy state clearer" }], ...overrides }
+  return { take: "1", part, state: "Busy", device: "iphone-16", created, name: "Clearer busy chip", files: ["src/Chip.tsx"], images: [], run: { _tag: "Idle" }, log: [{ _tag: "User", text: "Make the busy state clearer" }], ...overrides }
 }
 function takes(list: readonly TakeView[] = []): TakesSnapshot {
   return {
@@ -133,11 +135,11 @@ describe("initial snapshots and saved preferences", () => {
     expect(new URLSearchParams(h.hashes.at(-1)?.slice(1)).has("take")).toBe(false)
   })
   test("tool/device/calibration/split preferences restore and a new tool selection persists", () => {
-    const values = new Map([["caliper:view", "takes"], ["caliper:device", "odin2portal"], ["caliper:px-per-mm", "7"], ["caliper:code-share", "0.6"], ["caliper:code-open", "true"]])
+    const values = new Map([["caliper:view", "takes"], ["caliper:device", "pixel-7"], ["caliper:px-per-mm", "7"], ["caliper:code-share", "0.6"], ["caliper:code-open", "true"]])
     const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
     const restored = createAppState("", storage)
     expect(restored.tools.active).toBe("takes")
-    expect(restored.device.id).toBe("odin2portal")
+    expect(restored.device).toBe("pixel-7")
     expect(restored.pxPerMm).toBe(7)
     expect(restored.calibrated).toBe(true)
     expect(restored.tools.codeShare).toBe(0.6)
@@ -146,7 +148,7 @@ describe("initial snapshots and saved preferences", () => {
     apps.add(app)
     app.actions.onTool("preview")
     expect(createAppState("", storage).tools.active).toBe("preview")
-    expect(createAppState("#device=rg353m", storage).device.id).toBe("rg353m")
+    expect(createAppState("#device=iphone-16", storage).device).toBe("iphone-16")
   })
 })
 

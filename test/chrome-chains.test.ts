@@ -3,6 +3,7 @@ import { createChromeApp } from "../src/client/app/runtime"
 import type { RuntimeInput } from "../src/client/app/runtime"
 import type { Project, TakesSnapshot, TakeView } from "../src/types"
 import type { ChainView } from "../src/client/ui/contract"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 // Phase 5 core: chains on the Takes canvas from the served take records.
 const part = "src/Chip.atom.part.tsx"
@@ -20,11 +21,12 @@ function project(): Project {
     entry: { _tag: "Derived", value: { file: "src/main.tsx" }, source: { file: "index.html", line: 6 }, via: "module script" },
     css: { _tag: "Derived", value: { stylesheets: [], unresolved: [] }, source: { file: "src/main.tsx", line: 1 }, via: "entry imports" },
     wrapper: { _tag: "Overridden", value: { elements: [] }, option: "wrap" },
+    devices: STANDARD_DEVICES,
   }
 }
 const at = (take: string, minutes: number) => ({ take, created: t0 + minutes * 60_000 })
 function take(id: string, minutes: number, overrides: Partial<TakeView> = {}): TakeView {
-  return { ...at(id, minutes), part, state: "default", device: "rg353m", name: `Take ${id} name`, files: ["src/chip.css"], images: [], run: { _tag: "Idle" }, log: [], ...overrides }
+  return { ...at(id, minutes), part, state: "default", device: "iphone-16", name: `Take ${id} name`, files: ["src/chip.css"], images: [], run: { _tag: "Idle" }, log: [], ...overrides }
 }
 /** Take 6 from 1 across a discarded 4; take 5 from 2; take 3 alone. */
 function chainTakes(): TakeView[] {

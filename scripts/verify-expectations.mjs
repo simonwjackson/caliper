@@ -131,7 +131,7 @@ try {
   const check = (result, name) => { const found = result.checks.find(item => item.name === name); assert(found, `${result.state}: missing ${name}`); return found }
   const all = await run(["--part", "*", "--state", "*", "--device", "*"])
   assert.equal(all.report.results.length, 30)
-  for (const device of ["rg353m", "odin2portal"]) {
+  for (const device of ["iphone-16", "pixel-7"]) {
     /** @param {string} state @param {string} [file] */
     const result = (state, file = part) => {
       const found = all.report.results.find(item => item.part === file && item.state === state && item.device === device)
@@ -170,7 +170,7 @@ try {
   console.log("CLI: 30 state/device results verified exact rules and targets, spill bounds, unused declarations, invalid metadata, intended empty and mismatch.")
 
   const store = createTakeStore(root)
-  const take = store.create({ part, state: "default", device: "rg353m" })
+  const take = store.create({ part, state: "default", device: "iphone-16" })
   const takeReason = "Take-only declaration for a take-only target."
   store.write(take, part, `export default function Default() { return <button id="take-target" /> }\nexport const expectations = ${JSON.stringify({ default: { accessibility: [{ rule: "button-name", target: ["#take-target"], reason: takeReason }] } })}`)
   const taken = await run(["--part", part, "--take", take])
@@ -243,7 +243,7 @@ try {
   assert.deepEqual(errors, [])
   console.log(`Checks UI: accepted counts, reasons and raw violations verified; take image approval is disabled.${values.layout ? " Container geometry gates passed." : " Reference layout gates explicitly deferred."}`)
 
-  const started = await fetch(`${base}takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part, state: "default", device: "rg353m", prompt: "Run checks and report the accepted product exception without editing files." }) })
+  const started = await fetch(`${base}takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part, state: "default", device: "iphone-16", prompt: "Run checks and report the accepted product exception without editing files." }) })
   assert.equal(started.status, 201)
   const startedTake = await started.json()
   let idle = false

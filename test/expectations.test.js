@@ -79,7 +79,7 @@ function fixture(run) {
   const samples = ["first", "repeat"].map(name => {
     const png = join(root, `${name}.png`)
     writeFileSync(png, "same image")
-    return /** @type {import('../src/render/render.js').RenderResult} */ ({ part: partFile, state: "default", device: "rg353m", viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null, environment: "test", accessibility: { _tag: "Complete", violations: [], incomplete: [] } })
+    return /** @type {import('../src/render/render.js').RenderResult} */ ({ part: partFile, state: "default", device: "iphone-16", viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null, environment: "test", accessibility: { _tag: "Complete", violations: [], incomplete: [] } })
   })
   const report = () => compareRenders({ project: "intent", first: [samples[0]], second: [samples[1]] })
   try { run(samples, report, root) } finally { rmSync(root, { recursive: true, force: true }) }

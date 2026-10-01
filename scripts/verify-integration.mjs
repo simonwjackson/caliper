@@ -57,7 +57,7 @@ try {
   }
   const store = createTakeStore(root)
   const integration = createIntegrationReview(store)
-  const ask = { part: "src/Chip.atom.part.tsx", state: "default", device: "rg353m" }
+  const ask = { part: "src/Chip.atom.part.tsx", state: "default", device: "iphone-16" }
   let source
   let take
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } })

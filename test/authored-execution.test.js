@@ -46,7 +46,7 @@ export const checks = { Waiting: { 'started hanging callback': async () => { awa
   try {
     await server.listen()
     const url = /** @type {string} */ (server.resolvedUrls?.local[0])
-    const result = await checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "default", device: "rg353m" }], out: join(root, ".caliper/checks"), executablePath: /** @type {string} */ (process.env.CHROMIUM) })
+    const result = await checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "default", device: "iphone-16", viewport: { width: 393, height: 852 } }], out: join(root, ".caliper/checks"), executablePath: /** @type {string} */ (process.env.CHROMIUM) })
     expect(result.report.version).toBe(2)
     expect(result.results[0]?.authored?.checks.map(item => [item.name, item.status])).toEqual([["retry loads", "Passed"], ["deliberate failure", "Failed"], ["assertion mentions page closed", "Failed"], ["still executes next check", "Passed"]])
     expect(result.results[0]?.authored?.checks[1]?.detail).toContain("Wrong")
@@ -56,9 +56,9 @@ export const checks = { Waiting: { 'started hanging callback': async () => { awa
     mkdirSync(join(root, "screenshots"))
     symlinkSync(join(root, "screenshots"), alias, "dir")
     try {
-      await expect(checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "default", device: "rg353m" }], out: alias, executablePath: /** @type {string} */ (process.env.CHROMIUM) })).rejects.toThrow("must be under .caliper/checks")
+      await expect(checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "default", device: "iphone-16", viewport: { width: 393, height: 852 } }], out: alias, executablePath: /** @type {string} */ (process.env.CHROMIUM) })).rejects.toThrow("must be under .caliper/checks")
     } finally { rmSync(alias) }
-    const stopped = await checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "Waiting", device: "rg353m" }], out: join(root, ".caliper/checks"), executablePath: /** @type {string} */ (process.env.CHROMIUM), signal: cancellation.signal })
+    const stopped = await checkJobs({ url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "Waiting", device: "iphone-16", viewport: { width: 393, height: 852 } }], out: join(root, ".caliper/checks"), executablePath: /** @type {string} */ (process.env.CHROMIUM), signal: cancellation.signal })
     expect(started).toBe(true)
     expect(stopped.results[0]?.checkRun?.termination).toBe("Cancelled")
     expect(stopped.results[0]?.authored?.checks[0]?.status).toBe("Inconclusive")
@@ -74,7 +74,7 @@ export const checks = { Waiting: { 'started hanging callback': async () => { awa
       child.disconnect()
     }
     try {
-      child.send({ type: "checks", input: { url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "Waiting", device: "rg353m" }], out: join(root, ".caliper/checks/disconnected"), executablePath: process.env.CHROMIUM } })
+      child.send({ type: "checks", input: { url, project: "test", jobs: [{ part: "src/Retry.part.tsx", state: "Waiting", device: "iphone-16", viewport: { width: 393, height: 852 } }], out: join(root, ".caliper/checks/disconnected"), executablePath: process.env.CHROMIUM } })
       const [code] = await exit
       expect(code).toBe(0)
       expect(browsers.length).toBeGreaterThan(0)

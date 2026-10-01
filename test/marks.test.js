@@ -49,12 +49,12 @@ const PNG = { name: "shot.png", mimeType: /** @type {const} */ ("image/png"), by
 describe("store.fork", () => {
   test("copies every edited file and no images, and leaves the source unchanged", () => inFolder(files, root => {
     const store = createTakeStore(root)
-    const source = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "Warm it up" })
+    const source = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", prompt: "Warm it up" })
     store.write(source, "src/chip.css", ".chip { color: red }\n")
     store.write(source, "src/deep/New.ts", "export const added = 1\n")
     store.addImages(source, [PNG])
     const before = JSON.stringify([store.record(source), store.files(source)])
-    const take = store.fork(source, { part: "src/Chip.part.tsx", state: "default", device: "rg353m", parent: { take: source, created: /** @type {number} */ (store.record(source)?.created) } })
+    const take = store.fork(source, { part: "src/Chip.part.tsx", state: "default", device: "iphone-16", parent: { take: source, created: /** @type {number} */ (store.record(source)?.created) } })
     expect(take).not.toBe(source)
     expect(store.files(take)).toEqual(["src/chip.css", "src/deep/New.ts"])
     expect(store.read(take, "src/chip.css")).toContain("red")
@@ -67,7 +67,7 @@ describe("store.fork", () => {
 
   test("refuses a missing source without leaving a take behind", () => inFolder(files, root => {
     const store = createTakeStore(root)
-    expect(() => store.fork("4", { part: "src/Chip.part.tsx", state: "default", device: "rg353m" })).toThrow("Take 4 does not exist.")
+    expect(() => store.fork("4", { part: "src/Chip.part.tsx", state: "default", device: "iphone-16" })).toThrow("Take 4 does not exist.")
     expect(store.list()).toEqual([])
   }))
 })
@@ -87,9 +87,9 @@ describe("the draft of marks", () => {
     const marks = createMarkStore(root)
     expect(marks.read()).toEqual({ revision: 0, marks: [] })
     const one = { take: "1", created: 100 }, two = { take: "2", created: 200 }
-    const first = marks.add(0, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", anchor })
-    const second = marks.add(first.draft.revision, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", anchor })
-    const other = marks.add(second.draft.revision, { source: two, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", anchor })
+    const first = marks.add(0, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", anchor })
+    const second = marks.add(first.draft.revision, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", anchor })
+    const other = marks.add(second.draft.revision, { source: two, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", anchor })
     expect(other.draft.marks.map(mark => [mark.source.take, mark.letter])).toEqual([["1", "A"], ["1", "B"], ["2", "A"]])
     expect(createMarkStore(root).read()).toEqual(other.draft)
     expect(readFileSync(join(root, ".caliper/.gitignore"), "utf8")).toContain("*")
@@ -103,7 +103,7 @@ describe("the draft of marks", () => {
     const noted = marks.change(3, first.id, { note: "love this" })
     const removed = marks.remove(noted.revision, first.id)
     expect(removed.marks.map(mark => mark.letter)).toEqual(["B", "A"])
-    const again = marks.add(removed.revision, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", anchor })
+    const again = marks.add(removed.revision, { source: one, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", anchor })
     expect(again.draft.marks.at(-1)?.letter).toBe("A")
     const released = marks.release(again.draft.revision, new Set([second.id, again.id]))
     expect(released.marks.map(mark => mark.id)).toEqual([other.id])
@@ -120,8 +120,8 @@ describe("a take made from marks", () => {
   test("stores its own history, so a discarded ancestor never breaks it", () => {
     const direction = { title: "Cover wide", brief: "Cover art two thirds wide." }
     /** @type {import("../src/takes/marks-contract.js").Mark} */
-    const onOne = { id: "m1", source: { take: "1", created: 10 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", letter: "A", note: "cover is too wide", anchor }
-    const root = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", created: 10, prompt: "Give the cover room", direction })
+    const onOne = { id: "m1", source: { take: "1", created: 10 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", letter: "A", note: "cover is too wide", anchor }
+    const root = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 10, prompt: "Give the cover room", direction })
     const six = { ...childRecord({ take: "1", created: 10 }, root, [onOne]), created: 60 }
     expect(six).toMatchObject({ parent: { take: "1", created: 10 }, chain: { take: "1", created: 10 }, history: { prompt: "Give the cover room", direction, lineage: [{ take: "1", created: 10 }], passes: [] }, marks: [onOne] })
     const onSix = { ...onOne, id: "m6", source: { take: "6", created: 60 }, note: "love this", anchor: { ...anchor, afterInput: true } }
@@ -149,9 +149,9 @@ describe("a take made from marks", () => {
   })
 
   test("says when the first prompt was never recorded, and names region contents", () => {
-    const old = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", created: 5 })
+    const old = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 5 })
     /** @type {import("../src/takes/marks-contract.js").Mark} */
-    const region = { id: "r", source: { take: "2", created: 5 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", letter: "B", note: "", anchor: { ...anchor, kind: "Region", rect: { x: 141.4, y: 77, width: 166, height: 125 }, elements: [anchor.element] } }
+    const region = { id: "r", source: { take: "2", created: 5 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", letter: "B", note: "", anchor: { ...anchor, kind: "Region", rect: { x: 141.4, y: 77, width: 166, height: 125 }, elements: [anchor.element] } }
     const brief = markupMessage({
       take: "3", record: childRecord({ take: "2", created: 5 }, old, [region]), sources: [],
       pictures: [{ preview: { part: "src/Chip.part.tsx", state: "default" }, previewLabel: "Chip · Default", deviceLabel: "RG353M", width: 640, height: 480, drawn: ["B"], missing: ["B"], outside: [] }],
@@ -167,18 +167,18 @@ describe("a take made from marks", () => {
 
 describe("phase 6: references and the original", () => {
   /** @param {string} take @param {number} created @param {string} letter @param {string} note */
-  const markOn = (take, created, letter, note) => /** @type {import("../src/takes/marks-contract.js").Mark} */ ({ id: `${take}${letter}`, source: { take, created }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "rg353m", letter, note, anchor })
+  const markOn = (take, created, letter, note) => /** @type {import("../src/takes/marks-contract.js").Mark} */ ({ id: `${take}${letter}`, source: { take, created }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", letter, note, anchor })
   const picture = { preview: { part: "src/Chip.part.tsx", state: "default" }, previewLabel: "Chip · Default", deviceLabel: "RG353M", width: 640, height: 480, drawn: ["A"], missing: [], outside: [] }
 
   test("a take's agent may read a take its notes point to, never write there, and never read another take", () => inFolderAsync(files, async root => {
     const store = createTakeStore(root)
-    const two = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "Two" })
+    const two = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", prompt: "Two" })
     store.write(two, "src/chip.css", ".chip { color: green }\n")
-    const five = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", prompt: "Five" })
+    const five = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", prompt: "Five" })
     store.write(five, "src/chip.css", ".chip { color: pink }\n")
     const twoCreated = /** @type {import("../src/takes/store.js").TakeRecord} */ (store.record(two)).created
-    const three = store.create({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", references: [{ source: { take: two, created: twoCreated }, marks: [markOn(two, twoCreated, "A", "")] }, { source: { take: "0", created: 0 }, marks: [] }] })
-    const tools = takeTools({ store, take: three, defaults: { state: "default", device: "rg353m" }, render: async () => [] })
+    const three = store.create({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", references: [{ source: { take: two, created: twoCreated }, marks: [markOn(two, twoCreated, "A", "")] }, { source: { take: "0", created: 0 }, marks: [] }] })
+    const tools = takeTools({ store, take: three, defaults: { state: "default", device: "iphone-16" }, render: async () => [] })
     const tool = (/** @type {string} */ name) => /** @type {import("@earendil-works/pi-agent-core").AgentTool<any>} */ (tools.find(item => item.name === name))
     {
       const read = await tool("read_file").execute("r", { path: "src/chip.css", take: two })
@@ -196,7 +196,7 @@ describe("phase 6: references and the original", () => {
   }))
 
   test("the brief names the marks a note points to, their crops, and read access", () => {
-    const parent = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "rg353m", created: 30, prompt: "Warm" })
+    const parent = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 30, prompt: "Warm" })
     const own = markOn("3", 30, "A", "use 2A here")
     const record = { ...childRecord({ take: "3", created: 30 }, parent, [own]), references: [{ source: { take: "2", created: 20 }, marks: [markOn("2", 20, "A", "nice gap")] }] }
     const brief = markupMessage({ take: "7", record, sources: [], pictures: [picture], references: [
@@ -212,7 +212,7 @@ describe("phase 6: references and the original", () => {
   })
 
   test("a take made from marks on the original is a copy of the real files with no parent", () => {
-    const record = { part: "src/Chip.part.tsx", state: "default", device: "rg353m", history: { prompt: null, lineage: [], passes: [] }, marks: [markOn("0", 0, "A", "too loud")] }
+    const record = { part: "src/Chip.part.tsx", state: "default", device: "iphone-16", history: { prompt: null, lineage: [], passes: [] }, marks: [markOn("0", 0, "A", "too loud")] }
     const brief = markupMessage({ take: "4", record, sources: [], pictures: [picture] })
     expect(brief).toContain("You are take 4, a new take made from the real files.")
     expect(brief).toContain("Take 4 starts from the real files. It has no parent take.")

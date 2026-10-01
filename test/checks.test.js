@@ -12,7 +12,7 @@ function fixture(run) {
   const sample = (name, bytes = "image") => {
     const png = join(root, `${name}.png`)
     writeFileSync(png, bytes)
-    return { part: "src/Button.part.tsx", state: "default", device: "rg353m", viewport: { width: 640, height: 480 }, frame: "Rendered", png,
+    return { part: "src/Button.part.tsx", state: "default", device: "iphone-16", viewport: { width: 640, height: 480 }, frame: "Rendered", png,
       problems: [], console: [], spill: null, environment: "chromium:123;linux:x64;dpr:1;axe:4;checks:1",
       accessibility: { _tag: "Complete", violations: [], incomplete: [] } }
   }

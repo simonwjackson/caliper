@@ -12,12 +12,13 @@ import { compareRenders } from "../src/render/checks.js"
 import { CheckReportSchema } from "../src/render/check-contract.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { manifest, withProject } from "./project-server.js"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 const part = "Button.part.tsx"
 /** @type {import('../src/types').Project} */
 const project = {
   name: "app", parts: [{ file: part, name: "Button", states: [{ export: "default", label: "Default" }, { export: "Busy", label: "Busy" }] }],
-  entry: { _tag: "Failed", reason: "", hint: "" }, css: { _tag: "Failed", reason: "", hint: "" }, wrapper: { _tag: "Failed", reason: "", hint: "" },
+  entry: { _tag: "Failed", reason: "", hint: "" }, css: { _tag: "Failed", reason: "", hint: "" }, wrapper: { _tag: "Failed", reason: "", hint: "" }, devices: STANDARD_DEVICES.slice(0, 2),
 }
 const request = { part, state: "default" }
 
@@ -141,14 +142,14 @@ test("write routes reject cross/null/malformed origins, wrong media types, metho
   for (const type of ["text/plain", "application/json-evil"]) expect((await f.post("/checks/run", request, { "content-type": type })).status).toBe(403)
   expect((await f.get("/checks/run")).status).toBe(405)
   expect((await f.post("/checks", {})).status).toBe(405)
-  for (const body of [null, {}, { ...request, baselines: "/tmp" }, { ...request, devices: ["rg353m"] }, { part: "missing", state: "default" }]) expect((await f.post("/checks/run", body)).status).toBe(400)
+  for (const body of [null, {}, { ...request, baselines: "/tmp" }, { ...request, devices: ["iphone-16"] }, { part: "missing", state: "default" }]) expect((await f.post("/checks/run", body)).status).toBe(400)
   expect((await f.post("/checks/run", { ...request, take: "999" })).status).toBe(400)
   expect(f.api.snapshot()._tag).toBe("Idle")
 }))
 
 test("only allowlisted image indices and kinds are served; missing baseline and previous run return 404", () => fixture(async f => {
   const first = await f.start()
-  expect(await (await f.get(`/checks/image?id=${first.id}&index=0&kind=first`)).text()).toBe("image:default:rg353m")
+  expect(await (await f.get(`/checks/image?id=${first.id}&index=0&kind=first`)).text()).toBe("image:default:iphone-16")
   expect((await f.get(`/checks/image?id=${first.id}&index=0&kind=repeat`)).status).toBe(200)
   for (const suffix of ["index=0&kind=baseline", "index=-1&kind=first", "index=999&kind=first", "index=0&kind=../../package.json", "index=0.0&kind=first", "file=/etc/passwd"]) expect((await f.get(`/checks/image?id=${first.id}&${suffix}`)).status).toBe(404)
   await f.start()
@@ -182,10 +183,10 @@ test("approval requires review, approves one device only, and preserves prior ba
   expect(readdirSync(baselineDir).filter(name => name.endsWith(".json"))).toHaveLength(1)
   const second = await f.start()
   const imageUrl = `/checks/image?id=${second.id}&index=0&kind=baseline`
-  expect(await (await f.get(imageUrl)).text()).toBe("image:default:rg353m")
+  expect(await (await f.get(imageUrl)).text()).toBe("image:default:iphone-16")
   expect((await f.post("/checks/approve", { id: second.id, index: 0, reviewed: true })).status).toBe(200)
   for (const file of readdirSync(baselineDir).filter(name => name.endsWith(".png"))) writeFileSync(join(baselineDir, file), "changed accepted baseline")
-  expect(await (await f.get(imageUrl)).text()).toBe("image:default:rg353m")
+  expect(await (await f.get(imageUrl)).text()).toBe("image:default:iphone-16")
 }))
 
 test("watcher noise does not stale reports, but real changes stay visible and block approval", () => fixture(async f => {
@@ -257,7 +258,7 @@ test("one concurrent run, source changes during execution stale completion, and 
 }))
 
 test("take-only parts and states plan the real overlay; take approval is forbidden and take edits invalidate", () => fixture(async f => {
-  const take = f.store.create({ ...request, device: "rg353m" })
+  const take = f.store.create({ ...request, device: "iphone-16" })
   f.store.write(take, "Alternate.part.tsx", "export default () => <div />; export const Alternate = () => <button />")
   const ready = await f.start({ part: "Alternate.part.tsx", state: "Alternate", take })
   expect(ready.report.results.map(item => item.state)).toEqual(["Alternate", "Alternate"])
@@ -406,7 +407,7 @@ test("v2 serves hashed interaction PNGs separately and approves only the initial
   expect((await f.post("/checks/approve", { id: ready.id, index: 0, reviewed: true })).status).toBe(200)
   const directory = join(f.root, ".caliper/baselines")
   const baseline = readdirSync(directory).find(name => name.endsWith(".png"))
-  expect(readFileSync(join(directory, baseline ?? "missing"), "utf8")).toBe("image:default:rg353m")
+  expect(readFileSync(join(directory, baseline ?? "missing"), "utf8")).toBe("image:default:iphone-16")
   const path = ready.report.results[0]?.authored?.checks[0]?.image
   if (!path) throw new Error("Missing interaction image")
   writeFileSync(path, "tampered")

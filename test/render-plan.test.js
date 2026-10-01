@@ -1,6 +1,9 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
-import { planRenders } from "../src/render/plan.js"
+import { planRenders, withViewport } from "../src/render/plan.js"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
+
+const phone = { width: 393, height: 852 }
 
 /** @type {import("../src/types").Project} */
 const project = {
@@ -12,6 +15,8 @@ const project = {
   entry: { _tag: "Failed", reason: "", hint: "" },
   css: { _tag: "Failed", reason: "", hint: "" },
   wrapper: { _tag: "Failed", reason: "", hint: "" },
+  // The project lists two devices; planning uses only its list.
+  devices: STANDARD_DEVICES.slice(0, 2),
 }
 
 describe("planRenders", () => {
@@ -19,34 +24,43 @@ describe("planRenders", () => {
     const plan = planRenders(project, { part: "src/Button.atom.part.tsx" })
     expect(plan).toEqual({
       _tag: "Planned",
-      jobs: [{ part: "src/Button.atom.part.tsx", state: "default", device: "rg353m" }],
+      jobs: [{ part: "src/Button.atom.part.tsx", state: "default", device: "iphone-16", viewport: phone }],
     })
   })
 
   test("expands * to every state and every device, states first", () => {
     const plan = planRenders(project, { part: "src/Button.atom.part.tsx", state: "*", devices: ["*"] })
     expect(plan._tag === "Planned" && plan.jobs.map(job => `${job.state}@${job.device}`)).toEqual([
-      "default@rg353m",
-      "default@odin2portal",
-      "Busy@rg353m",
-      "Busy@odin2portal",
+      "default@iphone-16",
+      "default@pixel-7",
+      "Busy@iphone-16",
+      "Busy@pixel-7",
     ])
   })
 
   test("selects all declared states across all parts without duplicate devices", () => {
-    const plan = planRenders(project, { part: "*", state: "*", devices: ["rg353m", "rg353m"] })
+    const plan = planRenders(project, { part: "*", state: "*", devices: ["iphone-16", "iphone-16"] })
     expect(plan._tag === "Planned" && plan.jobs).toEqual([
-      { part: "src/Button.atom.part.tsx", state: "default", device: "rg353m" },
-      { part: "src/Button.atom.part.tsx", state: "Busy", device: "rg353m" },
-      { part: "src/pages/Home.page.part.tsx", state: "default", device: "rg353m" },
+      { part: "src/Button.atom.part.tsx", state: "default", device: "iphone-16", viewport: phone },
+      { part: "src/Button.atom.part.tsx", state: "Busy", device: "iphone-16", viewport: phone },
+      { part: "src/pages/Home.page.part.tsx", state: "default", device: "iphone-16", viewport: phone },
     ])
     expect(planRenders({ ...project, parts: [] }, { part: "*" })._tag).toBe("Invalid")
     expect(planRenders(project, { part: "*", state: "Busy" })._tag).toBe("Invalid")
   })
 
   test("accepts a list of devices by id", () => {
-    const plan = planRenders(project, { part: "src/pages/Home.page.part.tsx", devices: ["odin2portal"] })
-    expect(plan._tag === "Planned" && plan.jobs.map(job => job.device)).toEqual(["odin2portal"])
+    const plan = planRenders(project, { part: "src/pages/Home.page.part.tsx", devices: ["pixel-7"] })
+    expect(plan._tag === "Planned" && plan.jobs.map(job => [job.device, job.viewport])).toEqual([["pixel-7", { width: 412, height: 915 }]])
+  })
+
+  test("refuses a known device the project does not list", () => {
+    expect(planRenders(project, { part: "src/pages/Home.page.part.tsx", devices: ["monitor-24"] })._tag).toBe("Invalid")
+  })
+
+  test("withViewport gives a job its device's viewport, and refuses a device the project dropped", () => {
+    expect(withViewport(project, { part: "p", state: "s", device: "pixel-7" }).viewport).toEqual({ width: 412, height: 915 })
+    expect(() => withViewport(project, { part: "p", state: "s", device: "rg353m" })).toThrow('Caliper has no device "rg353m" in this project. Its devices are: iphone-16, pixel-7.')
   })
 
   test("names the parts that match when the part is unknown", () => {
@@ -72,7 +86,7 @@ describe("planRenders", () => {
   test("names the devices when a device is unknown", () => {
     expect(planRenders(project, { part: "src/Button.atom.part.tsx", devices: ["iphone"] })).toEqual({
       _tag: "Invalid",
-      reason: 'Caliper has no device "iphone". Its devices are: rg353m, odin2portal.',
+      reason: 'Caliper has no device "iphone" in this project. Its devices are: iphone-16, pixel-7.',
     })
   })
 })

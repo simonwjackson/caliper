@@ -134,7 +134,7 @@ try {
   const first = await ready(await start())
   assert.equal(first.report.run.termination, "Completed")
   assert.equal(first.stale, false)
-  assert.deepEqual(first.report.results.map(result => result.device).sort(), ["odin2portal", "rg353m"])
+  assert.deepEqual(first.report.results.map(result => result.device).sort(), ["pixel-7", "iphone-16"])
   for (const result of first.report.results) {
     assert.deepEqual(result.authored.checks.map(check => [check.name, check.status]), [["retry loads the library", "Passed"], ["deliberate assertion failure", "Failed"]])
     assert.equal(result.checks.find(check => check.name === "determinism")?.status, "Passed")

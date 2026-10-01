@@ -2,13 +2,13 @@ import { planSend, referencesIn } from "../../src/takes/send-plan.js"
 import { acceptFlag, flagWords, historyLabel, lineageLabel, planChains } from "../../src/takes/chains.js"
 import type { AcceptRecord, ChainTake } from "../../src/takes/chains.js"
 import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupOutcome, MarkupView, TakeSummary } from "../../src/client/ui/contract"
-import { DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
+import { STANDARD_DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
 
 export const enabled: Availability = { _tag: "Enabled" }
 export const blocked: Availability = { _tag: "Disabled", reason: "Unavailable in this scenario" }
 const subject = { part: "src/Button.atom.part.tsx", state: "default" }
 const preview = { part: "src/Page.page.part.tsx", state: "MenuOpen" }
-const device = DEVICES[0]
+const device = STANDARD_DEVICES[0]
 if (!device) throw new Error("The contract fixture needs one built-in device")
 const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jzQAAAABJRU5ErkJggg=="
 const take: TakeSummary = {
@@ -37,7 +37,7 @@ export function readyView(): ChromeView {
       unavailable: [{ subject: { part: "src/Removed.part.tsx", state: "Gone" }, label: "Removed state", takes: [{ id: "8", label: "Take 8 · review or discard", selected: false }] }],
       setup: [{ label: "Entry", status: "Derived", values: ["src/mount.tsx"], provenance: "package.json:1", problems: [] }, { label: "CSS", status: "Overridden", values: ["src/global.css"], provenance: "vite.config", problems: [] }, { label: "Wrapper", status: "Failed", values: [], provenance: "Set caliper({wrap})", problems: ["Wrapper not found"] }], setupProblems: ["A declaration needs review"],
     },
-    devices: DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
+    devices: STANDARD_DEVICES, device, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false,
     tools: { active: "takes", navOpen: true, codeOpen: true, side: "record", codeShare: 0.45 },
     canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames: [{ ...frame, key: "real", label: "Original", src: "/frame", take: null, selected: false, markable: enabled }, frame],
       chains: [{ id: "6@1234", shown: frame.key, parent: null, take: "6", label: "6", history: { _tag: "None" }, flag: { _tag: "Current" }, solo: "Shown" }] },
@@ -50,7 +50,7 @@ export function readyView(): ChromeView {
     },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Open", take, emptyLogMessage: "No conversation since Vite started", integration: { _tag: "None" },
-      log: [{ _tag: "User", text: "Make it quiet", images: [{ name: "reference.png", url: pixel }] }, { _tag: "Assistant", text: "Changed the spacing" }, { _tag: "Edit", file: "src/Button.css" }, { _tag: "Tool", name: "render", subject: "default@rg353m", outcome: "Done", detail: "Rendered" }] },
+      log: [{ _tag: "User", text: "Make it quiet", images: [{ name: "reference.png", url: pixel }] }, { _tag: "Assistant", text: "Changed the spacing" }, { _tag: "Edit", file: "src/Button.css" }, { _tag: "Tool", name: "render", subject: "default@iphone-16", outcome: "Done", detail: "Rendered" }] },
     code: { _tag: "Ready", files: [{ file: "src/Button.tsx", label: "Button.tsx", depth: 1, changed: true, added: 1, removed: 1 }, { file: subject.part, label: "Button.atom.part.tsx", depth: 0, changed: false }], tabs: ["src/Button.tsx"], filter: "", selectedFile: "src/Button.tsx",
       document: { file: "src/Button.tsx", content: "export const value = 2\n", original: "export const value = 1\n" }, documentKey: "6@1234|src/Button.tsx", mode: { _tag: "Take", original: "export const value = 1\n" }, save: { _tag: "Saved", label: "Saved to the take" }, notice: "", changes: 1, take: "6", stop: blocked, lenses: [{ export: "default", label: "Default", current: true }] },
     knobs: { _tag: "Ready", target: "Real files", skipped: [{ name: "--output", where: ".button", reason: "Computed output" }], problems: [],

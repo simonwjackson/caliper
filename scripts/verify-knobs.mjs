@@ -214,7 +214,7 @@ try {
     assert.equal(await computed(".card", "width"), "560px")
   })
   await step("take-scoped input writes only the take copy", async () => {
-    const take = createTakeStore(root).create({ part: "src/Card.part.tsx", state: "default", device: "rg353m" })
+    const take = createTakeStore(root).create({ part: "src/Card.part.tsx", state: "default", device: "iphone-16" })
     await page.goto(`${url}__caliper/#part=src/Card.part.tsx&state=takes:default&take=${take}`)
     await page.reload()
     await row("Pixel rows").waitFor()

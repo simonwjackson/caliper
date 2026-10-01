@@ -18,7 +18,7 @@
 import type {
   Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, NavPart, NavState, TakeSummary,
 } from "../contract"
-import { DEVICES } from "../../device-frame.js"
+import { HANDHELD_DEVICES } from "../../device-frame.js"
 import { identityKey } from "../../../takes/chains.js"
 import type { AcceptRecord, ChainTake, TakeIdentity } from "../../../takes/chains.js"
 import { PICO_GAME_DETAIL } from "./pico"
@@ -33,8 +33,9 @@ const blocked = (reason: string): Availability => ({ _tag: "Disabled", reason })
 const PART = "src/pages/PicoGameDetail.page.part.tsx"
 const ref = (state: string) => ({ part: PART, state })
 const DEFAULT = ref("default")
-const rg353m = DEVICES[0]!
-const odin = DEVICES[1]!
+// The fixture project is Pico, which lists the two handhelds in its vite.config.
+const rg353m = HANDHELD_DEVICES[0]!
+const odin = HANDHELD_DEVICES[1]!
 
 /**
  * A frame document: the Pico render filling the device's CSS viewport. A tap
@@ -189,7 +190,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
       ],
       setupProblems: [],
     },
-    devices: DEVICES, device: rg353m, pxPerMm: 3.875, calibrated: true,
+    devices: HANDHELD_DEVICES, device: rg353m, pxPerMm: 3.875, calibrated: true,
     tools: { active: "takes", navOpen: true, codeOpen: false, side: "closed", codeShare: 0.46 },
     canvas: { _tag: "Frames", mode: "Takes", title: "Game Detail", frames: [frame(null, { selected: false })], chains: [] },
     plan: { _tag: "None" },

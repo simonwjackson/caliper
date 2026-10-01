@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { createIntegrationReview } from "../src/takes/integration.js"
 import { createTakeStore } from "../src/takes/store.js"
 
-const ask = { part: "src/Button.part.tsx", state: "default", device: "rg353m", name: "Quiet button" }
+const ask = { part: "src/Button.part.tsx", state: "default", device: "iphone-16", name: "Quiet button" }
 const proposal = {
   strategy: /** @type {const} */ ("variant"),
   summary: "Add an explicit quiet variant.",

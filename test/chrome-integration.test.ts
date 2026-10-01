@@ -8,7 +8,7 @@ import { createIntegrationController } from "../src/client/app/integration"
 import type { TakeView } from "../src/types"
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 5))
-const ask = { part: "src/Button.part.tsx", state: "default", device: "rg353m" }
+const ask = { part: "src/Button.part.tsx", state: "default", device: "iphone-16" }
 const proposal = { strategy: "variant" as const, summary: "An opt-in quiet button", shared: "Counter and focus behavior", preserved: "Existing callers stay unchanged", usage: '<Button tone="quiet" />', preview: { part: ask.part, state: "Quiet" } }
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "chrome-integration-controller-"))

@@ -20,7 +20,7 @@ function ready(controller: Controller): Extract<CodeView, { _tag: "Ready" }> {
 const part = { file: "src/Chip.part.tsx", name: "Chip", states: [{ export: "default", label: "Default" }, { export: "Empty", label: "Empty" }] }
 const real: CodeSubject = { part, take: null, state: "default" }
 function take(overrides: Partial<TakeView> = {}): TakeView {
-  return { take: "1", created: 123, part: part.file, state: "default", device: "rg353m", run: { _tag: "Idle" }, files: ["src/Chip.tsx"], log: [], images: [], ...overrides }
+  return { take: "1", created: 123, part: part.file, state: "default", device: "iphone-16", run: { _tag: "Idle" }, files: ["src/Chip.tsx"], log: [], images: [], ...overrides }
 }
 function setup(overrides: Partial<CodeDependencies> = {}) {
   let lists: CodeFile[] = [{ file: part.file, depth: 0, changed: false }, { file: "src/Chip.tsx", depth: 1, changed: false }, { file: "src/deep/Chip.tsx", depth: 2, changed: false }]

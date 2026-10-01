@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, relative, resolve as resolvePath } from "no
 import { fileURLToPath } from "node:url"
 import { loadEnv, mergeConfig } from "vite"
 import { deriveProject } from "./derive/project.js"
+import { resolveDevices } from "./client/device-frame.js"
 import { discoverParts, PART_SUFFIX } from "./derive/parts.js"
 import { codeChange, createCodeApi } from "./code/api.js"
 import { createKnobsApi } from "./knobs/api.js"
@@ -70,6 +71,9 @@ export function caliper(options = {}) {
   if (options !== null && typeof options === "object" && "agent" in options) {
     throw new Error("caliper({ agent }) is gone: the Caliper app owns the agent now. Move the agent settings to ~/.config/caliper/config.json as { \"agent\": { \"model\": ... } } and remove agent from vite.config.")
   }
+  // A wrong device list fails when vite.config loads, not on the first render.
+  const devices = resolveDevices(options?.devices)
+  if (devices._tag === "Invalid") throw new Error(devices.reason)
   /** @type {string} */
   let root = process.cwd()
   let cacheDir = join(root, "node_modules/.vite")

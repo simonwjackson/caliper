@@ -4,6 +4,7 @@ import { basename, isAbsolute, join, relative, resolve as resolvePath } from "no
 import { CSS_FILE, readAppShell } from "./app-shell.js"
 import { deriveEntry } from "./entry.js"
 import { discoverParts } from "./parts.js"
+import { resolveDevices } from "../client/device-frame.js"
 
 /**
  * @typedef {import("../types").Project} Project
@@ -21,6 +22,8 @@ import { discoverParts } from "./parts.js"
  *   `files` are the absolute paths the result depends on, apart from part files
  */
 export async function deriveProject({ root, options, resolve }) {
+  const devices = resolveDevices(options.devices)
+  if (devices._tag === "Invalid") throw new Error(devices.reason)
   const parts = discoverParts(root)
   const entry = deriveEntry(root, options.entry)
   const files = [join(root, "index.html"), join(root, "package.json")]
@@ -44,7 +47,7 @@ export async function deriveProject({ root, options, resolve }) {
   if (css._tag !== "Failed") files.push(...css.value.stylesheets.map(sheet => resolvePath(root, sheet.file)))
 
   return {
-    project: { name: projectName(root), parts, entry, css, wrapper: wrapOverride(options.wrap) ?? wrapper },
+    project: { name: projectName(root), parts, entry, css, wrapper: wrapOverride(options.wrap) ?? wrapper, devices: devices.devices },
     files,
   }
 }

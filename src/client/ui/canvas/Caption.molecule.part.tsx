@@ -2,6 +2,7 @@ import { Caption } from "./Caption"
 import { PartScope } from "../fixtures/PartScope"
 import { useFixture } from "../fixtures/useFixture"
 import { odinView, takesView } from "../fixtures/views"
+import { STANDARD_DEVICES } from "../../device-frame.js"
 
 export const name = "Frame caption"
 export const note = "The devices as the switch, the width, and whether the frames are true size."
@@ -13,6 +14,11 @@ export default function TrueSize() {
 export function Scaled() {
   const { view, actions } = useFixture(odinView)
   return <PartScope width="30rem"><Caption view={view} actions={actions} geometry={{ width: 400, height: 225, scale: 0.21, fit: { _tag: "Scaled", percent: 66 } }} /></PartScope>
+}
+/** A project with no `devices` option: five standard devices wrap onto a second line in a narrow caption. */
+export function StandardDevices() {
+  const { view, actions } = useFixture(() => ({ ...takesView(), devices: STANDARD_DEVICES, device: STANDARD_DEVICES[0]! }))
+  return <PartScope width="22rem"><Caption view={view} actions={actions} geometry={{ width: 252, height: 546, scale: 0.64, fit: { _tag: "TrueSize" } }} /></PartScope>
 }
 export function Uncalibrated() {
   const { view, actions } = useFixture(() => ({ ...takesView(), calibrated: false }))

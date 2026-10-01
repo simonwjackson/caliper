@@ -42,7 +42,7 @@ console.log(`Renderer: ${renderer}`)
 // take that writes the chip's stylesheet; plain is another Chip prompt.
 const store = createTakeStore(root)
 const css = (/** @type {string} */ colour) => readFileSync(join(root, "src/chip.css"), "utf8").replace("padding: 12px 20px", `padding: 12px 20px; color: ${colour}`)
-const ask = { part: chipPart, state: "default", device: "rg353m" }
+const ask = { part: chipPart, state: "default", device: "iphone-16" }
 /** @param {string} take */
 const identity = take => ({ take, created: /** @type {import("../src/takes/store.js").TakeRecord} */ (store.record(take)).created })
 const pause = () => new Promise(done => setTimeout(done, 5))
@@ -95,7 +95,7 @@ async function until(page, predicate, what, timeout = 15_000) {
 /** @param {import("playwright-core").Page} page @param {string} part @param {string | null} take */
 async function open(page, part, take) {
   await installRouting(page, app)
-  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&device=rg353m${take ? `&take=${take}` : ""}`, vite.url).href)
+  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&device=iphone-16${take ? `&take=${take}` : ""}`, vite.url).href)
   await until(page, `view => view?.canvas._tag === "Frames" && view.canvas.mode === "Takes" && view.canvas.chains.length > 0`, "the Takes canvas with chains", 30_000)
 }
 /** The chain warm, warmer, warmest. @param {import("playwright-core").Page} page */

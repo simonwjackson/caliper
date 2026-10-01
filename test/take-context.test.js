@@ -1,4 +1,5 @@
 // @ts-check
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 import { describe, expect, test } from "bun:test"
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai"
 import { planTakeRenders, validateTakeContext } from "../src/agent/api.js"
@@ -6,12 +7,14 @@ import { planDirections } from "../src/agent/planner.js"
 
 const subject = { part: "src/Chip.part.tsx", state: "Missing" }
 const preview = { part: "src/Home.part.tsx", state: "NoArtwork" }
+const phone = { width: 393, height: 852 }
 /** @type {import("../src/types").Project} */
 const project = {
   name: "scenarios",
   entry: { _tag: "Failed", reason: "unused", hint: "unused" },
   css: { _tag: "Failed", reason: "unused", hint: "unused" },
   wrapper: { _tag: "Failed", reason: "unused", hint: "unused" },
+  devices: STANDARD_DEVICES,
   parts: [
     { file: subject.part, name: "Chip", states: [{ export: "default", label: "Default" }, { export: "Missing", label: "Missing" }] },
     { file: preview.part, name: "Home", states: [{ export: "default", label: "Default" }, { export: "NoArtwork", label: "No artwork" }, { export: "Unrelated", label: "Unrelated" }], composition: {
@@ -21,28 +24,28 @@ const project = {
     { file: "src/Other.part.tsx", name: "Other", states: [{ export: "default", label: "Default" }] },
   ],
 }
-const request = { state: preview.state, devices: ["rg353m"] }
+const request = { state: preview.state, devices: ["iphone-16"] }
 
 describe("take context validation and render planning", () => {
   test("an old isolated take renders its subject without a migration", () => {
     expect(planTakeRenders(project, subject, { ...request, state: subject.state }, "1")).toEqual([
-      { ...subject, device: "rg353m", take: "1" },
+      { ...subject, device: "iphone-16", viewport: phone, take: "1" },
     ])
   })
 
   test("the default render shows the declared preview, and an override shows the subject", () => {
     const ask = { ...subject, context: preview }
-    expect(planTakeRenders(project, ask, request, "1")).toEqual([{ ...preview, device: "rg353m", take: "1" }])
-    expect(planTakeRenders(project, ask, { ...request, ...subject }, "1")).toEqual([{ ...subject, device: "rg353m", take: "1" }])
+    expect(planTakeRenders(project, ask, request, "1")).toEqual([{ ...preview, device: "iphone-16", viewport: phone, take: "1" }])
+    expect(planTakeRenders(project, ask, { ...request, ...subject }, "1")).toEqual([{ ...subject, device: "iphone-16", viewport: phone, take: "1" }])
   })
 
   test("related checks cover every subject state and all declared contexts without duplicate jobs", () => {
-    const jobs = planTakeRenders(project, { ...subject, context: preview }, { ...request, related: true, devices: ["rg353m", "rg353m"] }, "2")
+    const jobs = planTakeRenders(project, { ...subject, context: preview }, { ...request, related: true, devices: ["iphone-16", "iphone-16"] }, "2")
     expect(jobs.map(job => `${job.part}:${job.state}`).sort()).toEqual([
       "src/Chip.part.tsx:Missing", "src/Chip.part.tsx:default",
       "src/Home.part.tsx:NoArtwork", "src/Home.part.tsx:default", "src/Shell.part.tsx:default",
     ])
-    expect(jobs.every(job => job.take === "2" && job.device === "rg353m")).toBe(true)
+    expect(jobs.every(job => job.take === "2" && job.device === "iphone-16")).toBe(true)
   })
 
   test("a wildcard renders related states only, not every state of a context part", () => {
@@ -78,7 +81,7 @@ test("the planner distinguishes its editing subject from the screenshot's compos
   }])
   await planDirections({
     engine: { models, model: provider.getModel(), reasoning: "medium" },
-    prompt: "Make the chip clearer", count: 2, ...subject, device: "rg353m", preview,
+    prompt: "Make the chip clearer", count: 2, ...subject, device: "iphone-16", preview,
     context: [{ type: "text", text: '<file path="src/Chip.part.tsx">chip fixture</file>' }, { type: "text", text: '<file path="src/Home.part.tsx">home fixture</file>' }],
   })
   expect(seen).toContain("The editing subject is src/Chip.part.tsx")

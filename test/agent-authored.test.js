@@ -15,7 +15,7 @@ function deferred() {
   return { promise, resolve }
 }
 
-const ask = { part: "Example.part.tsx", state: "default", device: "rg353m" }
+const ask = { part: "Example.part.tsx", state: "default", device: "iphone-16" }
 
 /** @param {(root: string, store: ReturnType<typeof createTakeStore>) => Promise<void>} run */
 async function fixture(run) {

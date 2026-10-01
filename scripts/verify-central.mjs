@@ -171,8 +171,8 @@ const renderers = frame => frame.evaluate(() => [.../** @type {any} */ (window).
 const markAll = (/** @type {import("playwright-core").Page[]} */ tabs) => Promise.all(tabs.flatMap(tab => tab.frames().filter(frame => frame.url().includes("/__caliper/frame")).map(frame => frame.evaluate(() => Object.assign(window, { __mark: 1 })).catch(() => undefined))))
 /** @param {import("playwright-core").Frame} frame */
 const marked = frame => frame.evaluate(() => /** @type {any} */ (window).__mark === 1)
-const picoUrl = `${base("pico")}__caliper/#${new URLSearchParams({ part: PICO_PART, state: "default", device: "rg353m" })}`
-const olderUrl = `${base("react18")}__caliper/#${new URLSearchParams({ part: COUNTER, state: "default", device: "rg353m" })}`
+const picoUrl = `${base("pico")}__caliper/#${new URLSearchParams({ part: PICO_PART, state: "default", device: "iphone-16" })}`
+const olderUrl = `${base("react18")}__caliper/#${new URLSearchParams({ part: COUNTER, state: "default", device: "iphone-16" })}`
 
 /** @type {Record<string, import("playwright-core").Page>} */
 const tabs = {}
@@ -289,7 +289,7 @@ await check("the plugin refuses a write without its token, and the app refuses a
 })
 
 await check("the app's agent makes a take through the plugin, and the take renders in the chrome", async () => {
-  const started = await fetch(`${direct.react18}__caliper/takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: COUNTER, state: "default", device: "rg353m", prompt: "Change the heading" }) })
+  const started = await fetch(`${direct.react18}__caliper/takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: COUNTER, state: "default", device: "iphone-16", prompt: "Change the heading" }) })
   const body = await started.json()
   assert(started.status === 201, JSON.stringify(body))
   const take = body.take
@@ -304,7 +304,7 @@ await check("the app's agent makes a take through the plugin, and the take rende
   }
   assert(view?.run._tag === "Idle" && view.files.includes(COUNTER), JSON.stringify(view?.run ?? view))
   assert(existsSync(join(older, ".caliper/takes", take, COUNTER)), "the take's copy is in the project's take folder")
-  const tab = await open(`${base("react18")}__caliper/#${new URLSearchParams({ part: COUNTER, state: "takes:default", device: "rg353m", take, takeCreated: String(view.created) })}`)
+  const tab = await open(`${base("react18")}__caliper/#${new URLSearchParams({ part: COUNTER, state: "takes:default", device: "iphone-16", take, takeCreated: String(view.created) })}`)
   const end2 = Date.now() + 30_000
   for (;;) {
     const found = framesOf(tab, ids.react18).filter(frame => frame.url().includes(`take=${take}`))

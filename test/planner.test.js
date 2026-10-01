@@ -17,7 +17,7 @@ const input = {
   count: 3,
   part: "src/Home.part.tsx",
   state: "default",
-  device: "rg353m",
+  device: "iphone-16",
   context: [{ type: /** @type {const} */ ("text"), text: "<file>…</file>" }],
 }
 

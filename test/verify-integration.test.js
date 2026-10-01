@@ -13,7 +13,7 @@ async function withRenders(run) {
     await run((image, state = "default") => {
       const png = join(root, `${index++}.png`)
       writeFileSync(png, image)
-      return { part: "src/Chip.part.tsx", state, device: "rg353m", viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }
+      return { part: "src/Chip.part.tsx", state, device: "iphone-16", viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }
     })
   } finally { rmSync(root, { recursive: true, force: true }) }
 }

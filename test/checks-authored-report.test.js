@@ -10,7 +10,7 @@ const authored = {
   checks: [{ name: "retry loads the library", source: { file: "Button.part.tsx", line: 4 }, status: "Failed", reason: "Assertion", detail: "Not visible", durationMs: 12, errors: [] }],
 }
 const result = {
-  part: "Button.part.tsx", state: "default", device: "rg353m", frame: "Rendered", viewport: { width: 640, height: 480 },
+  part: "Button.part.tsx", state: "default", device: "iphone-16", frame: "Rendered", viewport: { width: 640, height: 480 },
   png: "first.png", repeatPng: "repeat.png", sha256: "a".repeat(64), repeatSha256: "a".repeat(64),
   checks: ["render", "browser", "determinism"].map(name => ({ name, status: "Passed", detail: "" })),
 }

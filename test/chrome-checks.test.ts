@@ -11,9 +11,10 @@ import { createTakeStore } from "../src/takes/store.js"
 import { createChecksController } from "../src/client/app/checks"
 import type { CheckReport } from "../src/render/check-contract.js"
 import type { Project } from "../src/types"
+import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 const part = "Button.part.tsx"
-const project: Project = { name: "checks-controller", parts: [{ file: part, name: "Button", states: [{ export: "default", label: "Default" }] }], entry: { _tag: "Failed", reason: "", hint: "" }, css: { _tag: "Failed", reason: "", hint: "" }, wrapper: { _tag: "Failed", reason: "", hint: "" } }
+const project: Project = { name: "checks-controller", parts: [{ file: part, name: "Button", states: [{ export: "default", label: "Default" }] }], entry: { _tag: "Failed", reason: "", hint: "" }, css: { _tag: "Failed", reason: "", hint: "" }, wrapper: { _tag: "Failed", reason: "", hint: "" }, devices: STANDARD_DEVICES.slice(0, 2) }
 const tick = () => new Promise(resolve => setTimeout(resolve, 5))
 async function until(condition: () => boolean) { for (let i = 0; i < 200; i++) { if (condition()) return; await tick() } throw new Error("Controller did not settle") }
 type Controller = ReturnType<typeof createChecksController>

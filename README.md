@@ -131,8 +131,9 @@ unless you pass `--host`. Read [SECURITY.md](SECURITY.md) before you expose it.
 - Only Vite and React projects can use Caliper. Only Chromium is tested.
 - Caliper shows size and viewport truthfully. It cannot show pixel density,
   panel color or touch input.
-- The built-in device list is short, and its viewports are inferred, not
-  measured on the devices.
+- The standard devices (two phones, a tablet, a laptop and a monitor) are
+  sized from spec sheets, not measured. Set `caliper({ devices })` for others;
+  see [Devices](docs/guide.md#devices).
 - Tailwind's source scan, Sass, Less and conditional CSS `@import` are not
   tested with takes and knobs.
 - All projects share the app's origin, so they share `localStorage`,

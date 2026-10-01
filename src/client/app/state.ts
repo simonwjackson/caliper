@@ -1,6 +1,6 @@
 import type { Part, Project, StateRef, TakesSnapshot, TakeView } from "../../types"
 import type { ChromeView, Tool } from "../ui/contract"
-import { DEFAULT_PX_PER_MM, DEVICES } from "../device-frame.js"
+import { DEFAULT_PX_PER_MM, STANDARD_DEVICES, type Device } from "../device-frame.js"
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
 import type { FrameReport } from "./wire"
 
@@ -23,7 +23,8 @@ export type AppState = {
   takeCreated: number | null
   filter: string
   expanded: ReadonlyMap<string, boolean>
-  device: typeof DEVICES[number]
+  /** The chosen device's id. It can name a device the project has not listed yet; `deviceOf` gives the device shown. */
+  device: string
   pxPerMm: number
   calibrated: boolean
   tools: { active: Tool; navOpen: boolean; codeOpen: boolean; side: "closed" | "knobs" | "record"; codeShare: number }
@@ -68,13 +69,24 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     part: saved.get("part"), shown: shown === "*" ? { _tag: "All" } : shown?.startsWith("takes:") ? { _tag: "Takes", export: shown.slice(6) || "default" } : { _tag: "One", export: shown || "default" },
     context: saved.has("contextPart") ? { part: saved.get("contextPart") ?? "", state: saved.get("contextState") ?? "default" } : null,
     contextNote: "", take: saved.get("take"), takeCreated: Number.isFinite(created) && created >= 0 ? created : null, filter: "", expanded: new Map(),
-    device: DEVICES.find(device => device.id === selectedDevice) ?? DEVICES[0]!, pxPerMm: Number.isFinite(px) && px > 0 ? px : DEFAULT_PX_PER_MM, calibrated: Number.isFinite(px) && px > 0,
+    device: selectedDevice ?? "", pxPerMm: Number.isFinite(px) && px > 0 ? px : DEFAULT_PX_PER_MM, calibrated: Number.isFinite(px) && px > 0,
     // navOpen is the docked parts column, a remembered preference. The UI owns the small-screen drawer.
     tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
     chainsOpen: new Set(), chainSolo: savedChainSolo(storage), projectId: null, projects: [],
   }
 }
+/** The project's devices; the standard ones until the project arrives. */
+export function devicesOf(state: AppState): readonly Device[] {
+  return state.project?.devices.length ? state.project.devices : STANDARD_DEVICES
+}
+/** The device the frames show: the chosen one when the project lists it, else the project's first. */
+export function deviceOf(state: AppState): Device {
+  const devices = devicesOf(state)
+  return devices.find(device => device.id === state.device) ?? devices[0]!
+}
+/** A device's name for a take or mark made on it; a device the project no longer lists keeps its id. */
+export function deviceName(state: AppState, id: string) { return devicesOf(state).find(device => device.id === id)?.name ?? id }
 export function clampShare(value: number) { return Math.min(0.8, Math.max(0.2, value)) }
 export function currentPart(state: AppState): Part | null { return state.project?.parts.find(part => part.file === state.part) ?? null }
 export function subjectRef(state: AppState): StateRef | null {
@@ -106,7 +118,7 @@ export function locationHash(state: AppState) {
   if (state.shown._tag === "All") params.set("state", "*")
   else if (state.shown._tag === "Takes") params.set("state", `takes:${state.shown.export}`)
   else if (state.shown.export !== "default") params.set("state", state.shown.export)
-  params.set("device", state.device.id)
+  if (state.device) params.set("device", state.device)
   if (state.take) {
     params.set("take", state.take)
     if (state.takeCreated !== null) params.set("takeCreated", String(state.takeCreated))
@@ -118,6 +130,8 @@ export function locationHash(state: AppState) {
 export function reconcileSelection(state: AppState): AppState {
   if (!state.project) return state
   const parts = state.project.parts
+  // A device the project does not list, for example one removed from vite.config, falls back to its first.
+  if (state.device !== deviceOf(state).id) state = { ...state, device: deviceOf(state).id }
   if (state.take && state.takes) {
     const selected = currentTake(state)
     if (!selected) state = { ...state, take: null, takeCreated: null, tools: { ...state.tools, side: state.tools.side === "record" ? "closed" : state.tools.side } }

@@ -33,7 +33,7 @@ cpSync(subject, root, { recursive: true, filter: source => !/\/(node_modules|\.c
 symlinkSync(join(subject, "node_modules"), join(root, "node_modules"), "dir")
 
 const store = createTakeStore(root)
-const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => /** @type {string} */ (store.create({ part, state: "default", device: "rg353m", prompt })))
+const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => /** @type {string} */ (store.create({ part, state: "default", device: "iphone-16", prompt })))
 store.write(two, css, `${readFileSync(join(root, css), "utf8")}\n.pico-card-kicker { color: ${RED} }\n`)
 
 const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "warn", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper()] })
@@ -62,7 +62,7 @@ let failed = false
 try {
   const agent = await api("takes.json")
   assert(agent.agent._tag === "Ready", `the agent is not ready: ${JSON.stringify(agent.agent)}`)
-  await page.goto(new URL(`__caliper/#part=${part}&state=takes:default&take=${one}&device=rg353m`, url).href)
+  await page.goto(new URL(`__caliper/#part=${part}&state=takes:default&take=${one}&device=iphone-16`, url).href)
   for (const take of [null, one, two, three]) await frame(take).locator(title).first().waitFor({ timeout: 90_000 })
   await page.locator('[data-cal="mark-mode"]').waitFor({ timeout: 30_000 })
 

@@ -54,7 +54,7 @@ try {
   // Accept and Discard confirm; one handler answers every confirm in the run.
   page.on("dialog", dialog => void dialog.accept())
   page.on("pageerror", error => failures.push(`chrome page error: ${error.message}`))
-  const selection = new URLSearchParams({ part: args.part, state: args.state, device: "rg353m" })
+  const selection = new URLSearchParams({ part: args.part, state: args.state, device: "iphone-16" })
   if (args["context-part"]) {
     selection.set("contextPart", args["context-part"])
     selection.set("contextState", args["context-state"])

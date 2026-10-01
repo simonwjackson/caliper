@@ -116,7 +116,7 @@ try {
   assert.equal(readFileSync(stable.reportPath, "utf8"), `${JSON.stringify(stable.report, null, 2)}\n`, "later checks leave reviewed evidence intact")
 
   const store = createTakeStore(root)
-  const take = store.create({ part, state: "default", device: "rg353m" })
+  const take = store.create({ part, state: "default", device: "iphone-16" })
   store.write(take, part, source.replace("<button>Ready</button>", '<button style={{ width: 60, height: 30 }} />'))
   /** @type {Awaited<ReturnType<typeof checkJobs>>} */
   const changed = await run([...request, "--take", take])
@@ -132,7 +132,7 @@ try {
   assert.equal(accepted.results[0].frame, "Rendered", "accepted files render without a take overlay")
 
   // Exercise the production HTTP -> engine -> render tool -> checks path.
-  const started = await fetch(`${url}__caliper/takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part, state: "default", device: "rg353m", prompt: "Report automatic checks without editing files." }) })
+  const started = await fetch(`${url}__caliper/takes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part, state: "default", device: "iphone-16", prompt: "Report automatic checks without editing files." }) })
   assert.equal(started.status, 201)
   const startedTake = await started.json()
   const deadline = Date.now() + 30_000

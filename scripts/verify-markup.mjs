@@ -50,7 +50,7 @@ put("public/markup-harness.html", `<!doctype html><html><head><meta charset="utf
 console.log(`Renderer: ${renderer}`)
 
 const store = createTakeStore(root)
-const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
+const [one, two, three] = ["Warm it up", "Cool it down", "Keep it plain"].map(prompt => store.create({ part, state: "default", device: "iphone-16", prompt }))
 store.write(/** @type {string} */ (one), "src/chip.css", readFileSync(join(root, "src/chip.css"), "utf8").replace(".chip { padding: 12px 20px }", ".chip { padding: 12px 20px; color: #b00 }"))
 
 /** @type {Array<{ text: string, images: number }>} */
@@ -102,7 +102,7 @@ function assert(condition, message) { if (!condition) throw new Error(message) }
 let vite = await startVite()
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 const context = await browser.newContext({ viewport: { width: 1600, height: 1100 } })
-const hash = `#part=${part}&state=takes:default&take=${one}&device=rg353m`
+const hash = `#part=${part}&state=takes:default&take=${one}&device=iphone-16`
 
 /** @typedef {import("../src/client/ui/contract").ChromeView} ChromeView */
 /** @param {import("playwright-core").Page} page @returns {Promise<ChromeView>} */

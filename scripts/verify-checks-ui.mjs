@@ -76,8 +76,8 @@ try {
   assert(ready._tag === "Ready")
   assert.equal(ready.report.results.length, 10)
   const originalId = ready.id
-  const defaultIndex = ready.report.results.findIndex(result => result.state === "default" && result.device === "rg353m")
-  const missingIndex = ready.report.results.findIndex(result => result.state === "MissingName" && result.device === "rg353m")
+  const defaultIndex = ready.report.results.findIndex(result => result.state === "default" && result.device === "iphone-16")
+  const missingIndex = ready.report.results.findIndex(result => result.state === "MissingName" && result.device === "iphone-16")
   const missing = dialog.locator(`${cal.checkRow}[data-index="${missingIndex}"]`)
   await (await reveal(page, missing.locator(":scope > summary"))).click()
   await (await reveal(page, missing.getByText(/button-name/).first())).waitFor({ state: "visible" })
@@ -155,7 +155,7 @@ try {
 
   // Take reports use the actual overlay, stay labelled, and never enable baseline approval.
   const store = createTakeStore(root)
-  const take = store.create({ part, state: "default", device: "rg353m" })
+  const take = store.create({ part, state: "default", device: "iphone-16" })
   store.write(take, part, source.replace("<button>Ready</button>", '<button style={{ width: 60, height: 30 }} />'))
   // External fixture setup bypasses the API's take notification. Reload its snapshot.
   await page.reload()

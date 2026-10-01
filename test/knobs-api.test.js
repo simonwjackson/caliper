@@ -149,7 +149,7 @@ describe("locating a knob's declaration", () => {
   test("in a take's frame, reads the take's copy of the file", async () => {
     await withProject({ files }, async ({ get, url, root }) => {
       const store = createTakeStore(root)
-      const take = store.create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      const take = store.create({ part: "src/Box.part.tsx", state: "default", device: "iphone-16" })
       store.write(take, "src/child.css", ".theme {\n  --paper: rgb(1, 1, 1);\n}\n")
       const css = await served(get, `/src/child.css?take=${take}`)
       const body = { sheet: `${join(root, "src/child.css")}?take=${take}`, css, rules: [{ path: [0], kind: "style", selector: ".theme" }], targets: [{ path: [0], property: "--paper" }] }
@@ -162,7 +162,7 @@ describe("locating a knob's declaration", () => {
 
   test("in a take's frame, finds a declaration in a global stylesheet whose @import the take loads on its own", async () => {
     await withProject({ files }, async ({ get, url, root }) => {
-      const take = createTakeStore(root).create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      const take = createTakeStore(root).create({ part: "src/Box.part.tsx", state: "default", device: "iphone-16" })
       // The frame page flattens the take's global stylesheets.
       expect((await get(`/__caliper/frame?part=src/Box.part.tsx&take=${take}`)).status).toBe(200)
       const css = await served(get, `/src/global.css?take=${take}`)
@@ -296,7 +296,7 @@ describe("writing a knob's value", () => {
 
   test("in a take's frame, writes the take's copy as an edit by hand, and leaves the real file", async () => {
     await withProject({ files }, async ({ get, url, root }) => {
-      const take = createTakeStore(root).create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      const take = createTakeStore(root).create({ part: "src/Box.part.tsx", state: "default", device: "iphone-16" })
       const css = await served(get, `/src/child.css?take=${take}`)
       const { results } = await (await post(url, "/__caliper/knobs/locate", {
         sheet: `${join(root, "src/child.css")}?take=${take}`, take, css, rules: [{ path: [0], kind: "style", selector: ".theme" }], targets: [{ path: [0], property: "--paper" }],
@@ -400,7 +400,7 @@ describe("promoting a literal to a token", () => {
 
   test("in a take's frame, edits the take's copies and leaves the real files", async () => {
     await withProject({ files: withBox }, async project => {
-      const take = createTakeStore(project.root).create({ part: "src/Box.part.tsx", state: "default", device: "rg353m" })
+      const take = createTakeStore(project.root).create({ part: "src/Box.part.tsx", state: "default", device: "iphone-16" })
       const [color, anchor] = await locate(project, "src/box.css", boxRules, [{ path: [1], property: "color" }, { path: [0], property: "--box-a" }], take)
       const response = await post(project.url, "/__caliper/knobs/promote", { take, name: "--box-ink", literal: span(color), home: span(anchor) })
       expect(response.status).toBe(200)

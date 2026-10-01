@@ -128,6 +128,8 @@ export type Project = {
   readonly entry: Derivation<Entry>
   readonly css: Derivation<GlobalCss>
   readonly wrapper: Derivation<Wrapper>
+  /** The devices to show and check, from the `devices` option. The first is the default device. */
+  readonly devices: readonly import("./client/device-frame.js").Device[]
 }
 
 /** What a device frame loads, in the order it loads it. */
@@ -421,4 +423,27 @@ export type CaliperOptions = {
    * derived wrapper.
    */
   readonly wrap?: string | readonly string[] | false
+  /**
+   * The devices to show and check, first one the default. A string names a
+   * device Caliper knows, for example "iphone-16" or "rg353m"; an object
+   * declares the project's own. Omit it for the standard phones, tablet,
+   * laptop and monitor. Checks render every state on every device, so each
+   * device adds check time.
+   */
+  readonly devices?: readonly (string | DeclaredDevice)[]
+}
+
+/** A device a project declares in `caliper({ devices })`. */
+export type DeclaredDevice = {
+  /** Stable id. Takes and marks store it. */
+  readonly id: string
+  readonly name: string
+  /** The screen's physical size, for true size. */
+  readonly widthMm: number
+  readonly heightMm: number
+  /** What the page sees: `window.innerWidth`, `vw`, media queries. */
+  readonly cssWidth: number
+  readonly cssHeight: number
+  /** Where the sizes come from. */
+  readonly viewportNote?: string
 }

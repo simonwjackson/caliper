@@ -42,7 +42,7 @@ console.log(`Renderer: ${renderer}`)
 
 const store = createTakeStore(root)
 const css = readFileSync(join(root, "src/chip.css"), "utf8")
-const [one, two, three] = ["Warm it", "Space it", "Plain"].map(prompt => store.create({ part, state: "default", device: "rg353m", prompt }))
+const [one, two, three] = ["Warm it", "Space it", "Plain"].map(prompt => store.create({ part, state: "default", device: "iphone-16", prompt }))
 store.write(/** @type {string} */ (two), "src/chip.css", css.replace("gap: 12px", "gap: 40px"))
 
 /** @type {Array<{ text: string, images: number }>} */
@@ -139,7 +139,7 @@ async function send() {
 
 try {
   await installRouting(page, app)
-  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&take=${one}&device=rg353m`, url).href)
+  await page.goto(new URL(`markup-harness.html#part=${part}&state=takes:default&take=${one}&device=iphone-16`, url).href)
   await until(`view => view?.markup?._tag === "Ready" && view.canvas._tag === "Frames" && view.canvas.frames.length === 4 && view.canvas.frames.every(frame => frame.verdict._tag === "Rendered")`, "four rendered frames", 30_000)
 
   await gate("a note that points to another take's mark makes that take no take, and its agent gets the element, a crop and read access", async () => {

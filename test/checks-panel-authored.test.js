@@ -93,7 +93,7 @@ test.skipIf(!process.env.CHROMIUM)("reference Chrome and real checks controller 
     view = { _tag: "Ready", id: crypto.randomUUID(), request: { ...request, take: "7" }, stale: false, approved: [], report: {
       version: 2, project: "app", environment: "test", createdAt: new Date().toISOString(), coverage: "Named scenarios only",
       run: { id: "authored-run", termination: "Cancelled", source: { epoch: "server", generation: 4, fingerprint: "a".repeat(64) }, stale: false },
-      results: [{ part: request.part, state: request.state, take: "7", device: "rg353m", frame: "Rendered", viewport: { width: 640, height: 480 }, png: "first.png", repeatPng: "repeat.png", sha256: digest(png), repeatSha256: digest(png),
+      results: [{ part: request.part, state: request.state, take: "7", device: "iphone-16", frame: "Rendered", viewport: { width: 640, height: 480 }, png: "first.png", repeatPng: "repeat.png", sha256: digest(png), repeatSha256: digest(png),
         checks: [{ name: "render", status: "Passed", detail: "Rendered" }, { name: "browser", status: "Passed", detail: "No errors" }, { name: "determinism", status: "Passed", detail: "Matching images" }],
         authored: { status: "Failed", reason: "Assertion", provenance: { kind: "Take", take: "7", files: ["Button.part.tsx", "retry-helper.ts"], changedDeclarations: ["edited: retry loads the library"] },
           checks: [{ name: "retry loads the library", source: { file: "Button.part.tsx", line: 9 }, status: "Failed", reason: "Assertion", detail: "Expected Library to be visible", durationMs: 25, errors: [], image: "interaction.png", imageSha256: digest(interactionPng) },

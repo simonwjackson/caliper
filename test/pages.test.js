@@ -24,6 +24,24 @@ describe("the plugin", () => {
     expect(caliper().apply).toBe("serve")
   })
 
+  test("refuses a wrong device list when vite.config loads, naming the known devices", () => {
+    expect(() => caliper({ devices: ["nope"] })).toThrow('names "nope", which Caliper does not know. Known devices: iphone-16')
+    expect(() => caliper({ devices: [] })).toThrow("at least one device")
+  })
+
+  test("serves the standard devices without the option, and the project's own list with it", async () => {
+    await withProject({ files }, async ({ project }) => {
+      expect((await project()).devices.map(device => device.id)).toEqual(["iphone-16", "pixel-7", "ipad-air-11", "macbook-air-13", "monitor-24"])
+    })
+    const kiosk = { id: "kiosk", name: "Kiosk", widthMm: 300, heightMm: 200, cssWidth: 1200, cssHeight: 800 }
+    await withProject({ files, options: { devices: ["odin2portal", kiosk] } }, async ({ project }) => {
+      expect((await project()).devices).toEqual([
+        expect.objectContaining({ id: "odin2portal", cssWidth: 1920 }),
+        { ...kiosk, viewportNote: "Declared in the project's vite.config." },
+      ])
+    })
+  })
+
   test("closing Vite cancels a pending source refresh before the project is removed", async () => {
     await withProject({ files }, async ({ project, write }) => {
       await project()

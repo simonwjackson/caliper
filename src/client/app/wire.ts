@@ -40,6 +40,7 @@ export const ProjectSchema = Type.Object({
     unresolved: Type.Array(Type.Object({ specifier: text, at: Site })),
   })),
   wrapper: derivation(Type.Object({ elements: Type.Array(Type.Object({ tag: text, className: text })), renderedAt: Type.Optional(Site) })),
+  devices: Type.Array(Type.Object({ id: text, name: text, widthMm: Type.Number({ exclusiveMinimum: 0 }), heightMm: Type.Number({ exclusiveMinimum: 0 }), cssWidth: Type.Number({ exclusiveMinimum: 0 }), cssHeight: Type.Number({ exclusiveMinimum: 0 }), viewportNote: Type.String() }), { minItems: 1 }),
 })
 export const DirectionSchema = Type.Object({ title: text, brief: text, strange: Type.Optional(tag(true)) })
 export const PlanSchema = Type.Object({ directions: Type.Array(DirectionSchema, { maxItems: 4 }), note: Type.Optional(text) })

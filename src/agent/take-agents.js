@@ -1,7 +1,7 @@
 // @ts-check
 import { readFileSync } from "node:fs"
 import { Agent } from "@earendil-works/pi-agent-core"
-import { DEVICES } from "../client/device-frame.js"
+import { STANDARD_DEVICES } from "../client/device-frame.js"
 import { takeTools } from "./tools.js"
 import { metadataTools } from "./metadata-tools.js"
 import { createIntegrationReview } from "../takes/integration.js"
@@ -51,13 +51,16 @@ export const MAX_TURNS = 40
  *   onChange: () => void,
  *   skills?: () => SkillCatalog,
  *   integration?: ReturnType<typeof createIntegrationReview>,
+ *   devices?: () => readonly import("../client/device-frame.js").Device[] | Promise<readonly import("../client/device-frame.js").Device[]>,
  * }} input
+ *   `devices` is the project's device list, read when a take's agent starts;
+ *   without it, the agent hears of the standard devices.
  *   `engine` is called when a take starts, so a missing connection fails that
  *   take, not the server. `onChange` fires on every visible change. `skills`
  *   is read when a take's agent starts, so a new or changed skill reaches the
  *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(store) }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(store), devices = () => STANDARD_DEVICES }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
   /** @type {Map<string, AbortController>} */
@@ -287,7 +290,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
         return renderTake({ ...request, signal })
       }
       const first = entry.agent === null
-      const agent = entry.agent ?? createAgent(take, record, render, entry)
+      // A list the caller already holds starts the agent without waiting a turn.
+      const listed = entry.agent === null ? devices() : []
+      const agent = entry.agent ?? createAgent(take, record, render, entry, Array.isArray(listed) ? listed : await listed)
       entry.agent = agent
       const named = namedSkills(entry, prompt)
       if (named.length > 0) onChange()
@@ -327,8 +332,9 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {TakeAsk} ask
    * @param {RenderTake} render
    * @param {Live} entry
+   * @param {readonly import("../client/device-frame.js").Device[]} devices the project's
    */
-  const createAgent = (take, ask, render, entry) => {
+  const createAgent = (take, ask, render, entry, devices) => {
     const { models, model, reasoning } = engine()
     const preview = ask.context ?? ask
     const catalog = skills()
@@ -341,7 +347,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     ]
     let turns = 0
     const agent = new Agent({
-      initialState: { systemPrompt: `${systemPrompt(take)}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
+      initialState: { systemPrompt: `${systemPrompt(take, devices)}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
       streamFn: models.streamSimple.bind(models),
       sessionId: `caliper-take-${take}-${Date.now()}`,
       toolExecution: "sequential",
@@ -516,10 +522,13 @@ function detailOf(result, isError, name) {
   return text.split("\n")[0]?.slice(0, 200) ?? ""
 }
 
-/** @param {string} take */
-function systemPrompt(take) {
-  const devices = DEVICES.map(device => `${device.id} (${device.name}, ${device.cssWidth}x${device.cssHeight} CSS px)`).join(", ")
-  return `You are the design agent inside Caliper, a tool that shows a React project's UI parts at the true size of handheld devices.
+/**
+ * @param {string} take
+ * @param {readonly import("../client/device-frame.js").Device[]} projectDevices
+ */
+function systemPrompt(take, projectDevices) {
+  const devices = projectDevices.map(device => `${device.id} (${device.name}, ${device.cssWidth}x${device.cssHeight} CSS px)`).join(", ")
+  return `You are the design agent inside Caliper, a tool that shows a React project's UI parts at the true size of the devices it targets.
 
 You work on take ${take}. A take is one proposed version of a part. Your edits go into the take, never into the real project; the user sees the take next to the original and accepts it or throws it away.
 

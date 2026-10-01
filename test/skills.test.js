@@ -160,7 +160,7 @@ describe("telling the model", () => {
 })
 
 describe("a take agent with skills", () => {
-  const ask = { part: "src/Chip.part.tsx", state: "default", device: "rg353m" }
+  const ask = { part: "src/Chip.part.tsx", state: "default", device: "iphone-16" }
 
   test("sees the catalog, loads a skill once, reads its files, and cannot read outside them", async () => {
     await inTree({
@@ -253,7 +253,7 @@ describe("a take agent with skills", () => {
       return fauxAssistantMessage([fauxToolCall("propose_directions", { directions: [{ title: "A", brief: "Use intrinsic." }] })], { stopReason: "toolUse" })
     }])
     const catalog = { skills: [{ name: "intrinsic", description: "Layout\nrules.", scope: /** @type {const} */ ("project"), location: "x", file: "x", dir: "x", modelInvocable: true }], problems: [] }
-    await planDirections({ engine: { models, model: faux.getModel(), reasoning: "medium" }, prompt: "p", count: 2, part: "a", state: "default", device: "rg353m", context: [], skills: catalog })
+    await planDirections({ engine: { models, model: faux.getModel(), reasoning: "medium" }, prompt: "p", count: 2, part: "a", state: "default", device: "iphone-16", context: [], skills: catalog })
     expect(system).toContain("- intrinsic: Layout rules.")
   })
 })
