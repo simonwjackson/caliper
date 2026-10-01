@@ -179,6 +179,18 @@ Gates run on the branch: `bun test` (all pass), `tsc`, `verify-chrome-core.mjs`
 (22 gates), `verify-chains`, `verify-markup`, `verify-references`,
 `ui/verify-served-typeahead`, `verify-chrome-contract` (19 scenarios, 111
 hooks), `ui/verify.mjs`. Not run: `verify-markup-model` and
-`verify-references-model` (a paid model), and `verify-chrome-delivery`'s
-self-host step, which needs the pinned tool moved to this build.
+`verify-references-model` (a paid model).
+
+### Deploy on zao, 2026-09-30
+
+| Check | Result |
+|---|---|
+| `deploy/install.sh` | Wrote and enabled `caliper.service` (the app on 3132, from the main checkout) and `caliper-proxy.service` (`caliper-tsnet` to 3132). Both active; both start with the user session. A reboot was not tested. |
+| Settings | `~/.config/caliper/config.json`: `claude-opus-5-5`, reasoning medium. Endpoint and key from `~/.pi/agent/cliproxyapi.json`. |
+| Projects | Pico (Vite on `[::1]:5173`) and amaze-next (`100.114.19.92:5199`) both Ready. The IPv6 address exposed a proxy bug, fixed in `71ecc0f`. |
+| Through `https://caliper.hummingbird-lake.ts.net` (Chromium on zao) | Project list with 2 links. A Pico tab rendered in 683 ms and an amaze-next tab in 1,560 ms. The switcher listed both. Both HMR sockets went to the tailnet name at their project's path. No page errors. |
+| A take with the real model | Pico, take 5: `activate_skill`, `name_take`, `read_file`, `edit_file`, `render` twice, all Done, through the plugin's host endpoint. Discarded after. |
+| 100 agent file reads through the plugin | 334 ms, about 3.3 ms each (HTTP to the plugin; the worker's own hop not included). |
+| Pinned tool | Moved to `71ecc0f`. `verify:chrome-delivery` passed linked, packed and self-host. `bun run tool:app` served both projects on 3133. |
+| Not done | The Fold itself, Firefox, and a reboot. The HTTPS run used Chromium on zao. |
 
