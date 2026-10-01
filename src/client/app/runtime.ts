@@ -3,7 +3,7 @@ import type { StateRef, TakeView, CodeChange } from "../../types"
 import { Check } from "typebox/value"
 import { Type } from "typebox"
 import { ChecksViewSchema, CodeChangeSchema, FrameReportSchema, PlanSchema, parseProject, parseTakes, parseWire } from "./wire"
-import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable, deviceOf, devicesOf, currentWorkspace, openWorkspace } from "./state"
+import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable, deviceOf, devicesOf, currentWorkspace, openWorkspace, rowKey } from "./state"
 import type { AppState, Ask, Plan, Preferences, Submission } from "./state"
 import { toChromeView, takeSummary, disabled, acceptConfirmNote, chainHasParent } from "./view"
 import { identityKey } from "../../takes/chains.js"
@@ -18,6 +18,7 @@ import { createMarkupController } from "./markup"
 import { createModelsController } from "./models"
 import { nextPanes } from "../tool-rule"
 import type { ToolEvent } from "../tool-rule"
+import { rowRef } from "../../takes/workspace-contract.js"
 
 export type Request = <T>(path: string, data?: object) => Promise<T>
 export type RuntimeInput = {
@@ -110,7 +111,7 @@ export function createChromeApp(input: RuntimeInput) {
     if (id !== null && !workspace) return
     const prompt = workspace?._tag === "Ready" && workspace.ideas.length === 0 ? workspace.question : ""
     generation++
-    set(reconcileSelection({ ...state, workspace: id, idea: null, same: new Set(), plan: { _tag: "None" }, prompt: id === state.workspace ? state.prompt : prompt }))
+    set(reconcileSelection({ ...state, workspace: id, idea: null, row: { _tag: "None" }, rowRecord: null, same: new Set(), plan: { _tag: "None" }, prompt: id === state.workspace ? state.prompt : prompt }))
     save()
   }
   /** A write to the open workspace, then the takes again, which carry it. */
@@ -174,6 +175,60 @@ export function createChromeApp(input: RuntimeInput) {
     } catch (error) {
       if (isPlanning(planId)) { set({ ...state, plan: { _tag: "None" } }); notify(error) }
     }
+  }
+  const rowResponse = Type.Object({ row: Type.String({ pattern: "^rows/[1-9][0-9]*\\.part\\.tsx$" }) })
+  /** A scratch row's number in its routes: rows/3.part.tsx is 3. */
+  const rowNumber = (file: string) => /^rows\/([1-9]\d*)\.part\.tsx$/.exec(file)?.[1] ?? null
+  /** Open a row's record in the side panel; a scratch row is focused too, so the bar talks to its agent. */
+  function openRowRecord(row: string, column?: string) {
+    const workspace = currentWorkspace(state)
+    if (workspace?._tag !== "Ready") return
+    const stored = workspace.rows.find(item => rowKey(rowRef(workspace.id, item)) === row)
+    if (!stored) return
+    set({
+      ...state, rowRecord: { row, column: column ?? (state.rowRecord?.row === row ? state.rowRecord.column : "today") },
+      ...(stored._tag === "Scratch" && workspace.status._tag === "Open" ? { row: { _tag: "Focused" as const, file: stored.file }, idea: null } : {}),
+    })
+    if (state.tools.side !== "record") applyTools({ _tag: "Press", tool: "takes", hasTake: true })
+  }
+  /**
+   * The bar's main button for rows (slice 2). New row starts a row agent with
+   * what you asked; the new row is then focused with its record open. Row
+   * sends a follow-up to the focused row's agent.
+   */
+  async function writeRow() {
+    const workspace = openWorkspace(state)
+    const board = snapshot.workspace
+    if (!workspace || board._tag !== "Open" || board.bar.go.availability._tag !== "Enabled") return
+    const device = deviceOf(state).id, submitted = submission(), prompt = state.prompt.trim()
+    if (board.bar.mode === "NewRow") {
+      await takeRequest("Starting the row agent", async () => {
+        const { row } = parseWire(rowResponse, await input.request<unknown>(`workspaces/${workspace.id}/rows/new`, { brief: prompt, device }))
+        consumeSubmission(submitted)
+        await refreshTakes()
+        set({ ...state, row: { _tag: "Focused", file: row }, idea: null })
+        openRowRecord(rowKey(rowRef(workspace.id, { _tag: "Scratch", file: row, brief: "" })), "today")
+      })
+      return
+    }
+    const focused = board.bar.mode === "Row" ? board.bar.row : null
+    const number = focused ? rowNumber(focused.id) : null
+    if (number === null) return
+    await takeRequest("Sending to the row", async () => {
+      await input.request(`workspaces/${workspace.id}/rows/${number}/prompt`, { prompt, device })
+      consumeSubmission(submitted)
+      await refreshTakes()
+    })
+  }
+  async function deleteRow(file: string) {
+    const workspace = openWorkspace(state)
+    const number = rowNumber(file)
+    const stored = workspace?.rows.find(row => row._tag === "Scratch" && row.file === file)
+    if (!workspace || number === null || !stored) return
+    const name = workspace.scratch.find(item => item.file === file)?.name ?? `row ${number}`
+    if (!input.confirm?.(`Delete "${name}"? Its file and its place on the board go. The ideas keep their files.`)) return
+    await workspaceWrite("Deleting the row", `rows/${number}/delete`)
+    set({ ...state, row: { _tag: "None" }, rowRecord: null })
   }
   async function followIdea(take: string) {
     const board = snapshot.workspace
@@ -471,16 +526,37 @@ export function createChromeApp(input: RuntimeInput) {
       showWorkspace(made.workspace)
     })),
     onPin: (ref, pinned) => { if (stateExists(state.project?.parts ?? [], ref) || !pinned) immediate(() => workspaceWrite(pinned ? "Pinning" : "Unpinning", "rows", { ...ref, pinned })) },
-    onIdea: take => { if (take === null || openWorkspace(state)?.ideas.some(idea => idea.take === take)) set({ ...state, idea: take }) },
-    onQuestions: open => { if (!currentWorkspace(state)) return; applyTools(open ? { _tag: "Press", tool: "takes", hasTake: true } : { _tag: "Close", pane: "record" }) },
+    onIdea: take => { if (take === null || openWorkspace(state)?.ideas.some(idea => idea.take === take)) set({ ...state, idea: take, row: { _tag: "None" } }) },
+    onQuestions: open => {
+      if (!currentWorkspace(state)) return
+      // The questions take the side panel back from a row's record, and the bar leaves the row.
+      set({ ...state, rowRecord: null, row: state.row._tag === "Focused" ? { _tag: "None" } : state.row })
+      if (open && state.tools.side !== "record") applyTools({ _tag: "Press", tool: "takes", hasTake: true })
+      if (!open) applyTools({ _tag: "Close", pane: "record" })
+    },
     onAsk: text => { if (text.trim()) immediate(() => workspaceWrite("Asking", "questions", { text: text.trim() })) },
     onAnswer: (question, answer, reason) => { if (answer.trim() && reason.trim()) immediate(() => workspaceWrite("Answering", `questions/${question}/answer`, { answer: answer.trim(), reason: reason.trim() })) },
     onWorkspaceStart: () => immediate(startWorkspace),
     onIdeaFollow: take => immediate(() => followIdea(take)),
     onIdeaDiscard: take => immediate(() => discardIdea(take)),
     onWorkspaceDiscard: id => { if (openWorkspace(state)?.id === id) immediate(async () => { await workspaceWrite("Discarding the ideas", "discard"); set({ ...state, idea: null }) }) },
-    // Workspaces slice 2. The view offers none of these until scratch rows are built (`newRow` is disabled).
-    onRowNew: () => {}, onRowRecord: () => {}, onRowWrite: () => {}, onRowStop: () => {}, onRowDelete: () => {}, onRowCheck: () => {},
+    // Workspaces slice 2: scratch rows and the checks in cells.
+    onRowNew: open => { if (openWorkspace(state)) set({ ...state, row: open ? { _tag: "New" } : { _tag: "None" }, idea: open ? null : state.idea }) },
+    onRowRecord: (row, column) => {
+      if (row !== null) { openRowRecord(row, column); return }
+      set({ ...state, rowRecord: null, row: state.row._tag === "Focused" ? { _tag: "None" } : state.row })
+      applyTools({ _tag: "Close", pane: "record" })
+    },
+    onRowWrite: () => immediate(writeRow),
+    onRowStop: file => { const number = rowNumber(file); if (number !== null) immediate(() => workspaceWrite("Stopping the row agent", `rows/${number}/stop`)) },
+    onRowDelete: file => immediate(() => deleteRow(file)),
+    onRowCheck: row => {
+      const workspace = openWorkspace(state)
+      const stored = workspace?.rows.find(item => rowKey(rowRef(workspace.id, item)) === row)
+      if (!workspace || !stored) return
+      const ref = rowRef(workspace.id, stored)
+      immediate(() => workspaceWrite("Checking the row again", "checks", { ...ref, device: deviceOf(state).id }))
+    },
   }
   function reloadFrames(onlyTake?: string, file?: string) {
     const reports = new Map(state.reports)

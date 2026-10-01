@@ -1,11 +1,11 @@
-import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView, ModelsView, BoardView, BoardColumnView, BoardCellView, BoardRowView, QuestionView, WorkspaceBarView, PinView } from "../ui/contract"
+import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView, ModelsView, BoardView, BoardColumnView, BoardCellView, BoardRowView, QuestionView, WorkspaceBarView, PinView, CellChecksView, RowCheckView, RowRecordView } from "../ui/contract"
 import { acceptFlag, acceptNote, flagWords, historyLabel, lineageLabel, planChains } from "../../takes/chains.js"
 import type { AcceptFlag as ChainFlag, AcceptRecord, ChainTake } from "../../takes/chains.js"
-import type { Derivation, IdeaView, StateRef, TakeView, WorkspaceView } from "../../types"
+import type { CellCheck, Derivation, IdeaView, StateRef, TakeView, WorkspaceView } from "../../types"
 import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js"
 import { MAX_IMAGES } from "../images.js"
 import type { AppState } from "./state"
-import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey, deviceName, deviceOf, devicesOf, currentWorkspace, openWorkspace } from "./state"
+import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey, deviceName, deviceOf, devicesOf, currentWorkspace, openWorkspace, rowKey } from "./state"
 import { rowRef } from "../../takes/workspace-contract.js"
 
 /** Marks as the markup controller sees them. `frame` reads its current locations; it does no I/O. */
@@ -143,7 +143,6 @@ function workspaceMeta(workspace: Extract<WorkspaceView, { _tag: "Ready" }>): st
 const dayLabel = (at: number) => new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 /** A board cell's frame key: the board's own, so a report never matches a canvas frame of the same state. */
 export function cellKey(row: StateRef, idea: Pick<IdeaView, "take" | "created"> | null) { return JSON.stringify(["board", row.part, row.state, idea?.take ?? null, idea?.created ?? null]) }
-const rowKey = (row: StateRef) => `${row.part}#${row.state}`
 
 /** The selected workspace's board (decision 45). No I/O. */
 function board(state: AppState): BoardView {
@@ -156,20 +155,38 @@ function board(state: AppState): BoardView {
   const open = workspace.status._tag === "Open"
   const status = !open ? "Closed" : workspace.question.trim() === "" && workspace.ideas.length === 0 ? "New" : "Open"
   const planning = state.plan._tag === "Ideas" && state.plan.workspace === workspace.id ? state.plan : null
+  const device = deviceOf(state).id
+  const focusedRow = state.row._tag === "Focused" ? state.row.file : null
+  const recordOf = state.tools.side === "record" ? state.rowRecord : null
+  /** The names and lines of a row's checks: a scratch row's file, or a pinned state's part. */
+  const declared = (row: (typeof workspace.rows)[number]) => row._tag === "Scratch"
+    ? workspace.scratch.find(item => item.file === row.file)?.checks ?? []
+    : (parts.find(item => item.file === row.part)?.authoredChecks?.[row.state] ?? []).map(check => ({ name: check.name, line: check.line }))
   const rows: BoardRowView[] = workspace.rows.map(row => {
     const ref = rowRef(workspace.id, row)
+    const key = rowKey(ref)
     if (row._tag === "Scratch") {
       // A scratch row (slice 2): its file's name, or the start of what you asked until the agent names it.
       const facts = workspace.scratch.find(item => item.file === row.file)
       const name = facts?.name ?? (row.brief.length > 48 ? `${row.brief.slice(0, 47).trimEnd()}…` : row.brief)
-      return { key: rowKey(ref), ref, part: name, state: "Scratch", site: ref.part, missing: false, checks: facts?.checks.length ?? 0,
-        scratch: { id: row.file, run: facts?.run ?? { _tag: "Idle" }, written: facts?.written ?? false, focused: false }, open: false }
+      return { key, ref, part: name, state: "Scratch", site: ref.part, missing: false, checks: declared(row).length,
+        scratch: { id: row.file, run: facts?.run ?? { _tag: "Idle" }, written: facts?.written ?? false, focused: focusedRow === row.file }, open: recordOf?.row === key }
     }
     const part = parts.find(item => item.file === row.part)
-    return { key: rowKey(ref), ref, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row),
-      checks: part?.authoredChecks?.[row.state]?.length ?? 0, scratch: null, open: false }
+    return { key, ref, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row),
+      checks: declared(row).length, scratch: null, open: recordOf?.row === key }
   })
-  const focused = workspace.ideas.find(idea => idea.take === state.idea) ?? null
+  /** How a row's checks went in one column, on the board's device (slice 2). */
+  const cellCheck = (row: BoardRowView, column: string) => workspace.checks.find(item => item.row === row.ref.part && item.state === row.ref.state && item.column === column && item.device === device)
+  const checksIn = (row: BoardRowView, column: string): CellChecksView => {
+    if (row.checks === 0) return { _tag: "None" }
+    const found = cellCheck(row, column)
+    if (!found) return { _tag: "NotRun" }
+    if (found.status === "Waiting" || found.status === "Running") return { _tag: found.status }
+    if (found.status === "Unknown") return { _tag: "Unknown", reason: found.reason }
+    return { _tag: "Done", passed: found.results.filter(result => result.status === "Passed").length, total: found.results.length, stale: found.stale }
+  }
+  const focused = state.row._tag === "None" ? workspace.ideas.find(idea => idea.take === state.idea) ?? null : null
   const columns: BoardColumnView[] = [
     { _tag: "Today", key: "today" },
     ...workspace.ideas.map((idea): BoardColumnView => ({
@@ -179,7 +196,9 @@ function board(state: AppState): BoardView {
     ...Array.from({ length: planning?.count ?? 0 }, (_, index): BoardColumnView => ({ _tag: "Planned", key: `planned:${index}` })),
   ]
   const cell = (row: BoardRowView, column: BoardColumnView, idea: IdeaView | null): BoardCellView => {
-    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running" || row.scratch && !row.scratch.written) return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
+    if (column._tag === "Planned" || row.missing || row.scratch && !row.scratch.written) return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
+    const checks = checksIn(row, idea?.take ?? "today")
+    if (idea?.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false, checks }
     const key = cellKey(row.ref, idea)
     const report = state.reports.get(key)
     const frame: FrameView = {
@@ -189,7 +208,7 @@ function board(state: AppState): BoardView {
       ...(idea ? { run: idea.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [],
       markable: disabled("A workspace compares ideas; marks are for takes."), marks: [],
     }
-    return { row: row.key, column: column.key, frame, same: idea !== null && state.same.has(key), checks: { _tag: "None" } }
+    return { row: row.key, column: column.key, frame, same: idea !== null && state.same.has(key), checks }
   }
   const cells = rows.flatMap(row => columns.map(column => cell(row, column, column._tag === "Idea" ? workspace.ideas.find(idea => idea.take === column.take) ?? null : null)))
   const questions: QuestionView[] = workspace.questions.map(question => {
@@ -200,24 +219,33 @@ function board(state: AppState): BoardView {
   const write = !ready ? disabled("Vite is not reachable.") : !open ? disabled("This workspace is closed.") : busy ? disabled("A request is pending.") : enabled
   const agentReady = state.takes?.agent._tag === "Ready"
   const files = workspace.ideas.reduce((sum, idea) => sum + idea.files.length, 0)
-  const mode: WorkspaceBarView["mode"] = !open ? "Closed" : focused ? "Idea" : workspace.ideas.length === 0 ? "Ask" : "More"
+  // Slice 2: the bar writes a new row, or talks to a focused row's agent.
+  const rowFocus = focusedRow === null ? null : rows.find(row => row.scratch?.id === focusedRow) ?? null
+  const mode: WorkspaceBarView["mode"] = !open ? "Closed" : state.row._tag === "New" ? "NewRow" : rowFocus ? "Row" : focused ? "Idea" : workspace.ideas.length === 0 ? "Ask" : "More"
   const blocker = write._tag === "Disabled" ? write.reason : planning ? "Ideas are being planned." : !agentReady ? "The agent is not ready." : ""
   const go = (label: string, why: string): WorkspaceBarView["go"] => ({ label, availability: blocker || why ? disabled(blocker || why) : enabled })
   const prompt = state.prompt.trim()
   const bar: WorkspaceBarView = {
     mode, prompt: state.prompt, notices: state.notices,
-    placeholder: mode === "Ask" ? "Ask the question this workspace answers" : mode === "Idea" && focused ? `Tell idea ${focused.take} what to change` : mode === "Closed" ? "This workspace is closed" : "Describe another idea for this question",
+    placeholder: mode === "Ask" ? "Ask the question this workspace answers" : mode === "Idea" && focused ? `Tell idea ${focused.take} what to change` : mode === "Closed" ? "This workspace is closed"
+      : mode === "NewRow" ? "Say what the new row shows, and what its checks press and expect" : mode === "Row" ? "Tell the row what to change" : "Describe another idea for this question",
     edit: agentReady && !planning && open ? enabled : disabled(!open ? "This workspace is closed." : planning ? "Ideas are being planned." : "The agent is not ready."),
     count: state.count,
-    go: mode === "Ask" ? go(state.count === 1 ? "1 new idea" : `Plan ${state.count} ideas`, workspace.rows.length === 0 || !prompt ? "Pin a state and write the question first." : "")
+    go: mode === "NewRow" ? go("Write row", !prompt ? "Say what the row must show and check first." : "")
+      : mode === "Row" && rowFocus ? go("Send to row", rowFocus.scratch?.run._tag === "Running" ? "The row's agent is working." : !prompt ? "Write what to change first." : "")
+      : mode === "Ask" ? go(state.count === 1 ? "1 new idea" : `Plan ${state.count} ideas`, workspace.rows.length === 0 || !prompt ? "Pin a state and write the question first." : "")
       : mode === "Idea" && focused ? go(`Send to idea ${focused.take}`, focused.run._tag === "Running" ? "The idea's agent is working." : !prompt ? "Write what to change first." : "")
         : mode === "More" ? go("New idea", !prompt ? "Describe the idea first." : "") : { label: "Closed", availability: disabled("This workspace is closed.") },
     idea: focused ? {
       take: focused.take, label: `Idea ${focused.take}`,
       discard: write, stop: focused.run._tag === "Running" && ready ? enabled : disabled("No agent is running."),
     } : null,
-    row: null,
+    row: rowFocus?.scratch ? {
+      id: rowFocus.scratch.id, label: rowFocus.part,
+      remove: write, stop: rowFocus.scratch.run._tag === "Running" && ready ? enabled : disabled("No agent is running."),
+    } : null,
   }
+  const record = rowRecordView(state, workspace, rows, columns, recordOf, declared, cellCheck, write)
   return {
     _tag: "Open", id: workspace.id, title: workspaceTitle(workspace), status,
     statusLabel: status === "New" ? "No question yet" : status === "Closed" ? "Closed" : "Open",
@@ -226,7 +254,46 @@ function board(state: AppState): BoardView {
     ask: write, answer: write,
     discard: { availability: write, ideas: workspace.ideas.length, files, answered: questions.filter(question => question._tag === "Answered").length, open: questions.filter(question => question._tag === "Open").length },
     bar,
-    newRow: disabled("Scratch rows are not built yet."), record: { _tag: "Closed" },
+    newRow: blocker ? disabled(blocker) : enabled, record,
+  }
+}
+
+/**
+ * A row's record (slice 2): what you asked its agent, its file, each check in
+ * each column on the board's device, and the agent's log. No I/O.
+ */
+function rowRecordView(
+  state: AppState, workspace: Extract<WorkspaceView, { _tag: "Ready" }>, rows: readonly BoardRowView[], columns: readonly BoardColumnView[],
+  open: AppState["rowRecord"], declared: (row: (typeof workspace.rows)[number]) => readonly { name: string; line: number }[],
+  cellCheck: (row: BoardRowView, column: string) => CellCheck | undefined, write: Availability,
+): RowRecordView {
+  if (open === null) return { _tag: "Closed" }
+  const index = rows.findIndex(row => row.key === open.row)
+  const row = rows[index]
+  const stored = workspace.rows[index]
+  if (!row || !stored) return { _tag: "Closed" }
+  const ready = state.connection._tag === "Ready"
+  const shown = columns.filter(column => column._tag !== "Planned")
+  const facts = stored._tag === "Scratch" ? workspace.scratch.find(item => item.file === stored.file) : undefined
+  const running = row.scratch?.run._tag === "Running"
+  const checks: RowCheckView[] = declared(stored).map(check => ({
+    name: check.name, line: check.line,
+    results: shown.map(column => {
+      const found = cellCheck(row, column._tag === "Idea" ? column.take : "today")
+      const result = found?.results.find(item => item.name === check.name)
+      const status = found?.status === "Waiting" || found?.status === "Running" ? found.status : result?.status ?? "NotRun"
+      const detail = found?.status === "Unknown" ? found.reason : result?.detail ?? ""
+      return { column: column.key, status, detail, image: result?.image ? `workspaces/${workspace.id}/checks/${result.image}` : null }
+    }),
+  }))
+  return {
+    _tag: "Open", row: row.key, title: row.part, file: row.site, brief: stored._tag === "Scratch" ? stored.brief : "",
+    scratch: row.scratch ? { id: row.scratch.id, run: row.scratch.run, stop: running && ready ? enabled : disabled("No agent is running."), remove: write } : null,
+    columns: shown.map(column => ({ key: column.key, label: column._tag === "Idea" ? column.take : "Today" })),
+    column: shown.some(column => column.key === open.column) ? open.column : "today",
+    checks,
+    checkAgain: write._tag === "Disabled" ? write : checks.length === 0 ? disabled("This row declares no checks.") : running ? disabled("The row's agent is still writing the row.") : enabled,
+    log: (facts?.log ?? []).filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: [] } : entry),
   }
 }
 

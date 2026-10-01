@@ -87,7 +87,7 @@ export function rowsScene(base: ChromeView, scene: Scene): ChromeView {
   const focused = scene.bar === "Row"
   const dpad: (BoardRowView & { readonly id: RowId }) | null = scene.row === "None" ? null : {
     id: "dpad", key: DPAD, ref: { part: ROW_FILE, state: "default" }, part: written ? ROW_NAME : "Home on the portal's own input…", state: "Scratch", site: ROW_FILE, missing: false,
-    checks: written ? CHECKS.length : 0, scratch: { id: "1", run: run(written ? "Idle" : "Running"), written, focused }, open: scene.record !== undefined,
+    checks: written ? CHECKS.length : 0, scratch: { id: "rows/1.part.tsx", run: run(written ? "Idle" : "Running"), written, focused }, open: scene.record !== undefined,
   }
   const rows = [...STATES, ...dpad ? [dpad] : []]
   const frame = (row: (typeof rows)[number], take: IdeaId | null): FrameView => ({
@@ -110,7 +110,7 @@ export function rowsScene(base: ChromeView, scene: Scene): ChromeView {
   }))
   const record: RowRecordView = scene.record === undefined || !dpad ? { _tag: "Closed" } : {
     _tag: "Open", row: dpad.key, title: written ? ROW_NAME : "New row", file: ROW_FILE, brief: ASKED,
-    scratch: { id: "1", run: run(written ? "Idle" : "Running"), stop: written ? blocked("No agent is running.") : enabled, remove: enabled },
+    scratch: { id: "rows/1.part.tsx", run: run(written ? "Idle" : "Running"), stop: written ? blocked("No agent is running.") : enabled, remove: enabled },
     columns: (["today", "5", "6", "7"] as const).map(column => ({ key: column === "today" ? "today" : `idea:${column}`, label: columnLabel(column) })),
     column: scene.record === "today" ? "today" : `idea:${scene.record}`,
     checks: written ? CHECKS.map((check, index): RowCheckView => ({
@@ -130,7 +130,7 @@ export function rowsScene(base: ChromeView, scene: Scene): ChromeView {
       go: { label: "Write row", availability: prompt ? enabled : blocked("Say what the row must show and check first.") } }
     : scene.bar === "Row" && dpad
       ? { mode: "Row", prompt: "", placeholder: `Tell the row what to change`, edit: enabled, count: 3, notices: [], idea: null,
-        row: { id: "1", label: written ? ROW_NAME : "New row", remove: enabled, stop: written ? blocked("No agent is running.") : enabled },
+        row: { id: "rows/1.part.tsx", label: written ? ROW_NAME : "New row", remove: enabled, stop: written ? blocked("No agent is running.") : enabled },
         go: { label: "Send to row", availability: blocked("Write what to change first.") } }
       : { mode: "More", prompt: "", placeholder: "Describe another idea for this question", edit: enabled, count: 3, notices: [], idea: null, row: null,
         go: { label: "New idea", availability: blocked("Describe the idea first.") } }

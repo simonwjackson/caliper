@@ -4,6 +4,7 @@ import { DEFAULT_PX_PER_MM, STANDARD_DEVICES, type Device } from "../device-fram
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
 import type { FrameReport } from "./wire"
 import { restorePanes } from "../tool-rule"
+import { rowRef } from "../../takes/workspace-contract.js"
 
 export type Ask = StateRef & { device: string; prompt: string; context?: StateRef; images?: { name: string; mimeType: string; data: string }[]
   /** Ids of marks on the original that go with the prompt (planner choice 14). They leave the draft once takes start. */
@@ -52,6 +53,14 @@ export type AppState = {
   /** Decision 45: the workspace whose board replaces the canvas, and the idea the bar talks to. */
   workspace: string | null
   idea: string | null
+  /**
+   * Workspaces slice 2: the bar writes a new scratch row (New), talks to one
+   * scratch row's agent (Focused, by its file), or neither. One of an idea
+   * and a row is focused at a time.
+   */
+  row: { _tag: "None" } | { _tag: "New" } | { _tag: "Focused"; file: string }
+  /** The row whose record holds the side panel (its board key), and the column whose results unfold. */
+  rowRecord: { row: string; column: string } | null
   /** Keys of board cells whose frame shows exactly what Today's frame of that row shows. */
   same: ReadonlySet<string>
 }
@@ -86,7 +95,7 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen, side, codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, recentTools: restorePanes({ active, codeOpen, side, checksOpen: false, calibrationOpen: false }).recent, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
     chainsOpen: new Set(), chainSolo: savedChainSolo(storage), projectId: null, projects: [],
-    workspace: saved.get("workspace"), idea: null, same: new Set(),
+    workspace: saved.get("workspace"), idea: null, row: { _tag: "None" }, rowRecord: null, same: new Set(),
   }
 }
 /** The selected workspace as the takes snapshot has it, or null when none is selected or it is gone. */
@@ -134,6 +143,8 @@ export function refLabel(state: AppState, ref: StateRef) {
 }
 export function takeName(take: TakeView) { return take.name ?? take.direction?.title ?? `Take ${take.take}` }
 export function frameKey(preview: StateRef, take: Pick<TakeView, "take" | "created"> | null) { return JSON.stringify([preview.part, preview.state, take?.take ?? null, take?.created ?? null]) }
+/** A board row's key: the part and state it renders. */
+export const rowKey = (row: StateRef) => `${row.part}#${row.state}`
 export function locationHash(state: AppState) {
   const params = new URLSearchParams()
   if (state.part) params.set("part", state.part)
@@ -155,9 +166,14 @@ export function reconcileSelection(input: AppState): AppState {
   if (!project) return input
   let state = input
   // A workspace that is gone, for example deleted by hand, leaves its board.
-  if (state.workspace !== null && state.takes && !currentWorkspace(state)) state = { ...state, workspace: null, idea: null }
+  if (state.workspace !== null && state.takes && !currentWorkspace(state)) state = { ...state, workspace: null, idea: null, row: { _tag: "None" }, rowRecord: null }
   const shown = currentWorkspace(state)
   if (state.idea !== null && (shown?._tag !== "Ready" || !shown.ideas.some(idea => idea.take === state.idea))) state = { ...state, idea: null }
+  // A deleted scratch row, or one gone by hand, leaves the bar and the side panel.
+  const focused = state.row
+  if (focused._tag === "Focused" && (shown?._tag !== "Ready" || !shown.rows.some(row => row._tag === "Scratch" && row.file === focused.file))) state = { ...state, row: { _tag: "None" } }
+  const record = state.rowRecord
+  if (record !== null && state.takes && (shown?._tag !== "Ready" || !shown.rows.some(row => rowKey(rowRef(shown.id, row)) === record.row))) state = { ...state, rowRecord: null }
   const parts = project.parts
   // A device the project does not list, for example one removed from vite.config, falls back to its first.
   if (state.device !== deviceOf(state).id) state = { ...state, device: deviceOf(state).id }

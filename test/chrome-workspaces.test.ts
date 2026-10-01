@@ -174,4 +174,89 @@ describe("workspaces in the app", () => {
     app.actions.onQuestions(false)
     expect(app.getSnapshot().tools.side).toBe("closed")
   })
+
+  test("New row writes a scratch row: the bar sends what you ask, and the new row is focused with its record open (slice 2)", async () => {
+    const { app, posts, serve } = harness([workspace({ question: "Can Settings open with the d-pad?", rows: [{ _tag: "State", part: home, state: "default" }], ideas: [idea("4")] })], {
+      "workspaces/1/rows/new": () => ({ row: "rows/1.part.tsx" }),
+    }, "#workspace=1")
+    app.actions.onRowNew(true)
+    let board = app.getSnapshot().workspace
+    expect(board).toMatchObject({ _tag: "Open", newRow: { _tag: "Enabled" }, bar: { mode: "NewRow", go: { label: "Write row", availability: { _tag: "Disabled" } } } })
+    app.actions.onPrompt("Home by d-pad. Check that A opens Settings.")
+    serve([workspace({
+      question: "Can Settings open with the d-pad?", ideas: [idea("4")],
+      rows: [{ _tag: "State", part: home, state: "default" }, { _tag: "Scratch", file: "rows/1.part.tsx", brief: "Home by d-pad. Check that A opens Settings." }],
+      scratch: [{ file: "rows/1.part.tsx", written: false, name: null, checks: [], problems: [], run: { _tag: "Running" }, log: [{ _tag: "User", text: "Home by d-pad. Check that A opens Settings." }] }],
+    })])
+    app.actions.onRowWrite()
+    await settle()
+    expect(posts().at(-1)).toEqual({ path: "workspaces/1/rows/new", body: { brief: "Home by d-pad. Check that A opens Settings.", device: "iphone-16" } })
+    board = app.getSnapshot().workspace
+    if (board._tag !== "Open") throw new Error("Expected the board")
+    const row = board.rows[1]
+    expect(row).toMatchObject({ part: "Home by d-pad. Check that A opens Settings.", state: "Scratch", scratch: { id: "rows/1.part.tsx", written: false, focused: true, run: { _tag: "Running" } }, open: true })
+    // While its agent writes, the row's cells wait.
+    expect(board.cells.filter(cell => cell.row === row?.key).every(cell => cell.frame === null)).toBe(true)
+    expect(board.bar).toMatchObject({ mode: "Row", prompt: "", row: { id: "rows/1.part.tsx", stop: { _tag: "Enabled" } } })
+    expect(board.record).toMatchObject({ _tag: "Open", file: ".caliper/workspaces/1/rows/1.part.tsx", brief: "Home by d-pad. Check that A opens Settings.", log: [{ _tag: "User", text: "Home by d-pad. Check that A opens Settings.", images: [] }] })
+    expect(app.getSnapshot().tools.side).toBe("record")
+    app.actions.onRowStop("rows/1.part.tsx")
+    await settle()
+    expect(posts().at(-1)?.path).toBe("workspaces/1/rows/1/stop")
+  })
+
+  test("a checked row shows a line under each cell on the board's device, and its record has each check per column (slice 2)", async () => {
+    const row = ".caliper/workspaces/1/rows/1.part.tsx"
+    const result = (status: "Passed" | "Failed") => [
+      { name: "A opens Settings", line: 62, status, detail: status === "Failed" ? "No control named Settings is reachable." : "", image: "a".repeat(24) },
+      { name: "B returns", line: 70, status: "Passed" as const, detail: "", image: null },
+    ]
+    const { app, posts } = harness([workspace({
+      question: "q", ideas: [idea("4"), idea("5")],
+      rows: [{ _tag: "Scratch", file: "rows/1.part.tsx", brief: "Home by d-pad." }],
+      scratch: [{ file: "rows/1.part.tsx", written: true, name: "Home by d-pad", checks: [{ name: "A opens Settings", line: 62 }, { name: "B returns", line: 70 }], problems: [], run: { _tag: "Idle" }, log: [] }],
+      checks: [
+        { row, state: "default", column: "today", device: "iphone-16", status: "Done", reason: "", stale: false, results: result("Failed") },
+        { row, state: "default", column: "4", device: "iphone-16", status: "Done", reason: "", stale: true, results: result("Passed") },
+        { row, state: "default", column: "5", device: "iphone-16", status: "Running", reason: "", stale: false, results: [] },
+        // Another device's result is not this board's.
+        { row, state: "default", column: "today", device: "pixel-9", status: "Done", reason: "", stale: false, results: result("Passed") },
+      ],
+    })], {}, "#workspace=1")
+    let board = app.getSnapshot().workspace
+    if (board._tag !== "Open") throw new Error("Expected the board")
+    expect(board.rows[0]).toMatchObject({ part: "Home by d-pad", checks: 2 })
+    expect(board.cells.map(cell => cell.checks)).toEqual([
+      { _tag: "Done", passed: 1, total: 2, stale: false },
+      { _tag: "Done", passed: 2, total: 2, stale: true },
+      { _tag: "Running" },
+    ])
+    expect(board.cells[0]?.frame?.src).toBe(`frame?${new URLSearchParams({ part: row, state: "default" })}`)
+    app.actions.onRowRecord(`${row}#default`, board.columns[1]!.key)
+    board = app.getSnapshot().workspace
+    if (board._tag !== "Open" || board.record._tag !== "Open") throw new Error("Expected the record")
+    expect(board.record.column).toBe(board.columns[1]!.key)
+    expect(board.record.columns.map(column => column.label)).toEqual(["Today", "4", "5"])
+    expect(board.record.checks[0]?.results.map(item => [item.status, item.detail, item.image])).toEqual([
+      ["Failed", "No control named Settings is reachable.", `workspaces/1/checks/${"a".repeat(24)}`],
+      ["Passed", "", `workspaces/1/checks/${"a".repeat(24)}`],
+      ["Running", "", null],
+    ])
+    expect(board.bar.mode).toBe("Row")
+    app.actions.onRowCheck(`${row}#default`)
+    await settle()
+    expect(posts().at(-1)).toEqual({ path: "workspaces/1/checks", body: { part: row, state: "default", device: "iphone-16" } })
+    // The questions take the side panel back; the bar leaves the row.
+    app.actions.onQuestions(true)
+    board = app.getSnapshot().workspace
+    expect(board._tag === "Open" && board.record._tag).toBe("Closed")
+    app.actions.onRowRecord(`${row}#default`)
+    app.actions.onPrompt("Rename it.")
+    app.actions.onRowWrite()
+    await settle()
+    expect(posts().at(-1)).toEqual({ path: "workspaces/1/rows/1/prompt", body: { prompt: "Rename it.", device: "iphone-16" } })
+    app.actions.onRowDelete("rows/1.part.tsx")
+    await settle()
+    expect(posts().at(-1)?.path).toBe("workspaces/1/rows/1/delete")
+  })
 })

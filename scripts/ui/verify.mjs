@@ -174,6 +174,44 @@ await gate("actions: workspace list, pin, idea, prompt, follow, questions, answe
     assert.deepEqual((await called(page, "onQuestions")).map(call => call.args[0]), [false])
   } finally { await close() }
 })
+await gate("actions: workspace rows: new row, check line, row record, column, check again, write, stop, delete (slice 2)", async () => {
+  const { page, close } = await open(desk, "workspaceRowBoard")
+  const row = ".caliper/workspaces/1/rows/1.part.tsx#default"
+  try {
+    // New row under the last row puts the bar in New row; its Cancel takes it out.
+    await page.locator(`.ws-rows ${cal("row-new")}`).click()
+    assert.deepEqual((await called(page, "onRowNew")).map(call => call.args[0]), [true])
+    assert.equal(await page.locator("form.ws-bar").getAttribute("data-mode"), "NewRow")
+    await page.locator(cal("prompt")).fill("Find by d-pad. Check that A opens Find.")
+    await page.locator(cal("row-write")).click()
+    assert.equal((await called(page, "onRowWrite")).length, 1)
+    await page.locator(`form.ws-bar ${cal("row-new")}`).click()
+    assert.deepEqual((await called(page, "onRowNew")).map(call => call.args[0]), [true, false])
+    // The line under a cell opens the row's record at that column.
+    await page.locator(`${cal("board-cell")}[data-column="idea:6"] ${cal("cell-checks")}`).click()
+    assert.deepEqual((await called(page, "onRowRecord")).at(-1)?.args, [row, "idea:6"])
+    assert.equal(await page.locator(cal("row-record")).count(), 0, "The board fixture keeps no record to open")
+  } finally { await close() }
+  const checked = await open(desk, "workspaceRowChecked")
+  try {
+    const { page } = checked
+    assert.equal(await page.locator(cal("row-record")).count(), 1)
+    await page.locator(".ws-rec__column", { hasText: "7" }).click()
+    assert.deepEqual((await called(page, "onRowRecord")).at(-1)?.args, [row, "idea:7"])
+    assert.equal(await page.locator(".ws-rec__column", { hasText: "7" }).getAttribute("aria-pressed"), "true")
+    await page.locator(cal("row-check")).click()
+    assert.deepEqual((await called(page, "onRowCheck")).map(call => call.args[0]), [row])
+    await page.locator(`${cal("row-record")} ${cal("row-delete")}`).click()
+    assert.deepEqual((await called(page, "onRowDelete")).map(call => call.args[0]), ["rows/1.part.tsx"])
+    await page.locator(cal("board-row")).click()
+    assert.deepEqual((await called(page, "onRowRecord")).at(-1)?.args, [null])
+  } finally { await checked.close() }
+  const writing = await open(desk, "workspaceRowWriting")
+  try {
+    await writing.page.locator(`form.ws-bar ${cal("take-stop")}`).click()
+    assert.deepEqual((await called(writing.page, "onRowStop")).map(call => call.args[0]), ["rows/1.part.tsx"])
+  } finally { await writing.close() }
+})
 await gate("actions: prompt, start, count, follow, attach, accept, discard, device, frame", async () => {
   const { page, close } = await open(desk, "takes")
   try {
