@@ -1047,3 +1047,42 @@ Costs:
   files each. All 12 cells rendered. Two cells, Find and Settings in the
   idea that added a drawer to Home only, dimmed as Same as Today. No agent
   asked a question. Pico's four takes of parts were not touched.
+
+**Slice 2: scratch rows that check.** Decided 2026-10-01. The user chose a
+**row agent** to write the shared scratch rows, over the planner (one model
+call that cannot render or run a check) and over rows you write by hand. The
+user then approved the slice 2 plan in `docs/plans/workspaces.md` and its
+mockup in `docs/design/mockups/workspaces-rows/`, with its six choices:
+
+- New row sits under the last row, at the end of the axis it extends. When
+  the board shows one row at a time, it ends the row picker.
+- A row with checks gets one line under every cell: a sign and "N of M checks
+  pass" in the colour of the result, or Checking, Waiting to check, Out of
+  date, Not checked or Could not check. `planBoard` counts its height.
+- The row's record takes the side panel, where the questions sit: what you
+  asked, the file, each check in one column at a time with its source line,
+  its failure text and the page at its end, and the agent's log.
+- A row's name, or the line under a cell, opens the record. A scratch row is
+  then focused, and the bar talks to its agent, with Stop and Delete row.
+- While its agent writes, the new row waits at the bottom of the board.
+- Discard keeps the rows, because they are the checks the answer relied on.
+  This changes step 6 of the plan's workflow.
+
+A scratch row is one file, `.caliper/workspaces/<id>/rows/<n>.part.tsx`, with
+one state, its default export, and an optional `checks` export. Caliper names
+the file when the row agent starts. The row agent writes only that file. Ideas
+read the rows and run their checks, and never write them. Board cells run only
+the authored checks, one column at a time.
+
+The spike, on a copy of korri with Pico's workspace 1: a row that composes the
+real `PicoSurface` with the portal's own input bus, keyboard adapter and
+spatial focus loads through the overlay and reaches HMR. Its two checks press
+only the arrow keys, Enter and Escape. Both fail in Today and pass in ideas 5,
+6 and 7, in 0.6 to 4.4 s each. A first version of one check failed two ideas
+because of its own word-boundary match, so the record shows each check's
+source line.
+
+Costs: a third kind of agent; about 20 s for a full pass of two checks in
+four columns on Pico; results that do not survive a restart; a defect in a
+check that looks like a failure of an idea; and a browser key press that is
+not gamepad input.
