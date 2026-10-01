@@ -1,6 +1,6 @@
 # Workspaces: a plan
 
-Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. [Slice 2](#slice-2-scratch-rows-that-check) is planned and drawn, not approved. Slices 3 and 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
+Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. [Slice 2](#slice-2-scratch-rows-that-check) is approved and being built. Slices 3 and 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
 
 ## Problem
 
@@ -22,6 +22,7 @@ Verified in the code:
 | 2026-10-01 | The workspace owns shared rows. An idea can add its own rows. | Shared rows only: an idea cannot show what only it makes. Idea rows only: there is no grid, so there is no clean comparison. |
 | 2026-10-01 | Slice 1 as written: state rows only, judged by looking. | Scratch rows and checks in slice 1: a bigger first slice that needs the workspace agent or rows written by hand. |
 | 2026-10-01 | The mockup in `docs/design/mockups/workspaces/` and its six choices, approved with "no notes". | |
+| 2026-10-01 | The slice 2 plan and its mockup in `docs/design/mockups/workspaces-rows/`, with its six choices, approved. | |
 | 2026-10-01 | A row agent writes the shared scratch rows (slice 2). You say what the row must show and check. The agent writes only that row's file, renders it in Today and runs its checks there. | The planner writes rows with the plan: one model call that cannot render or run a check, so a broken row reaches every idea. Only you write rows: no new agent, but the slowest path, and the code pane cannot write into `.caliper/`. |
 
 ## Terms
@@ -199,7 +200,7 @@ Limits for this example:
 
 ## Slice 2: scratch rows that check
 
-Status: draft, not approved. The mockup is in [`docs/design/mockups/workspaces-rows/`](../design/mockups/workspaces-rows/README.md).
+Status: approved on 2026-10-01, with its mockup in [`docs/design/mockups/workspaces-rows/`](../design/mockups/workspaces-rows/README.md). Recorded in decision 45 under "Slice 2".
 
 ### What you do
 
@@ -284,4 +285,4 @@ Test first, in a worktree. Land each step on `main` and deploy it.
 
 ## Next step
 
-The user reviews the slice 2 mockup. After approval, build slice 2 in the order above.
+Build slice 2 in the order above.

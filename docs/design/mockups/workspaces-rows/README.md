@@ -1,6 +1,6 @@
 # Workspaces, slice 2: high-fidelity mockup
 
-Status: draft, for review. The plan is [Slice 2 in `docs/plans/workspaces.md`](../../../plans/workspaces.md#slice-2-scratch-rows-that-check).
+Status: approved by the user on 2026-10-01, in decision 45 under "Slice 2". The plan is [Slice 2 in `docs/plans/workspaces.md`](../../../plans/workspaces.md#slice-2-scratch-rows-that-check).
 Slice 2 adds scratch rows that a row agent writes, and the results of their
 checks in every cell of the board.
 
