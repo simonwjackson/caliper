@@ -45,6 +45,13 @@ const noSkills = () => ({ skills: [], problems: [] })
 
 /** A run stops after this many model turns, so a confused agent cannot spend without end. */
 export const MAX_TURNS = 40
+/**
+ * An idea's run stops after this many turns. An idea starts from a question,
+ * not from one part, so its agent reads more of the project first: on Pico,
+ * three ideas each used all 40 turns, one of them reading 37 files and
+ * writing none.
+ */
+export const MAX_IDEA_TURNS = 80
 
 /**
  * Every take's agent in one dev server. Each take has its own agent, tools
@@ -446,6 +453,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       ...session.tools,
     ]
     const prompt = idea ? ideaSystemPrompt(take, idea.id, devices) : systemPrompt(take, devices)
+    const limit = idea ? MAX_IDEA_TURNS : MAX_TURNS
     let turns = 0
     const agent = new Agent({
       initialState: { systemPrompt: `${prompt}${skillPrompt(catalog)}`, model, thinkingLevel: reasoning, tools },
@@ -454,8 +462,8 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       toolExecution: "sequential",
       finishTurn: async ({ message }) => {
         turns += 1
-        if (turns < MAX_TURNS || message.stopReason !== "toolUse") return undefined
-        entry.log.push({ _tag: "Assistant", text: `Stopped after ${MAX_TURNS} turns. Send another prompt to go on.` })
+        if (turns < limit || message.stopReason !== "toolUse") return undefined
+        entry.log.push({ _tag: "Assistant", text: `Stopped after ${limit} turns. Send another prompt to go on.` })
         return { action: "end" }
       },
     })
@@ -684,7 +692,7 @@ Terms:
 Tools: read_file, list_files, edit_file and write_file work on project files as this idea sees them. render shows the idea in a headless browser and returns a verdict and screenshots. ask_question adds an open question to the workspace for the user.
 
 How to work:
-1. Read the files you need before you change them. Keep the project's structure, naming and CSS style.
+1. Your run stops after ${MAX_IDEA_TURNS} turns. Start from the rows' parts and the files they import; read only what your direction touches, and read several files in one turn when you can. Write your first change well before half the turns are gone. Keep the project's structure, naming and CSS style.
 2. Make the change your direction needs.
 3. Call render after each change. Before finishing, call render with rows:true to check every row of the board. Fix errors, and explain intentional Empty results or spill.
 4. When the question leaves a decision open that the user must make, or you find a problem the user must know about, call ask_question once for each. Ask only what the user must decide.

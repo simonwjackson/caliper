@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai"
-import { createTakeAgents } from "../src/agent/take-agents.js"
+import { createTakeAgents, MAX_IDEA_TURNS, MAX_TURNS } from "../src/agent/take-agents.js"
 import { planIdeaRenders } from "../src/agent/api.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { createWorkspaceStore } from "../src/takes/workspaces.js"
@@ -132,6 +132,25 @@ describe("an idea's agent", () => {
       }])
       await agents.follow(take, "Make the header quieter.")
       expect((await settled(take)).log.filter(entry => entry._tag === "User").map(entry => entry._tag === "User" && entry.text)).toEqual(["Can Settings open with the d-pad?", "Make the header quieter."])
+    })
+  })
+
+  test("an idea has a larger turn budget than a take, and its agent is told the budget", async () => {
+    await inFolder(async root => {
+      const { faux, workspace, agents, settled } = setup(root)
+      /** @type {any} */
+      let system = null
+      // A turn that only reads, again and again: the run stops at the idea's budget.
+      faux.setResponses(Array.from({ length: MAX_IDEA_TURNS + 5 }, (_, index) => context => {
+        if (index === 0) system = JSON.stringify(context)
+        return fauxAssistantMessage([fauxToolCall("read_file", { path: "src/home.css" })], { stopReason: "toolUse" })
+      }))
+      const take = await agents.start({ subject: { _tag: "Idea", workspace }, device: "rg353m", prompt: "q", direction })
+      const view = await settled(take)
+      expect(MAX_IDEA_TURNS).toBeGreaterThan(MAX_TURNS)
+      expect(view.log.filter(entry => entry._tag === "Tool")).toHaveLength(MAX_IDEA_TURNS)
+      expect(view.log.at(-1)).toEqual({ _tag: "Assistant", text: `Stopped after ${MAX_IDEA_TURNS} turns. Send another prompt to go on.` })
+      expect(system).toContain(`${MAX_IDEA_TURNS} turns`)
     })
   })
 

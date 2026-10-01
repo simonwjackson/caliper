@@ -1012,3 +1012,10 @@ Costs:
   idea's files declare, including a part the idea adds, and `rows: true`
   renders every row once. `ask_question` adds an open question to the
   workspace in the idea's name.
+- An idea's run stops after 80 turns, a take's after 40. On a copy of Pico,
+  with the question about Settings and two rows, the planner answered in 15 s
+  with three directions, one strange, and named the workspace. All three idea
+  agents then used their 40 turns: one read 37 files and wrote none, one wrote
+  9 files and never rendered. The idea's prompt now names the budget and asks
+  for a first change before half of it is gone. Cost: an idea can spend twice
+  a take's model calls.
