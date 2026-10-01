@@ -24,6 +24,9 @@ import { createMarkStore } from "../takes/marks.js"
 import { createWorkspaceStore } from "../takes/workspaces.js"
 import { ROW_PATH, rowPath, rowRef } from "../takes/workspace-contract.js"
 import { createRowAgents } from "./row-agents.js"
+import { createWorkspaceChecks } from "./workspace-checks.js"
+import { runAuthoredJobs } from "../authored/execute.js"
+import { settledCheckSource } from "../authored/source-client.js"
 import { createWorkspacesApi } from "./workspaces.js"
 import { Type } from "typebox"
 
@@ -181,7 +184,64 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     onChange,
     skills,
     devices: async signal => (await project(signal)).devices,
+    // Slice 2: an idea that stops is checked again in its column, and a new idea hears how Today did.
+    onIdle: take => boardChecks.ideaDone(take),
+    rowChecks: async workspace => todayChecks(workspace),
   })
+
+  // Workspaces slice 2: the authored checks of a board's rows, one column at a time.
+  const boardChecks = createWorkspaceChecks({
+    workspaces: workspaceStore,
+    ideas: () => agents.ideas(),
+    parts: async () => (await project()).parts,
+    onChange,
+    stamp: async take => {
+      const url = await serverUrl()
+      if (url === null) throw new Error("The dev server is not listening yet.")
+      const address = new URL("/__caliper/check-revision", url)
+      if (take !== null) address.searchParams.set("take", take)
+      const response = await fetch(address, { signal: AbortSignal.timeout(3000) })
+      if (!response.ok) throw new Error(`The source revision is unavailable: HTTP ${response.status}.`)
+      return response.json()
+    },
+    run: async ({ take, rows, device, signal }) => {
+      if (process.versions.bun) throw new Error("Board checks need the Caliper app to run under Node.")
+      const combined = AbortSignal.any([shutdown.signal, signal])
+      const original = await project(combined)
+      const viewed = { ...original, parts: [...take === null ? original.parts : await proposedParts(take), ...await workspaceStore.rowParts()] }
+      const on = device || original.devices[0]?.id || ""
+      const jobs = rows.flatMap(ref => {
+        const plan = planRenders(viewed, { part: ref.part, state: ref.state, devices: [on], ...(take === null ? {} : { take }) })
+        if (plan._tag === "Invalid") throw new Error(plan.reason)
+        return plan.jobs
+      })
+      if (!chromium) throw new Error(`Caliper cannot run checks. ${NO_CHROMIUM}`)
+      const url = await serverUrl(combined)
+      if (url === null) throw new Error("The dev server is not listening yet.")
+      const source = await settledCheckSource(url, take ?? undefined, combined)
+      const done = await trackRender(() => runAuthoredJobs({ url, jobs, out: join(renderDir, `board-${take ?? "today"}-${Date.now()}`), executablePath: chromium, source, signal: combined }))
+      return {
+        revision: { epoch: source.revision.epoch, generation: source.revision.generation },
+        rows: rows.map((ref, index) => ({ ref, failure: done.failure ?? null, checks: done.results[index]?.checks ?? [] })),
+      }
+    },
+  })
+
+  /**
+   * How the board's checks went in Today, in words, for the planner and a new idea's agent.
+   *
+   * @param {import("../types").Workspace} workspace
+   */
+  const todayChecks = async workspace => {
+    const today = (await boardChecks.cells(workspace)).filter(cell => cell.column === "today" && cell.status === "Done")
+    if (today.length === 0) return ""
+    const lines = today.map(cell => {
+      const passed = cell.results.filter(result => result.status === "Passed").length
+      const failed = cell.results.filter(result => result.status !== "Passed").map(result => `  - "${result.name}" ${result.status}${result.detail ? `: ${result.detail}` : ""}`)
+      return [`- ${cell.row}, on ${cell.device}: ${passed} of ${cell.results.length} checks pass${cell.stale ? " (out of date)" : ""}`, ...failed].join("\n")
+    })
+    return `How the rows' checks went in Today, the real files:\n${lines.join("\n")}`
+  }
 
   // Workspaces slice 2: each scratch row's agent renders its row in Today, with the row's checks.
   const rowAgents = createRowAgents({
@@ -190,6 +250,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     project,
     onChange,
     skills,
+    onDone: (workspace, file, device) => boardChecks.rowDone(workspace, file, device),
     renderRow: async (workspace, file, device, signal) => {
       const combined = AbortSignal.any([shutdown.signal, signal])
       const original = await project(combined)
@@ -208,6 +269,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     workspaces: workspaceStore,
     agents,
     rows: rowAgents,
+    checks: boardChecks,
     project,
     onChange,
     plan: async ({ workspace, count, device, images }) => {
@@ -231,6 +293,8 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
           context.push({ type: "text", text: `Caliper could not render ${row.part}, state "${row.state}": ${error instanceof Error ? error.message : String(error)}` })
         }
       }
+      const checked = await todayChecks(workspace)
+      if (checked) context.push({ type: "text", text: checked })
       return planIdeas({ engine: connected, question: workspace.question, count, rows: refs, device, context, images, skills: await skills() })
     },
   })
@@ -462,6 +526,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   // Vite must await this before declaring shutdown complete.
   const close = async () => {
     shutdown.abort(new Error("The Vite server is closing."))
+    boardChecks.close()
     await Promise.all([agents.close(), rowAgents.close(), Promise.allSettled([...rendering])])
   }
 

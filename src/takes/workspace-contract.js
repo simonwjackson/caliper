@@ -52,11 +52,12 @@ export const rowRef = (workspace, row) => row._tag === "State" ? { part: row.par
 /**
  * How one row's checks went in one column of the board (slice 2). `row` and
  * `state` are the row's part and state (`rowRef`); `column` is "today" or the
- * idea's take. `stale`: the row, the idea or the project changed after the
- * run. `image` is a key the workspace serves at `checks/<key>`.
+ * idea's take; `device` is where the checks ran. `stale`: the row, the idea or
+ * the project changed after the run. `image` is a key the workspace serves at
+ * `checks/<key>`.
  */
 export const CellCheckSchema = Type.Object({
-  row: Type.String(), state: Type.String(), column: Type.String(),
+  row: Type.String(), state: Type.String(), column: Type.String(), device: Type.String(),
   status: Type.Union([Type.Literal("Waiting"), Type.Literal("Running"), Type.Literal("Done"), Type.Literal("Unknown")]),
   reason: Type.String(), stale: Type.Boolean(),
   results: Type.Array(Type.Object({

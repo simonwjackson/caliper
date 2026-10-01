@@ -61,7 +61,7 @@ function setup(root) {
     },
     project: async () => ({ parts: [{ file: "src/Home.page.part.tsx", name: "Home", states: [{ export: "default", label: "Default" }] }], devices: [] }),
     onChange: () => { for (const resolve of waiting) { waiting.delete(resolve); resolve() } },
-    onDone: (id, file) => done.push({ workspace: id, file }),
+    onDone: (id, file) => { done.push({ workspace: id, file }) },
   })
   /** @param {string} file */
   const settled = async file => {

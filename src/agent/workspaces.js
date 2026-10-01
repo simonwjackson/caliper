@@ -3,7 +3,8 @@ import { Type } from "typebox"
 import { Check } from "typebox/value"
 import { json, MAX_BODY, readJson, refuse } from "../http.js"
 import { unknownDevice } from "../render/plan.js"
-import { MAX_TEXT, WORKSPACE_ID } from "../takes/workspace-contract.js"
+import { existsSync, readFileSync } from "node:fs"
+import { MAX_TEXT, WORKSPACE_ID, rowRef } from "../takes/workspace-contract.js"
 import { MAX_IMAGES_BODY, readImages } from "./images.js"
 
 /**
@@ -19,6 +20,8 @@ import { MAX_IMAGES_BODY, readImages } from "./images.js"
  *   POST workspaces/<id>/rows/<n>/prompt       { prompt, device }   a follow-up to the row's agent
  *   POST workspaces/<id>/rows/<n>/stop         {}
  *   POST workspaces/<id>/rows/<n>/delete       {}                  the row, its file and its agent go
+ *   POST workspaces/<id>/checks                { part, state, device }  Check again: one row in every idle column
+ *   GET  workspaces/<id>/checks/<key>          the page at the end of one check, as PNG
  *   POST workspaces/<id>/questions             { text }            an open question
  *   POST workspaces/<id>/questions/<q>/answer  { answer, reason }
  *   POST workspaces/<id>/plan                  { count, device, images? }  directions, and a name
@@ -51,6 +54,7 @@ const IdeaSchema = Type.Object({ device: Type.String({ minLength: 1 }), directio
 const PromptSchema = Type.Object({ prompt: words })
 const NewRowSchema = Type.Object({ brief: words, device: Type.String({ minLength: 1 }) })
 const RowPromptSchema = Type.Object({ prompt: words, device: Type.Optional(Type.String({ minLength: 1 })) })
+const CheckAgainSchema = Type.Object({ part: Type.String({ minLength: 1, maxLength: 1024 }), state: Type.String({ minLength: 1, maxLength: 256 }), device: Type.String({ minLength: 1 }) })
 
 /**
  * @param {{
@@ -59,12 +63,14 @@ const RowPromptSchema = Type.Object({ prompt: words, device: Type.Optional(Type.
  *   project: () => Promise<import("../types").Project>,
  *   plan: (input: { workspace: Workspace, count: number, device: string, images: import("./images.js").AttachedImage[] }) => Promise<import("../types").TakePlan & { name?: string }>,
  *   rows: Pick<ReturnType<typeof import("./row-agents.js").createRowAgents>, "start" | "follow" | "stop" | "remove" | "views">,
+ *   checks?: Pick<ReturnType<typeof import("./workspace-checks.js").createWorkspaceChecks>, "cells" | "checkRow" | "image">,
  *   onChange: () => void,
  * }} input
  *   `plan` asks the planner for one direction per idea, from the question and its rows.
- *   `rows` are the row agents, which write scratch rows (slice 2).
+ *   `rows` are the row agents, which write scratch rows; `checks` run the rows'
+ *   checks in each column (slice 2).
  */
-export function createWorkspacesApi({ workspaces, agents, project, plan, rows, onChange }) {
+export function createWorkspacesApi({ workspaces, agents, project, plan, rows, checks, onChange }) {
   /** @param {string} id */
   const ideasOf = async id => (await agents.ideas()).filter(idea => idea.workspace === id)
 
@@ -81,15 +87,15 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, rows, o
   /** @returns {Promise<WorkspaceView[]>} every workspace with its ideas */
   const views = async () => {
     const [listed, ideas, writers] = await Promise.all([workspaces.overview(), agents.ideas(), rows.views()])
-    return listed.map(/** @returns {WorkspaceView} */ entry => entry._tag === "Damaged" ? entry : {
+    return Promise.all(listed.map(/** @returns {Promise<WorkspaceView>} */ async entry => entry._tag === "Damaged" ? entry : {
       _tag: "Ready", ...entry.workspace,
       ideas: ideas.filter(idea => idea.workspace === entry.workspace.id).map(({ workspace: _workspace, ...idea }) => idea),
       scratch: entry.scratch.map(facts => {
         const writer = writers.find(view => view.workspace === entry.workspace.id && view.file === facts.file)
         return { ...facts, run: writer?.run ?? { _tag: /** @type {const} */ ("Idle") }, log: writer?.log ?? [] }
       }),
-      checks: [],
-    })
+      checks: checks ? await checks.cells(entry.workspace) : [],
+    }))
   }
 
   /**
@@ -128,6 +134,15 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, rows, o
    */
   const handle = async (path, request, response) => {
     if (path !== "/workspaces" && !path.startsWith("/workspaces/")) return false
+    // The page at the end of a check: the only read of a file here.
+    const image = /^\/workspaces\/[1-9]\d*\/checks\/([a-f0-9]{24})$/.exec(path)
+    if (image && request.method === "GET") {
+      const file = checks?.image(image[1] ?? "") ?? null
+      if (file === null || !existsSync(file)) { json(response, 404, { error: "That image is gone. Run the checks again." }); return true }
+      response.writeHead(200, { "content-type": "image/png", "cache-control": "no-store", "x-content-type-options": "nosniff" })
+      response.end(readFileSync(file))
+      return true
+    }
     const refusal = refuse(request)
     if (refusal !== null) {
       json(response, 403, { error: refusal })
@@ -191,6 +206,15 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, rows, o
           await rows.remove(id, file)
         }
         json(response, 200, { row: file })
+      } else if (action === "checks" && item === "") {
+        if (!Check(CheckAgainSchema, body)) throw new Error("Check again needs the row's part and state, and the device.")
+        const workspace = /** @type {Workspace} */ (await workspaces.read(id))
+        if (!workspace.rows.some(row => { const ref = rowRef(id, row); return ref.part === body.part && ref.state === body.state })) throw new Error(`Workspace ${id} has no row ${body.part}, "${body.state}".`)
+        if (!checks) throw new Error("This server cannot run a board's checks.")
+        const viewed = await project()
+        if (!viewed.devices.some(candidate => candidate.id === body.device)) throw new Error(unknownDevice(viewed, body.device))
+        checks.checkRow(id, { part: body.part, state: body.state }, body.device)
+        json(response, 202, { workspace: id })
       } else if (action === "questions" && item === "") {
         if (!Check(AskSchema, body)) throw new Error("Send the question as text.")
         const asked = await workspaces.ask(id, body.text, { _tag: "User" })

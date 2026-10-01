@@ -35,7 +35,8 @@ const chainKey = ({ take, created, chain }) => identityKey(chain ?? { take, crea
  * @typedef {import("./images.js").AttachedImage} AttachedImage
  * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
  * @typedef {ReturnType<typeof skillSession>} SkillSession
- * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string>, skills?: SkillSession }} Live
+ * @typedef {{ agent: Agent | null, run: TakeRun, log: TakeLogEntry[], edited: Set<string>, skills?: SkillSession, rows?: string[] }} Live
+ *   `rows` are the board's rows an idea's agent has heard of, so a row added later reaches it with the next prompt.
  *   `agent` is null until the first prompt creates it, and stays null when that fails.
  *   `edited` holds the files you changed by hand since the agent's last turn.
  *   `skills` is the agent's use of the skills; it exists once the agent does.
@@ -67,7 +68,12 @@ export const MAX_IDEA_TURNS = 80
  *   integration?: import("./host-types").AgentIntegration,
  *   workspaces?: import("./host-types").AgentWorkspaces,
  *   devices?: (signal?: AbortSignal) => readonly import("../client/device-frame.js").Device[] | Promise<readonly import("../client/device-frame.js").Device[]>,
+ *   onIdle?: (take: string) => void,
+ *   rowChecks?: (workspace: Workspace) => Promise<string>,
  * }} input
+ *   `onIdle` hears that a take's run ended, so a workspace can check an
+ *   idea's column (slice 2). `rowChecks` says how the workspace's checks went
+ *   in Today, for an idea's first message.
  *   `devices` is the project's device list, read when a take's agent starts;
  *   without it, the agent hears of the standard devices.
  *   `engine` is called when a take starts, so a missing connection fails that
@@ -75,7 +81,7 @@ export const MAX_IDEA_TURNS = 80
  *   is read when a take's agent starts, so a new or changed skill reaches the
  *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(/** @type {import("../takes/store.js").TakeStore} */ (store)), workspaces = createWorkspaceStore(store.root), devices = () => STANDARD_DEVICES }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(/** @type {import("../takes/store.js").TakeStore} */ (store)), workspaces = createWorkspaceStore(store.root), devices = () => STANDARD_DEVICES, onIdle = () => {}, rowChecks = async () => "" }) {
   /** The workspace an idea answers, as it is now. @param {{ subject: import("../takes/store.js").IdeaSubject }} idea @returns {Promise<Workspace>} */
   const workspaceOf = async idea => {
     const workspace = await workspaces.read(idea.subject.workspace)
@@ -130,6 +136,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
         pending.delete(take)
         controllers.delete(take)
       }
+      onIdle(take)
     })
   }
 
@@ -402,21 +409,22 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       const named = await namedSkills(entry, prompt)
       if (named.length > 0) onChange()
       const attached = imageContent(attachedImages, "this prompt")
+      const newRows = isIdea(record) ? rowNote(entry, await workspaceOf(record), first) : ""
       const content = first && brief
         ? [{ type: /** @type {const} */ ("text"), text: prompt }, ...attachedImages.map(image => ({ type: /** @type {const} */ ("image"), data: image.bytes.toString("base64"), mimeType: image.mimeType }))]
         : first
         ? [
           ...await (isIdea(record)
             ? ideaFirstMessage(record, await workspaceOf(record), `${named}${handNote(edited, true)}`, prompt, render, store, take,
-              async file => workspaces.readRow(record.subject.workspace, file))
+              async file => workspaces.readRow(record.subject.workspace, file), await rowChecks(await workspaceOf(record)).catch(() => ""))
             : firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take)),
           // A new agent in an old take, after a restart, has not seen the take's earlier images.
           ...imageContent(await earlierImages(store, take, attachedImages), "earlier prompts in this take"),
           ...attached,
         ]
         : attached.length > 0
-          ? [{ type: /** @type {const} */ ("text"), text: `${named}${handNote(edited, false)}${prompt}` }, ...attached]
-          : `${named}${handNote(edited, false)}${prompt}`
+          ? [{ type: /** @type {const} */ ("text"), text: `${named}${handNote(edited, false)}${newRows}${prompt}` }, ...attached]
+          : `${named}${handNote(edited, false)}${newRows}${prompt}`
       signal.throwIfAborted()
       if (live.get(take) !== entry) return
       await (typeof content === "string"
@@ -695,6 +703,7 @@ Terms:
 - A part is a file named *.part.tsx. Its default export and its other exported components are its states: example renders with realistic data.
 - An idea can reuse the project's parts, change them, or add new components, CSS and parts. Choose what the question needs. To show something new, you may add a part file and render it by name.
 - The board's rows are the test every idea is judged by. You cannot change which rows the board shows. Keep the real composition and fixture data of each row.
+- A scratch row is a file in the workspace's folder that a row agent wrote: a test bench for the question. Its checks send key presses and clicks as a person would, and the board shows under every cell how many pass. You can read a scratch row but never edit it. A check that fails in Today is often what the question asks you to fix: make it pass in your idea by changing the product, not the row.
 - Your writes are fenced to your idea's folder. Other ideas do not see your edits.
 - Devices: ${devices}. Every size you see is the device's CSS viewport.
 
@@ -703,9 +712,9 @@ Tools: read_file, list_files, edit_file and write_file work on project files as 
 How to work:
 1. Your run stops after ${MAX_IDEA_TURNS} turns. Start from the rows' parts and the files they import; read only what your direction touches, and read several files in one turn when you can. Write your first change well before half the turns are gone. Keep the project's structure, naming and CSS style.
 2. Make the change your direction needs.
-3. Call render after each change. Before finishing, call render with rows:true to check every row of the board. Fix errors, and explain intentional Empty results or spill.
+3. Call render after each change. Before finishing, call render with rows:true to check every row of the board, and with rows:true and checks:true when a row has checks, to run them in your idea. Fix errors, and explain intentional Empty results or spill.
 4. When the question leaves a decision open that the user must make, or you find a problem the user must know about, call ask_question once for each. Ask only what the user must decide.
-5. State what you checked and what remains unverified. Screenshots do not prove interactions such as key presses. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
+5. State what you checked and what remains unverified. Screenshots do not prove interactions such as key presses; a row's checks do, in a browser, and only what they assert. Then write two or three short sentences: what you changed, in which files, and anything you could not do.
 
 Do not ask questions in your reply; use ask_question. When something is unclear, make a sensible choice and say which one.`
 }
@@ -738,6 +747,25 @@ function directionText(ask, noun = "take") {
 }
 
 /**
+ * The rows added to the board since an idea's agent last heard of them, as a
+ * note before its next prompt (slice 2). The first prompt lists every row.
+ *
+ * @param {Live} entry
+ * @param {Workspace} workspace
+ * @param {boolean} first
+ */
+function rowNote(entry, workspace, first) {
+  const keys = workspace.rows.map(row => JSON.stringify(rowRef(workspace.id, row)))
+  const known = new Set(entry.rows ?? [])
+  entry.rows = keys
+  if (first) return ""
+  const added = workspace.rows.filter((_row, index) => !known.has(keys[index] ?? ""))
+  if (added.length === 0) return ""
+  const lines = added.map(row => row._tag === "State" ? `- the pinned state ${row.part}, "${row.state}"` : `- the scratch row ${rowPath(workspace.id, row.file)}: ${row.brief}`)
+  return `The board has new rows since your last prompt. Read them, and render with rows:true (and checks:true for a row with checks):\n${lines.join("\n")}\n\n`
+}
+
+/**
  * An idea's first message (decision 45): the workspace's question, the
  * idea's direction, the board's rows with the source of each row's part, and
  * how every row renders now.
@@ -750,9 +778,10 @@ function directionText(ask, noun = "take") {
  * @param {TakeStore} store
  * @param {string} take
  * @param {(file: string) => Promise<string | null>} rowSource a scratch row's file as it is now, or null before it is written
+ * @param {string} todayChecks how the rows' checks went in Today, or ""
  * @returns {Promise<Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>>}
  */
-async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, take, rowSource) {
+async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, take, rowSource, todayChecks) {
   const described = prompt.trim() === workspace.question.trim() ? "" : `\n\nThe user describes this idea: ${prompt}`
   const rows = workspace.rows.length ? workspace.rows.map(row => row._tag === "State" ? `- ${row.part}, state "${row.state}"`
     : `- the scratch row ${rowPath(workspace.id, row.file)}, which the workspace owns and you cannot edit. It was asked for as: ${row.brief}`).join("\n") : "- none yet"
@@ -768,7 +797,7 @@ async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, tak
   /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
   const content = [{
     type: "text",
-    text: `${lead}The workspace's question: ${workspace.question}${described}${directionText(ask, "idea")}\n\nThe board's rows. The user compares every idea on each of them, on ${ask.device}:\n${rows}\n\n${sources.join("\n\n")}`,
+    text: `${lead}The workspace's question: ${workspace.question}${described}${directionText(ask, "idea")}\n\nThe board's rows. The user compares every idea on each of them, on ${ask.device}:\n${rows}\n\n${sources.join("\n\n")}${todayChecks ? `\n\n${todayChecks}` : ""}`,
   }]
   const first = workspace.rows[0]
   if (first === undefined) return content

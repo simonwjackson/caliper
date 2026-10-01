@@ -41,7 +41,7 @@ const IMAGE_LIMIT = 4
  *   renderRow: (workspace: string, file: string, device: string, signal: AbortSignal) => Promise<RenderResult[]>,
  *   project: (signal?: AbortSignal) => Promise<Pick<import("../types").Project, "parts" | "devices">>,
  *   onChange: () => void,
- *   onDone?: (workspace: string, file: string) => void,
+ *   onDone?: (workspace: string, file: string, device: string) => void,
  *   skills?: () => import("./skills.js").SkillCatalog | Promise<import("./skills.js").SkillCatalog>,
  * }} input
  *   `renderRow` renders the row in Today and runs its checks. `onDone` hears
@@ -68,7 +68,7 @@ export function createRowAgents({ workspaces, engine, renderRow, project, onChan
     pending.set(key, task)
     void task.finally(() => {
       if (pending.get(key) === task) { pending.delete(key); controllers.delete(key) }
-      onDone(workspace, file)
+      if (live.has(key)) onDone(workspace, file, live.get(key)?.device ?? "")
     })
   }
 
@@ -112,9 +112,14 @@ export function createRowAgents({ workspaces, engine, renderRow, project, onChan
 
   /** Stop the row's agent, then take the row off the board and delete its file. @param {string} workspace @param {string} file */
   const remove = async (workspace, file) => {
-    await stop(workspace, file)
+    const key = keyOf(workspace, file)
+    const entry = live.get(key)
+    // Forget the row first, so its ending run checks nothing.
+    live.delete(key)
+    controllers.get(key)?.abort(new Error("The row was deleted."))
+    entry?.agent?.abort()
+    await pending.get(key)
     await workspaces.removeScratch(workspace, file)
-    live.delete(keyOf(workspace, file))
     onChange()
   }
 

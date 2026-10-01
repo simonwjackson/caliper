@@ -154,6 +154,33 @@ describe("an idea's agent", () => {
     })
   })
 
+  test("a scratch row added after an idea starts reaches its next prompt, and its render can run the rows' checks (slice 2)", async () => {
+    await inFolder(async root => {
+      const { faux, workspaces, workspace, agents, renders, settled } = setup(root)
+      /** @type {string[]} */
+      const prompts = []
+      const userText = (/** @type {any} */ context) => {
+        const last = context.messages.filter((/** @type {any} */ message) => message.role === "user").at(-1)
+        return typeof last?.content === "string" ? last.content : last?.content.filter((/** @type {any} */ block) => block.type === "text").map((/** @type {any} */ block) => block.text).join("\n")
+      }
+      faux.setResponses([
+        context => { prompts.push(userText(context)); return fauxAssistantMessage([fauxText("First pass.")]) },
+        context => { prompts.push(userText(context)); return fauxAssistantMessage([fauxToolCall("render", { rows: true, checks: true })], { stopReason: "toolUse" }) },
+        fauxAssistantMessage([fauxText("The checks run.")]),
+      ])
+      const take = await agents.start({ subject: { _tag: "Idea", workspace }, device: "rg353m", prompt: "q", direction })
+      await settled(take)
+      const { row } = workspaces.addScratch(workspace, "Home by d-pad. Check that A opens Settings.")
+      await agents.follow(take, "Go on.")
+      await settled(take)
+      expect(prompts[0]).not.toContain("new rows")
+      expect(prompts[1]).toContain("The board has new rows since your last prompt")
+      expect(prompts[1]).toContain(`.caliper/workspaces/${workspace}/${row.file}`)
+      expect(prompts[1]).toContain("Go on.")
+      expect(renders.at(-1)).toMatchObject({ take, related: true, checks: true })
+    })
+  })
+
   test("an idea cannot be accepted", async () => {
     await inFolder(async root => {
       const { faux, workspace, agents, settled } = setup(root)

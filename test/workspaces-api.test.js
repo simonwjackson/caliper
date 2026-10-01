@@ -72,6 +72,10 @@ describe("the workspaces API", () => {
         const missing = await post(url, `${base}/rows/7/${step}`, { prompt: "More", device })
         expect(missing.status).toBe(404)
       }
+      // Check again names a row of this workspace, and the image route serves only an image a check saved.
+      const notARow = await post(url, `${base}/checks`, { part: chip, state: "default", device })
+      expect((await notARow.json()).error).toContain("has no row")
+      expect((await get(`${base}/checks/${"a".repeat(24)}`)).status).toBe(404)
     })
   })
 
