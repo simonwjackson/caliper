@@ -121,12 +121,13 @@ export async function startCentral(options = {}) {
 
   const hosts = createAgentHosts({
     stateDir, agent: agentOption, env,
-    hostCall: async (id, target, method, args) => {
+    hostCall: async (id, target, method, args, signal) => {
       const entry = await routable(id)
       // The agent's worker asks where the project's server is now; it can restart on another port.
       if (target === "app" && method === "server") return entry === null ? { error: "The project's dev server is not running, or cannot be routed. Start it and try again." } : { value: { url: entry.url, base: entry.base } }
       if (entry === null) return { error: "The project's dev server is not running, or cannot be routed. Start it and try again." }
-      const response = await pluginFetch(entry, "host", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target, method, args }) })
+      signal.throwIfAborted()
+      const response = await pluginFetch(entry, "host", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target, method, args }), signal })
       const reply = /** @type {Record<string, unknown>} */ (await response.json().catch(() => ({ error: `The dev server answered ${response.status}.` })))
       if (!response.ok && reply.error === undefined) return { error: `The dev server answered ${response.status}.` }
       return reply

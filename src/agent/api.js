@@ -30,7 +30,7 @@ import { Type } from "typebox"
  * @typedef {import("../types").AgentStatus} AgentStatus
  * @typedef {import("../types").TakesSnapshot} TakesSnapshot
  * @typedef {import("./config.js").Connection} Connection
- * @typedef {import("../takes/store.js").TakeStore} TakeStore
+ * @typedef {import("./host-types").AgentStore} TakeStore
  * @typedef {import("./skills.js").SkillCatalog} SkillCatalog
  */
 
@@ -48,12 +48,12 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  *   store: TakeStore,
  *   status: AgentStatus,
  *   connection: Connection | null,
- *   project: () => Promise<Project>,
- *   serverUrl: () => string | null,
+ *   project: (signal?: AbortSignal) => Promise<Project>,
+ *   serverUrl: (signal?: AbortSignal) => string | null | Promise<string | null>,
  *   chromium: string | undefined,
  *   onChange: () => void,
  *   onMarks?: (draft: import("../takes/marks-contract.js").Draft) => void,
- *   skills?: () => SkillCatalog,
+ *   skills?: () => SkillCatalog | Promise<SkillCatalog>,
  *   host?: Host,
  * }} input
  *   `skills` finds the skills each new agent, the planner and the chrome see.
@@ -86,16 +86,16 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   }
 
   /** @param {string} take */
-  const proposedParts = take => discover(new Map(
-    store.files(take).filter(file => file.endsWith(PART_SUFFIX)).map(file => [file, store.read(take, file)]),
+  const proposedParts = async take => discover(new Map(
+    await Promise.all((await store.files(take)).filter(file => file.endsWith(PART_SUFFIX)).map(async file => /** @type {[string, string]} */ ([file, await store.read(take, file)]))),
   ))
 
   /** Both replacement and alternate proposals preserve their subject and context. @param {string} take */
-  const validateProposedContext = take => {
-    const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
-    const baseline = discover()
+  const validateProposedContext = async take => {
+    const record = /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take))
+    const baseline = await discover()
     validateTakeContext(baseline, record)
-    const proposed = proposedParts(take)
+    const proposed = await proposedParts(take)
     validateTakeContext(proposed, record)
     const existing = new Set(baseline.flatMap(part => part.compositionProblems ?? []))
     const problems = proposed.flatMap(part => part.compositionProblems ?? []).filter(problem => !existing.has(problem))
@@ -110,11 +110,11 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
    */
   const renderPart = async (part, { state, devices, take }) => {
     const original = await project()
-    const viewed = take === undefined ? original : { ...original, parts: proposedParts(take) }
+    const viewed = take === undefined ? original : { ...original, parts: await proposedParts(take) }
     const plan = planRenders(viewed, { part, state, devices, ...(take === undefined ? {} : { take }) })
     if (plan._tag === "Invalid") throw new Error(plan.reason)
     if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
-    const url = serverUrl()
+    const url = await serverUrl()
     if (url === null) throw new Error("The dev server is not listening yet.")
     return trackRender(() => renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium, signal: shutdown.signal }))
   }
@@ -124,14 +124,16 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     ...(host.integration ? { integration: host.integration } : {}),
     engine,
     renderFor: (take, ask) => async request => {
-      const original = await project()
-      validateTakeContext(original.parts, ask)
-      const viewed = { ...original, parts: proposedParts(take) }
-      const jobs = planTakeRenders(viewed, ask, request, take, Boolean(store.record(take)?.integration))
-      if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
-      const url = serverUrl()
-      if (url === null) throw new Error("The dev server is not listening yet.")
       const signal = request.signal ? AbortSignal.any([shutdown.signal, request.signal]) : shutdown.signal
+      signal.throwIfAborted()
+      const original = await project(signal)
+      validateTakeContext(original.parts, ask)
+      const viewed = { ...original, parts: await proposedParts(take) }
+      const jobs = planTakeRenders(viewed, ask, request, take, Boolean((await store.record(take))?.integration))
+      if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
+      const url = await serverUrl(signal)
+      signal.throwIfAborted()
+      if (url === null) throw new Error("The dev server is not listening yet.")
       const input = { url, jobs, out: join(renderDir, `take-${take}`), executablePath: chromium, signal }
       return trackRender(async () => {
         signal.throwIfAborted()
@@ -144,7 +146,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     },
     onChange,
     skills,
-    devices: async () => (await project()).devices,
+    devices: async signal => (await project(signal)).devices,
   })
 
   const markup = createMarkupApi({
@@ -157,7 +159,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
       const viewed = await project()
       const jobs = requested.map(job => withViewport(viewed, job))
       if (!chromium) throw new Error(`Caliper cannot draw marks on a render. ${NO_CHROMIUM}`)
-      const url = serverUrl()
+      const url = await serverUrl()
       if (url === null) throw new Error("The dev server is not listening yet.")
       return trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `marks-${Date.now()}`), executablePath: chromium, signal: shutdown.signal }))
     },
@@ -169,20 +171,19 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   const checking = new Set()
 
   /** @param {string} take */
-  const checkIntegration = async take => {
-    agents.assertIdle(take)
+  const checkIntegration = async take => agents.whileIdle(take, async () => {
     checking.add(take)
     onChange()
     try {
       return await agents.integration.check(take, async () => {
-        validateProposedContext(take)
+        await validateProposedContext(take)
         const original = await project()
-        const proposal = agents.integration.review(take).proposal
+        const proposal = (await agents.integration.review(take)).proposal
         if (original.parts.find(part => part.file === proposal.preview.part)?.states.some(state => state.export === proposal.preview.state)) {
           throw new Error("The alternate needs a new named state or part that opts into the new choice. Existing states must stay unchanged.")
         }
         if (!chromium) throw new Error(`Caliper cannot check an integration. ${NO_CHROMIUM}`)
-        const url = serverUrl()
+        const url = await serverUrl()
         if (!url) throw new Error("The dev server is not listening yet.")
         const jobs = original.parts.flatMap(part => part.states.flatMap(state => original.devices.map(device => withViewport(original, { part: part.file, state: state.export, device: device.id }))))
         const originals = () => trackRender(() => renderJobs({ url, jobs, out: join(renderDir, `check-${take}-original`), executablePath: chromium, signal: shutdown.signal }))
@@ -193,7 +194,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
       checking.delete(take)
       onChange()
     }
-  }
+  })
 
   /**
    * Ask the planner for different directions for one prompt. It sees the
@@ -210,9 +211,9 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     }
     const connected = engine()
     /** @type {import("./planner.js").Content[]} */
-    const context = [...new Set([ask.part, ask.context?.part].filter(file => file !== undefined))].map(file => ({
-      type: "text", text: `<file path="${file}">\n${readProjectFile(file)}\n</file>`,
-    }))
+    const context = await Promise.all([...new Set([ask.part, ask.context?.part].filter(file => file !== undefined))].map(async file => ({
+      type: /** @type {const} */ ("text"), text: `<file path="${file}">\n${await readProjectFile(file)}\n</file>`,
+    })))
     const preview = ask.context ?? ask
     try {
       const [result] = await renderPart(preview.part, { state: preview.state, devices: [ask.device] })
@@ -220,11 +221,14 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     } catch (error) {
       context.push({ type: "text", text: `Caliper could not render the part: ${error instanceof Error ? error.message : String(error)}` })
     }
-    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, images: ask.images, skills: skills(), ...(ask.context === undefined ? {} : { preview: ask.context }) })
+    return planDirections({ engine: connected, prompt: ask.prompt, count, part: ask.part, state: ask.state, device: ask.device, context, images: ask.images, skills: await skills(), ...(ask.context === undefined ? {} : { preview: ask.context }) })
   }
 
-  /** @returns {TakesSnapshot} */
-  const snapshot = () => ({ agent: status, skills: status._tag === "Ready" ? skillsStatus(skills()) : { skills: [], problems: [] }, takes: agents.views(), accepted: store.accepted() })
+  /** @returns {Promise<TakesSnapshot>} */
+  const snapshot = async () => (store.batch ?? (read => read()))(async () => ({
+    agent: status, skills: status._tag === "Ready" ? skillsStatus(await skills()) : { skills: [], problems: [] },
+    takes: await agents.views(), accepted: await store.accepted(),
+  }))
 
   /**
    * @param {string} path below `/__caliper`
@@ -235,13 +239,13 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   const handle = async (path, request, response) => {
     if (await markup.handle(path, request, response)) return true
     if (path === "/takes.json") {
-      json(response, 200, snapshot())
+      json(response, 200, await snapshot())
       return true
     }
     if (path !== "/takes" && !path.startsWith("/takes/")) return false
     const shown = /^\/takes\/([^/]+)\/images\/([^/]+)$/.exec(path)
     if (shown !== null && request.method === "GET") {
-      serveImage(shown[1] ?? "", shown[2] ?? "", response)
+      await serveImage(shown[1] ?? "", shown[2] ?? "", response)
       return true
     }
     const refusal = refuse(request)
@@ -256,7 +260,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
       shutdown.signal.throwIfAborted()
       if (path === "/takes") {
         const ask = await validAsk(body)
-        json(response, 201, { take: agents.start({ ...ask, ...validDirection(body) }) })
+        json(response, 201, { take: await agents.start({ ...ask, ...validDirection(body) }) })
         return true
       }
       if (path === "/takes/plan") {
@@ -264,38 +268,39 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
         return true
       }
       const [, , take = "", action = ""] = path.split("/")
-      if (!isTakeId(take) || store.record(take) === null) {
+      if (isTakeId(take) && action === "stop") await agents.stop(take)
+      if (!isTakeId(take) || await store.record(take) === null) {
         json(response, 404, { error: `Take ${take} does not exist.` })
         return true
       }
       if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
       if (action === "alternate") {
-        validateTakeContext(discover(), /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
-        json(response, 201, { take: agents.alternate(take) })
+        validateTakeContext(await discover(), /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take)))
+        json(response, 201, { take: await agents.alternate(take) })
       } else if (action === "review") {
         agents.assertIdle(take)
-        json(response, 200, agents.integration.review(take))
+        json(response, 200, await agents.integration.review(take))
       } else if (action === "check") {
         json(response, 200, await checkIntegration(take))
       } else if (action === "apply") {
         agents.assertIdle(take)
         if (!Check(applySchema, body)) throw new Error("Apply needs the reviewed revision and confirmation of product checks.")
-        validateProposedContext(take)
-        const files = agents.apply(take, body.revision, body.behaviorReviewed)
+        await validateProposedContext(take)
+        const files = await agents.apply(take, body.revision, body.behaviorReviewed)
         json(response, 200, { take, files })
       } else if (action === "file") {
         const { file, content } = validFile(body)
-        json(response, 200, { take, files: agents.editByHand(take, file, content) })
+        json(response, 200, { take, files: await agents.editByHand(take, file, content) })
       } else if (action === "prompt") {
-        validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take)))
-        agents.follow(take, validPrompt(body), readImages(body))
+        validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take)))
+        await agents.follow(take, validPrompt(body), readImages(body))
         json(response, 200, { take })
       } else if (action === "stop") {
         await agents.stop(take)
         json(response, 200, { take })
       } else if (action === "accept") {
-        validateProposedContext(take)
-        json(response, 200, { take, files: agents.accept(take) })
+        await validateProposedContext(take)
+        json(response, 200, { take, files: await agents.accept(take) })
       } else if (action === "discard") {
         await agents.discard(take)
         json(response, 200, { take })
@@ -326,8 +331,8 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
    * @param {string} file
    * @param {ServerResponse} response
    */
-  const serveImage = (take, file, response) => {
-    const kept = isTakeId(take) ? store.image(take, file) : null
+  const serveImage = async (take, file, response) => {
+    const kept = isTakeId(take) ? await store.image(take, file) : null
     if (kept === null) {
       json(response, 404, { error: `Take ${take} has no image "${file}".` })
       return
@@ -376,9 +381,9 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
    * @param {string} file
    * @param {string} content
    */
-  const editByHand = (take, file, content) => {
+  const editByHand = async (take, file, content) => {
     assertEditable(take)
-    agents.editByHand(take, file, content)
+    await agents.editByHand(take, file, content)
   }
 
   /** Refuse an edit by hand while the take's agent works or its integration is checked. @param {string} take */
@@ -399,10 +404,10 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
 
 /**
  * @typedef {{
- *   parts?: (overrides?: Map<string, string>) => import("../types").Part[],
- *   readFile?: (file: string) => string,
- *   marks?: import("../takes/marks.js").MarkStore,
- *   integration?: ReturnType<typeof import("../takes/integration.js").createIntegrationReview>,
+ *   parts?: (overrides?: Map<string, string>) => import("../types").Part[] | Promise<import("../types").Part[]>,
+ *   readFile?: (file: string) => string | Promise<string>,
+ *   marks?: import("./host-types").AgentMarks,
+ *   integration?: import("./host-types").AgentIntegration,
  *   baselines?: string,
  * }} Host
  */

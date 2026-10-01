@@ -13,6 +13,8 @@ The first public release.
 
 - Checks skip the generated `.direnv` cache instead of hashing linked Nix
   package trees, which could block the dev server and time out checks.
+- A slow project host call no longer blocks the take-agent worker. Stop can
+  abort a pending call without waiting for its 60-second timeout.
 
 ### Added
 

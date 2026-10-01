@@ -8,7 +8,7 @@ import { Type } from "typebox"
  * else: the take store fences every path.
  *
  * @typedef {import("@earendil-works/pi-agent-core").AgentTool<any>} AgentTool
- * @typedef {import("../takes/store.js").TakeStore} TakeStore
+ * @typedef {import("./host-types").AgentStore} TakeStore
  * @typedef {import("../render/render.js").RenderResult} RenderResult
  * @typedef {(request: { state: string, devices: string[], part?: string, related?: boolean, checks?: boolean, signal?: AbortSignal }) => Promise<RenderResult[]>} RenderTake
  *   Renders the chosen preview by default. `part` selects the subject or a declared related
@@ -35,13 +35,14 @@ export function takeTools({ store, take, render, defaults }) {
    * Planner choice 13: takes this take's notes point to ("use 2A here") can be
    * read, never written. They come from the take's record, so they survive a restart.
    */
-  const readable = () => (store.record(take)?.references ?? []).map(reference => reference.source).filter(source => source.take !== "0")
-  /** @param {string | undefined} other @returns {string} the take whose view to read */
-  const readAs = other => {
+  const readable = async () => ((await store.record(take))?.references ?? []).map(reference => reference.source).filter(source => source.take !== "0")
+  /** @param {string | undefined} other @returns {Promise<string>} the take whose view to read */
+  const readAs = async other => {
     if (other === undefined || other === take) return take
-    const source = readable().find(item => item.take === other)
-    if (!source) throw new Error(`Take ${other} is not one your marks point to. You can read ${readable().map(item => `take ${item.take}`).join(", ") || "no other take"}.`)
-    if (store.record(other)?.created !== source.created) throw new Error(`Take ${other} is gone, or is no longer the take the note pointed to.`)
+    const references = await readable()
+    const source = references.find(item => item.take === other)
+    if (!source) throw new Error(`Take ${other} is not one your marks point to. You can read ${references.map(item => `take ${item.take}`).join(", ") || "no other take"}.`)
+    if ((await store.record(other))?.created !== source.created) throw new Error(`Take ${other} is gone, or is no longer the take the note pointed to.`)
     return other
   }
   const otherTake = Type.Optional(Type.String({ description: "Only for a take your marks point to (see the brief): read that take's copy instead of yours. You can never write there." }))
@@ -52,9 +53,11 @@ export function takeTools({ store, take, render, defaults }) {
     label: "Read",
     description: "Read a project file as this take sees it: the take's edited copy when there is one, else the real file. Paths are relative to the project root.",
     parameters: Type.Object({ path: Type.String({ description: "Path relative to the project root, for example src/ui/Button.tsx" }), take: otherTake }),
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { path, take: other } = /** @type {{ path: string, take?: string }} */ (params)
-      const content = store.read(readAs(other), path)
+      const content = await store.read(await readAs(other), path)
+      signal?.throwIfAborted()
       const clipped = content.length > READ_LIMIT ? `${content.slice(0, READ_LIMIT)}\n[... clipped at ${READ_LIMIT} characters]` : content
       return { content: [text(clipped)], details: { path, ...(other === undefined ? {} : { take: other }) } }
     },
@@ -66,9 +69,11 @@ export function takeTools({ store, take, render, defaults }) {
     label: "List",
     description: "List the project's files under a folder, including files this take adds. node_modules, .git and environment files are not listed.",
     parameters: Type.Object({ folder: Type.Optional(Type.String({ description: 'Folder relative to the project root. Default: "" (the whole project)' })), take: otherTake }),
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { folder, take: other } = /** @type {{ folder?: string, take?: string }} */ (params)
-      const found = store.listFiles(readAs(other), folder ?? "")
+      const found = await store.listFiles(await readAs(other), folder ?? "")
+      signal?.throwIfAborted()
       const shown = found.slice(0, LIST_LIMIT)
       const more = found.length > shown.length ? `\n[... ${found.length - shown.length} more. List a smaller folder.]` : ""
       return { content: [text(`${shown.join("\n")}${more}` || "No files.")], details: { folder: folder ?? "", count: found.length } }
@@ -85,9 +90,10 @@ export function takeTools({ store, take, render, defaults }) {
       content: Type.String({ description: "The complete new content of the file" }),
     }),
     executionMode: "sequential",
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { path, content } = /** @type {{ path: string, content: string }} */ (params)
-      const file = store.write(take, path, content)
+      const file = await store.write(take, path, content)
       return { content: [text(`Wrote ${file} in take ${take}.`)], details: { path: file } }
     },
   }
@@ -103,16 +109,18 @@ export function takeTools({ store, take, render, defaults }) {
       new_text: Type.String({ description: "The replacement text" }),
     }),
     executionMode: "sequential",
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { path, old_text: oldText, new_text: newText } = /** @type {{ path: string, old_text: string, new_text: string }} */ (params)
-      const current = store.read(take, path)
+      const current = await store.read(take, path)
+      signal?.throwIfAborted()
       const count = oldText === "" ? 0 : current.split(oldText).length - 1
       if (count !== 1) {
         throw new Error(count === 0
           ? `old_text does not appear in ${path}. Read the file again and copy the text exactly.`
           : `old_text appears ${count} times in ${path}. Add more lines around it so it appears once.`)
       }
-      const file = store.write(take, path, current.replace(oldText, () => newText))
+      const file = await store.write(take, path, current.replace(oldText, () => newText))
       return { content: [text(`Edited ${file} in take ${take}.`)], details: { path: file } }
     },
   }

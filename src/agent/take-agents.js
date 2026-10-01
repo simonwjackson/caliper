@@ -1,10 +1,11 @@
 // @ts-check
 import { readFileSync } from "node:fs"
+import { AsyncLocalStorage } from "node:async_hooks"
 import { Agent } from "@earendil-works/pi-agent-core"
 import { STANDARD_DEVICES } from "../client/device-frame.js"
 import { takeTools } from "./tools.js"
 import { metadataTools } from "./metadata-tools.js"
-import { createIntegrationReview } from "../takes/integration.js"
+import { createIntegrationReview, integrationSummary } from "../takes/integration.js"
 import { skillPrompt, skillSession } from "./skills.js"
 import { imageContent } from "./images.js"
 import { identityKey } from "../takes/chains.js"
@@ -18,7 +19,7 @@ const chainKey = ({ take, created, chain }) => identityKey(chain ?? { take, crea
 /**
  * @typedef {import("./model.js").Engine} Engine
  * @typedef {import("./tools.js").RenderTake} RenderTake
- * @typedef {import("../takes/store.js").TakeStore} TakeStore
+ * @typedef {import("./host-types").AgentStore} TakeStore
  * @typedef {import("../types").TakeView} TakeView
  * @typedef {import("../types").TakeRun} TakeRun
  * @typedef {import("../types").TakeLogEntry} TakeLogEntry
@@ -45,13 +46,13 @@ export const MAX_TURNS = 40
  * and conversation; they run at the same time without sharing state.
  *
  * @param {{
- *   store: TakeStore & { batch?: <T>(read: () => T) => T },
+ *   store: TakeStore,
  *   engine: () => Engine,
  *   renderFor: (take: string, ask: TakeAsk) => RenderTake,
  *   onChange: () => void,
- *   skills?: () => SkillCatalog,
- *   integration?: ReturnType<typeof createIntegrationReview>,
- *   devices?: () => readonly import("../client/device-frame.js").Device[] | Promise<readonly import("../client/device-frame.js").Device[]>,
+ *   skills?: () => SkillCatalog | Promise<SkillCatalog>,
+ *   integration?: import("./host-types").AgentIntegration,
+ *   devices?: (signal?: AbortSignal) => readonly import("../client/device-frame.js").Device[] | Promise<readonly import("../client/device-frame.js").Device[]>,
  * }} input
  *   `devices` is the project's device list, read when a take's agent starts;
  *   without it, the agent hears of the standard devices.
@@ -60,13 +61,34 @@ export const MAX_TURNS = 40
  *   is read when a take's agent starts, so a new or changed skill reaches the
  *   next agent without a restart.
  */
-export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(store), devices = () => STANDARD_DEVICES }) {
+export function createTakeAgents({ store, engine, renderFor, onChange, skills = noSkills, integration = createIntegrationReview(/** @type {import("../takes/store.js").TakeStore} */ (store)), devices = () => STANDARD_DEVICES }) {
   /** @type {Map<string, Live>} */
   const live = new Map()
   /** @type {Map<string, AbortController>} */
   const controllers = new Map()
   /** @type {Map<string, Promise<void>>} */
   const pending = new Map()
+  /** Reservations keep idle mutations exclusive across remote awaits. Stop never waits for one. */
+  /** @type {Set<string>} */
+  const changing = new Set()
+  /** Takes prepared by Send remain reserved until launch or rollback. */
+  /** @type {Map<string, number>} */
+  const prepared = new Map()
+  // Membership and allocation must stay exclusive until their remote reply.
+  // Per-take reservations alone cannot protect an ID we have not received yet.
+  /** @type {AsyncLocalStorage<boolean>} */
+  const collectionScope = new AsyncLocalStorage()
+  let collectionBusy = false
+  let collectionTail = Promise.resolve()
+  /** @template T @param {() => Promise<T>} run @returns {Promise<T>} */
+  const whileCollection = run => {
+    const task = collectionTail.then(() => collectionScope.run(true, async () => {
+      collectionBusy = true
+      try { return await run() } finally { collectionBusy = false }
+    }))
+    collectionTail = task.then(() => {}, () => {})
+    return task
+  }
   let closed = false
   const assertOpen = () => { if (closed) throw new Error("The takes API is closed.") }
 
@@ -77,11 +99,11 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {boolean} [brief] the prompt is a markup brief: it replaces the first message, and the images are its pictures
    */
   const launch = (take, prompt, images = [], brief = false) => {
-    // Keep the images before the run starts, so the take shows them even if the model fails.
-    const attached = store.addImages(take, images).map((kept, index) => ({ ...kept, bytes: /** @type {AttachedImage} */ (images[index]).bytes }))
+    assertOpen()
     const controller = new AbortController()
     controllers.set(take, controller)
-    const task = send(take, prompt, attached, controller.signal, brief)
+    const run = () => send(take, prompt, images, controller.signal, brief)
+    const task = store.withSignal ? store.withSignal(controller.signal, run) : run()
     pending.set(take, task)
     void task.finally(() => {
       if (pending.get(take) === task) {
@@ -95,14 +117,15 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * Start a new take of a part and give its agent the first prompt.
    *
    * @param {TakeAsk & { prompt: string, images?: readonly AttachedImage[] }} input
-   * @returns {string} the take number
+   * @returns {Promise<string>} the take number
    */
-  const start = ({ prompt, images = [], ...ask }) => {
+  const start = async ({ prompt, images = [], ...ask }) => whileCollection(async () => {
     assertOpen()
-    const take = store.create({ ...ask, prompt, ...(ask.direction ? { name: ask.direction.title } : {}) })
+    const take = await store.create({ ...ask, prompt, ...(ask.direction ? { name: ask.direction.title } : {}) })
+    if (closed) { await store.discard(take); assertOpen() }
     launch(take, prompt, images)
     return take
-  }
+  })
 
   /**
    * Start a take made from marks: a copy of its parent, whose agent gets the
@@ -111,33 +134,55 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    *
    * @param {string} parent
    * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
-   * @returns {string} the take number
+   * @returns {Promise<string>} the take number
    */
-  const fork = (parent, record) => {
-    assertOpen()
-    assertIdle(parent)
-    return store.fork(parent, record)
-  }
+  const fork = async (parent, record) => whileCollection(async () => {
+    return whileIdle(parent, async () => {
+      assertOpen()
+      return holdPrepared(await store.fork(parent, record))
+    })
+  })
 
   /**
    * Start a take made from marks on the original: a new take of the real files.
    * Its agent is started with `startMarkup`.
    *
    * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
-   * @returns {string} the take number
+   * @returns {Promise<string>} the take number
    */
-  const create = record => {
+  const create = async record => whileCollection(async () => {
     assertOpen()
-    return store.create(record)
+    return holdPrepared(await store.create(record))
+  })
+
+  /** @param {string} take */
+  const holdPrepared = async take => {
+    changing.add(take)
+    try {
+      const record = await store.record(take)
+      if (record === null) throw new Error(`Take ${take} does not exist.`)
+      prepared.set(take, record.created)
+      return take
+    } catch (error) { changing.delete(take); throw error }
   }
+
+  /** Roll back only the reserved child's identity, never a reused number. @param {string} take */
+  const discardPrepared = async take => whileCollection(async () => {
+    try {
+      if ((await store.record(take))?.created === prepared.get(take)) await store.discard(take)
+    } finally { prepared.delete(take); changing.delete(take) }
+  })
 
   /**
    * @param {string} take a take `fork` or `create` made
    * @param {string} brief
    * @param {readonly AttachedImage[]} pictures
    */
-  const startMarkup = (take, brief, pictures) => {
+  const startMarkup = async (take, brief, pictures) => {
     assertOpen()
+    if (!prepared.has(take) || (await store.record(take))?.created !== prepared.get(take)) throw new Error(`Take ${take} is no longer the prepared take.`)
+    prepared.delete(take)
+    changing.delete(take)
     launch(take, brief, pictures, true)
   }
 
@@ -149,11 +194,13 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {string} prompt
    * @param {readonly AttachedImage[]} [images]
    */
-  const follow = (take, prompt, images = []) => {
-    assertOpen()
-    if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
-    if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
-    launch(take, prompt, images)
+  const follow = async (take, prompt, images = []) => {
+    return whileIdle(take, async () => {
+      assertOpen()
+      if (await store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
+      if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
+      launch(take, prompt, images)
+    })
   }
 
   /**
@@ -164,15 +211,17 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {string} take
    * @param {string} file root-relative
    * @param {string} content
-   * @returns {string[]} the files the take changes now
+   * @returns {Promise<string[]>} the files the take changes now
    */
-  const editByHand = (take, file, content) => {
-    if (store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
-    const entry = live.get(take) ?? { agent: null, run: { _tag: "Idle" }, log: [], edited: new Set() }
-    if (entry.run._tag === "Running") throw new Error(`Take ${take}'s agent is working. Stop it before you edit by hand.`)
-    const inside = content === store.original(file) ? (store.reset(take, file), file) : store.write(take, file, content)
-    noteHandEdit(take, inside)
-    return store.files(take)
+  const editByHand = async (take, file, content) => {
+    if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take}'s agent is working. Stop it before you edit by hand.`)
+    return whileIdle(take, async () => {
+      if (await store.record(take) === null) throw new Error(`Take ${take} does not exist.`)
+      const original = await store.original(file)
+      const inside = content === original ? (await store.reset(take, file), file) : await store.write(take, file, content)
+      noteHandEdit(take, inside)
+      return store.files(take)
+    })
   }
 
   /**
@@ -205,80 +254,93 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   }
 
   /** @param {string} take */
-  const accept = take => {
+  const accept = async take => whileCollection(async () => {
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it before you accept it.`)
-    const accepting = store.record(take)
-    if (accepting?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
-    // Plan decision 12: accept removes the accepted take's whole chain. Check every member before the first write.
-    const chain = accepting ? chainKey({ take, created: accepting.created, chain: accepting.chain }) : null
-    const members = store.list().filter(other => {
-      const record = other === take ? null : store.record(other)
-      return record !== null && chainKey({ take: other, created: record.created, chain: record.chain }) === chain
+    return whileIdle(take, async () => {
+      const accepting = await store.record(take)
+      if (accepting?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
+      // Plan decision 12: accept removes the accepted take's whole chain. Check every member before the first write.
+      const chain = accepting ? chainKey({ take, created: accepting.created, chain: accepting.chain }) : null
+      const members = (await Promise.all((await store.list()).map(async other => {
+        const record = other === take ? null : await store.record(other)
+        return record !== null && chainKey({ take: other, created: record.created, chain: record.chain }) === chain ? other : null
+      }))).filter(other => other !== null)
+      const running = members.find(other => live.get(other)?.run._tag === "Running")
+      if (running) throw new Error(`Take ${running} of this chain is still working. Stop it before you accept take ${take}.`)
+      for (const other of members) assertIdle(other)
+      for (const other of members) changing.add(other)
+      try {
+        const changed = await store.accept(take)
+        live.delete(take)
+        for (const other of members) {
+          await store.discard(other)
+          live.delete(other)
+        }
+        onChange()
+        return changed
+      } finally { for (const other of members) changing.delete(other) }
     })
-    const running = members.find(other => live.get(other)?.run._tag === "Running")
-    if (running) throw new Error(`Take ${running} of this chain is still working. Stop it before you accept take ${take}.`)
-    const changed = store.accept(take)
-    live.delete(take)
-    for (const other of members) {
-      live.delete(other)
-      store.discard(other)
-    }
-    onChange()
-    return changed
-  }
+  })
 
-  /** @param {string} take @returns {void | Promise<void>} */
-  const discard = take => {
+  /** @param {string} take @returns {Promise<void>} */
+  const discard = async take => {
     if (live.get(take)?.run._tag === "Running") return stop(take).then(() => discard(take))
-    live.delete(take)
-    store.discard(take)
-    onChange()
+    return whileCollection(() => whileIdle(take, async () => {
+      await store.discard(take)
+      live.delete(take)
+      onChange()
+    }))
   }
 
-  /** @returns {TakeView[]} */
-  const views = () => (store.batch ?? (read => read()))(() => store.list().flatMap(take => {
-    const record = store.record(take)
-    if (record === null) return []
-    const state = live.get(take)
-    return [{
-      take,
-      part: record.part,
-      state: record.state,
-      device: record.device,
-      created: record.created,
-      ...(record.context === undefined ? {} : { context: record.context }),
-      ...(record.direction === undefined ? {} : { direction: record.direction }),
-      ...(record.name ? { name: record.name } : {}),
-      ...(!record.name && !record.direction && state?.run._tag !== "Running" ? { nameIssue: "No generated name. Ask the agent to name this take." } : {}),
-      ...(record.integration ? { integration: integration.summary(take) } : {}),
-      ...(record.parent ? { parent: record.parent } : {}),
-      ...(record.chain ? { chain: record.chain } : {}),
-      ...(record.history ? { lineage: record.history.lineage } : {}),
-      run: state?.run ?? { _tag: "Idle" },
-      files: store.files(take),
-      images: record.images ?? [],
-      log: state?.log ?? [],
-    }]
-  }))
+  /** @returns {Promise<TakeView[]>} */
+  const views = async () => (store.batch ?? (read => read()))(async () => {
+    const entries = await Promise.all((await store.list()).map(async take => {
+      const record = await store.record(take)
+      if (record === null) return []
+      const state = live.get(take)
+      return [{
+        take, part: record.part, state: record.state, device: record.device, created: record.created,
+        ...(record.context === undefined ? {} : { context: record.context }),
+        ...(record.direction === undefined ? {} : { direction: record.direction }),
+        ...(record.name ? { name: record.name } : {}),
+        ...(!record.name && !record.direction && state?.run._tag !== "Running" ? { nameIssue: "No generated name. Ask the agent to name this take." } : {}),
+        ...(record.integration ? { integration: integrationSummary(record.integration) } : {}),
+        ...(record.parent ? { parent: record.parent } : {}),
+        ...(record.chain ? { chain: record.chain } : {}),
+        ...(record.history ? { lineage: record.history.lineage } : {}),
+        run: state?.run ?? { _tag: "Idle" },
+        files: await store.files(take), images: record.images ?? [], log: state?.log ?? [],
+      }]
+    }))
+    return entries.flat()
+  })
 
   /**
    * @param {string} take
    * @param {string} prompt
-   * @param {ReadonlyArray<AttachedImage & { file: string }>} images attached to this prompt, already kept
+   * @param {readonly AttachedImage[]} images attached to this prompt
    * @param {AbortSignal} signal
    * @param {boolean} brief
    */
   const send = async (take, prompt, images, signal, brief) => {
-    const record = /** @type {import("../takes/store.js").TakeRecord} */ (store.record(take))
     /** @type {Live} */
     const entry = live.get(take) ?? { agent: null, run: { _tag: "Running" }, log: [], edited: new Set() }
     entry.run = { _tag: "Running" }
-    entry.log.push({ _tag: "User", text: prompt, ...(images.length ? { images: images.map(image => image.file) } : {}) })
+    const user = { _tag: /** @type {const} */ ("User"), text: prompt }
+    entry.log.push(user)
     live.set(take, entry)
     onChange()
     const edited = [...entry.edited]
     entry.edited.clear()
     try {
+      signal.throwIfAborted()
+      const kept = await store.addImages(take, images)
+      const attachedImages = kept.map((image, index) => ({ ...image, bytes: /** @type {AttachedImage} */ (images[index]).bytes }))
+      const userIndex = entry.log.indexOf(user)
+      entry.log[userIndex] = { ...user, ...(kept.length ? { images: kept.map(image => image.file) } : {}) }
+      const record = await store.record(take)
+      if (record === null) throw new Error(`Take ${take} does not exist.`)
+      signal.throwIfAborted()
       const renderTake = renderFor(take, record)
       /** @type {RenderTake} */
       const render = request => {
@@ -291,19 +353,19 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       }
       const first = entry.agent === null
       // A list the caller already holds starts the agent without waiting a turn.
-      const listed = entry.agent === null ? devices() : []
-      const agent = entry.agent ?? createAgent(take, record, render, entry, Array.isArray(listed) ? listed : await listed)
+      const listed = entry.agent === null ? devices(signal) : []
+      const agent = entry.agent ?? await createAgent(take, record, render, entry, Array.isArray(listed) ? listed : await listed)
       entry.agent = agent
-      const named = namedSkills(entry, prompt)
+      const named = await namedSkills(entry, prompt)
       if (named.length > 0) onChange()
-      const attached = imageContent(images, "this prompt")
+      const attached = imageContent(attachedImages, "this prompt")
       const content = first && brief
-        ? [{ type: /** @type {const} */ ("text"), text: prompt }, ...images.map(image => ({ type: /** @type {const} */ ("image"), data: image.bytes.toString("base64"), mimeType: image.mimeType }))]
+        ? [{ type: /** @type {const} */ ("text"), text: prompt }, ...attachedImages.map(image => ({ type: /** @type {const} */ ("image"), data: image.bytes.toString("base64"), mimeType: image.mimeType }))]
         : first
         ? [
           ...await firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take),
           // A new agent in an old take, after a restart, has not seen the take's earlier images.
-          ...imageContent(earlierImages(store, take, images), "earlier prompts in this take"),
+          ...imageContent(await earlierImages(store, take, attachedImages), "earlier prompts in this take"),
           ...attached,
         ]
         : attached.length > 0
@@ -334,15 +396,15 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * @param {Live} entry
    * @param {readonly import("../client/device-frame.js").Device[]} devices the project's
    */
-  const createAgent = (take, ask, render, entry, devices) => {
+  const createAgent = async (take, ask, render, entry, devices) => {
     const { models, model, reasoning } = engine()
     const preview = ask.context ?? ask
-    const catalog = skills()
+    const catalog = await skills()
     const session = skillSession(catalog)
     entry.skills = session
     const tools = [
       ...takeTools({ store, take, render, defaults: { part: preview.part, state: preview.state, device: ask.device } }),
-      ...metadataTools({ store, take, onChange, integration }),
+      ...await metadataTools({ store, take, onChange, integration }),
       ...session.tools,
     ]
     let turns = 0
@@ -367,28 +429,40 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
 
   /** @param {string} take */
   const assertIdle = take => {
+    if (collectionBusy && !collectionScope.getStore()) throw new Error("Take storage is being changed. Wait for it to finish.")
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it first, or wait.`)
+    if (changing.has(take)) throw new Error(`Take ${take} is being changed. Wait for it to finish.`)
+  }
+
+  /** @template T @param {string} take @param {() => Promise<T>} run */
+  const whileIdle = async (take, run) => {
+    assertIdle(take)
+    changing.add(take)
+    try { return await run() } finally { changing.delete(take) }
   }
 
   /** Prepare separately so the original experiment remains available for replacement. @param {string} source */
-  const alternate = source => {
-    assertOpen()
-    assertIdle(source)
-    const take = integration.begin(source)
-    launch(take, INTEGRATION_PROMPT)
-    return take
-  }
+  const alternate = async source => whileCollection(async () => {
+    return whileIdle(source, async () => {
+      assertOpen()
+      const take = await integration.begin(source)
+      if (closed) { await store.discard(take); assertOpen() }
+      launch(take, INTEGRATION_PROMPT)
+      return take
+    })
+  })
 
   /** @param {string} take @param {string} revision @param {boolean} behaviorReviewed */
-  const apply = (take, revision, behaviorReviewed) => {
-    assertIdle(take)
-    const files = integration.apply(take, revision, behaviorReviewed)
-    live.delete(take)
-    onChange()
-    return files
-  }
+  const apply = async (take, revision, behaviorReviewed) => whileCollection(async () => {
+    return whileIdle(take, async () => {
+      const files = await integration.apply(take, revision, behaviorReviewed)
+      live.delete(take)
+      onChange()
+      return files
+    })
+  })
 
-  return { start, fork, create, startMarkup, editByHand, noteHandEdit, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, fork, create, startMarkup, discardPrepared, whileIdle, editByHand, noteHandEdit, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
 }
 
 /**
@@ -399,8 +473,8 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
  * @param {Live} entry
  * @param {string} prompt
  */
-function namedSkills(entry, prompt) {
-  const loaded = entry.skills?.mentioned(prompt) ?? []
+async function namedSkills(entry, prompt) {
+  const loaded = await entry.skills?.mentioned(prompt) ?? []
   for (const skill of loaded) {
     entry.log.push({ _tag: "Tool", id: `named-${skill.name}-${entry.log.length}`, name: "activate_skill", subject: skill.name, outcome: "Done", detail: `Loaded because the prompt names /${skill.name}.` })
   }
@@ -414,15 +488,15 @@ function namedSkills(entry, prompt) {
  * @param {TakeStore} store
  * @param {string} take
  * @param {ReadonlyArray<{ file: string }>} now the images of this prompt
- * @returns {AttachedImage[]}
+ * @returns {Promise<AttachedImage[]>}
  */
-function earlierImages(store, take, now) {
+async function earlierImages(store, take, now) {
   const current = new Set(now.map(image => image.file))
-  return (store.record(take)?.images ?? []).flatMap(known => {
+  return (await Promise.all(((await store.record(take))?.images ?? []).map(async known => {
     if (current.has(known.file)) return []
-    const kept = store.image(take, known.file)
+    const kept = await store.image(take, known.file)
     return kept === null ? [] : [{ name: known.name, mimeType: known.mimeType, bytes: kept.bytes }]
-  })
+  }))).flat()
 }
 
 /**
@@ -587,10 +661,10 @@ function directionText(ask) {
  * @returns {Promise<Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>>}
  */
 async function firstMessage(ask, prompt, render, store, take) {
-  const source = store.read(take, ask.part)
+  const source = await store.read(take, ask.part)
   const preview = ask.context ?? ask
   const contextSource = ask.context !== undefined && ask.context.part !== ask.part
-    ? `\n\n<file path="${ask.context.part}">\n${store.read(take, ask.context.part)}\n</file>` : ""
+    ? `\n\n<file path="${ask.context.part}">\n${await store.read(take, ask.context.part)}\n</file>` : ""
   /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
   const content = [{
     type: "text",

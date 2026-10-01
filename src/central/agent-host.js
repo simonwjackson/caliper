@@ -11,13 +11,13 @@ import { discoverSkills } from "../agent/skills.js"
 import { remoteHost } from "./remote-host.js"
 import { pluginUrl } from "./servers.js"
 import { chromiumExecutable } from "../render/chromium.js"
-import { syncCaller } from "./sync-call.js"
+import { asyncCaller } from "./host-call.js"
 
 /**
  * @typedef {{
  *   id: string, root: string, stateDir: string, home: string,
  *   agent: import("../types").AgentOptions | undefined, env: Record<string, string | undefined>,
- *   port: import("node:worker_threads").MessagePort, flag: SharedArrayBuffer,
+ *   port: import("node:worker_threads").MessagePort,
  * }} HostData
  */
 
@@ -25,15 +25,16 @@ const data = /** @type {HostData} */ (workerData)
 const main = /** @type {import("node:worker_threads").MessagePort} */ (parentPort)
 const TAKES_DELAY_MS = 100
 
-const call = syncCaller({ port: data.port, flag: data.flag })
+const call = asyncCaller({ port: data.port })
 /**
  * The project's dev server now, as the app checked it; the server can
  * restart on another port, and a stale registry file must not lead here.
  *
- * @returns {{ url: string, base: string }}
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ url: string, base: string }>}
  */
-const entry = () => {
-  const reply = call("app", "server", [])
+const entry = async signal => {
+  const reply = await call("app", "server", [], signal)
   if (reply.error !== undefined) throw new Error(reply.error)
   return /** @type {{ url: string, base: string }} */ (reply.value)
 }
@@ -45,10 +46,25 @@ const agent = resolveAgent({ option, env: data.env })
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let takesTimer
+let takesRevision = 0
+let closing = false
+const snapshots = new AbortController()
 const takesChanged = () => {
-  takesTimer ??= setTimeout(() => {
-    takesTimer = undefined
-    try { main.postMessage({ type: "takes", data: api.snapshot() }) } catch { /* the project is away; the next change reports again */ }
+  if (closing) return
+  takesRevision += 1
+  takesTimer ??= setTimeout(async () => {
+    const revision = takesRevision
+    try {
+      // Timers inherit async context. A broadcast must not inherit a take's
+      // aborted run, or Stop would suppress its own final update.
+      const snapshot = await host.store.withSignal(snapshots.signal, () => api.snapshot())
+      // A change during the read needs a fresh snapshot, not an older broadcast.
+      if (!closing && revision === takesRevision) main.postMessage({ type: "takes", data: snapshot })
+    } catch { /* the project is away; the next change reports again */ }
+    finally {
+      takesTimer = undefined
+      if (revision !== takesRevision) takesChanged()
+    }
   }, TAKES_DELAY_MS)
 }
 
@@ -56,16 +72,16 @@ const api = createTakesApi({
   store: host.store,
   status: agent.status,
   connection: agent.connection,
-  project: async () => {
-    const response = await fetch(pluginUrl(entry(), "project.json"))
+  project: async signal => {
+    const response = await fetch(pluginUrl(await entry(signal), "project.json"), { signal: signal ?? null })
     if (!response.ok) throw new Error(`The project's dev server answered ${response.status} for its parts.`)
     return response.json()
   },
-  serverUrl: () => { try { return entry().url.replace(/\/$/, "") } catch { return null } },
+  serverUrl: async signal => { try { return (await entry(signal)).url.replace(/\/$/, "") } catch { signal?.throwIfAborted(); return null } },
   chromium: chromiumExecutable(data.env),
   onChange: takesChanged,
   onMarks: draft => main.postMessage({ type: "marks", data: draft }),
-  skills: () => discoverSkills({ root: data.root, home: data.home, option: option?.skills, project: host.projectSkills() }),
+  skills: async () => discoverSkills({ root: data.root, home: data.home, option: option?.skills, project: await host.projectSkills() }),
   host: {
     parts: host.parts,
     readFile: host.readFile,
@@ -112,9 +128,9 @@ main.on("message", async message => {
     let marks = null
     /** @type {string | null} */
     let problem = null
-    try { takes = api.snapshot() } catch (error) { problem = error instanceof Error ? error.message : String(error) }
+    try { takes = await api.snapshot() } catch (error) { problem = error instanceof Error ? error.message : String(error) }
     // A broken marks.json must not close the stream; the chrome reads the reason from marks.json.
-    try { marks = api.marks() } catch { /* reported by marks.json */ }
+    try { marks = await api.marks() } catch { /* reported by marks.json */ }
     main.postMessage({ type: "snapshot", seq: message.seq, takes, marks, problem })
   } else if (message.type === "agent") {
     option = message.agent
@@ -128,8 +144,11 @@ main.on("message", async message => {
     try { api.assertEditable(message.take) } catch (reason) { error = reason instanceof Error ? reason.message : String(reason) }
     main.postMessage({ type: "editable", seq: message.seq, error })
   } else if (message.type === "close") {
+    closing = true
+    snapshots.abort(new Error("The agent host is closing."))
     clearTimeout(takesTimer)
     await api.close()
+    call.close()
     main.postMessage({ type: "closed" })
     process.exit(0)
   }

@@ -574,12 +574,21 @@ Costs:
   from its own agent, and forwards everything else to the plugin. It serves
   the chrome's `events` itself: the plugin's `project`, `checks` and `code`
   events, with its own `takes` and `marks`.
-- The agent code reads the take store synchronously, in about 60 places and
-  their tests. Rather than rewrite it, each project's agent runs in a worker
-  thread. A store call posts to the main thread and blocks only that worker
-  (`Atomics.wait`) until the plugin answers; the main thread keeps serving.
-  A call gives up after 60 seconds. The store's list, records and files for a
-  snapshot come in one call (`overview`).
+- Each project's agent runs in a worker thread. Agent callers now await the
+  host interface. Correlated messages carry calls and replies through the main
+  thread without `Atomics.wait` or shared memory. A call gives up after 60
+  seconds with the same error text. Stop cancels the run's pending host calls
+  and HTTP requests. The plugin keeps its synchronous disk store and fence.
+  The store's list, records, files and accept log for a snapshot come in one
+  call (`overview`), cached only within that async read scope.
+  This replaces the blocking bridge: a real-worker regression test held a
+  host answer and showed that another worker message could not run. Stop was
+  delayed, not lost, for up to the call timeout. Costs: agent callers and
+  their tests must await results. Idle take mutations need reservations across
+  awaits. Allocation and chain membership changes run in a short collection
+  queue, because a delayed creation reply does not yet name its child to the
+  worker. Stop and read requests do not join that queue. Cancellation cannot
+  undo a disk write the plugin completed.
 - The host endpoint is `POST <base>__caliper/host` with `{ target, method,
   args }`. The targets are the take store, the marks draft, the integration
   review, part discovery and project skills; `src/host/wire.js` lists every

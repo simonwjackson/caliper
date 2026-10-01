@@ -88,7 +88,7 @@ describe("finding skills", () => {
       "home/extra/copy/SKILL.md": skill("copy", "Writing rules."),
       "home/.agents/skills/tdd/SKILL.md": skill("tdd", "Test first."),
       "home/.agents/skills/intrinsic-design/SKILL.md": skill("intrinsic-design", "Layout from container size."),
-    }, ({ home, root }) => {
+    }, async ({ home, root }) => {
       /** @param {unknown} option */
       const names = option => discoverSkills({ root, home, option }).skills.map(found => found.name)
       expect(names(undefined)).toEqual(["layout", "intrinsic-design", "tdd"])
@@ -100,7 +100,7 @@ describe("finding skills", () => {
       expect(typo.skills).toEqual([])
       expect(typo.problems).toEqual(['agent.skills.include names "intrinsic", which Caliper did not find.'])
       // A filtered skill cannot be named with /name either.
-      expect(skillSession(discoverSkills({ root, home, option: { exclude: ["tdd"] } })).mentioned("/tdd")).toEqual([])
+      expect(await skillSession(discoverSkills({ root, home, option: { exclude: ["tdd"] } })).mentioned("/tdd")).toEqual([])
     })
   })
 
@@ -143,7 +143,7 @@ describe("telling the model", () => {
     await inTree({
       "repo/apps/web/.agents/skills/manual/SKILL.md": skill("manual", "Only on request.", "# Manual\n\nSteps.", "disable-model-invocation: true\n"),
       "repo/apps/web/.agents/skills/auto/SKILL.md": skill("auto", "Use <always> & often."),
-    }, ({ home, root }) => {
+    }, async ({ home, root }) => {
       const catalog = discoverSkills({ root, home, option: undefined })
       const prompt = skillPrompt(catalog)
       expect(prompt).toContain("<name>auto</name>")
@@ -151,10 +151,10 @@ describe("telling the model", () => {
       expect(prompt).not.toContain("manual")
       const session = skillSession(catalog)
       expect(session.tools.map(tool => tool.name)).toEqual(["activate_skill", "read_skill_file"])
-      const [named] = session.mentioned("Fix the spacing /manual please, see src/ui/auto.css")
+      const [named] = await session.mentioned("Fix the spacing /manual please, see src/ui/auto.css")
       expect(named?.name).toBe("manual")
       expect(named?.text).toContain("# Manual\n\nSteps.")
-      expect(session.mentioned("again /manual")).toEqual([])
+      expect(await session.mentioned("again /manual")).toEqual([])
     })
   })
 })
@@ -191,8 +191,12 @@ describe("a take agent with skills", () => {
         onChange: () => settle(),
         skills: () => discoverSkills({ root, home, option: undefined }),
       })
-      const take = agents.start({ ...ask, prompt: "Give it room" })
-      while (agents.views().find(view => view.take === take)?.run._tag === "Running") await new Promise(resolve => { settle = () => resolve(undefined) })
+      const take = await agents.start({ ...ask, prompt: "Give it room" })
+      for (;;) {
+        const changed = new Promise(resolve => { settle = () => resolve(undefined) })
+        if ((await agents.views()).find(view => view.take === take)?.run._tag !== "Running") break
+        await changed
+      }
 
       expect(JSON.stringify(seen[0].messages.find((/** @type {any} */ message) => message.role === "system"))).toContain("<name>intrinsic</name>")
       expect(JSON.stringify(seen[0])).toContain("read_skill_file")
@@ -204,7 +208,7 @@ describe("a take agent with skills", () => {
       expect(result(2)).toContain("already loaded")
       expect(result(3)).toBe("A worked case.\n")
       expect(result(4)).toContain("outside the skill's folder")
-      const log = agents.views()[0]?.log.filter(entry => entry._tag === "Tool") ?? []
+      const log = (await agents.views())[0]?.log.filter(entry => entry._tag === "Tool") ?? []
       expect(log.map(entry => entry._tag === "Tool" && [entry.name, entry.subject, entry.outcome, entry.detail])).toEqual([
         ["activate_skill", "intrinsic", "Done", "Loaded its instructions."],
         ["activate_skill", "intrinsic", "Done", "Already loaded."],
@@ -233,12 +237,16 @@ describe("a take agent with skills", () => {
         onChange: () => settle(),
         skills: () => discoverSkills({ root, home, option: undefined }),
       })
-      const take = agents.start({ ...ask, prompt: "Use /intrinsic for the gap" })
-      while (agents.views().find(view => view.take === take)?.run._tag === "Running") await new Promise(resolve => { settle = () => resolve(undefined) })
+      const take = await agents.start({ ...ask, prompt: "Use /intrinsic for the gap" })
+      for (;;) {
+        const changed = new Promise(resolve => { settle = () => resolve(undefined) })
+        if ((await agents.views()).find(view => view.take === take)?.run._tag !== "Running") break
+        await changed
+      }
       const text = first.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text
       expect(text).toStartWith('<skill_content name="intrinsic">\n# Intrinsic\n\nMeasure the container.')
       expect(text).toContain("Use /intrinsic for the gap")
-      expect(agents.views()[0]?.log[1]).toMatchObject({ _tag: "Tool", name: "activate_skill", subject: "intrinsic", detail: "Loaded because the prompt names /intrinsic." })
+      expect((await agents.views())[0]?.log[1]).toMatchObject({ _tag: "Tool", name: "activate_skill", subject: "intrinsic", detail: "Loaded because the prompt names /intrinsic." })
     })
   })
 

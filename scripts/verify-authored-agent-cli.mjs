@@ -111,7 +111,7 @@ try {
       ])
       reportPath = undefined
       const started = once(events, "started", { signal: AbortSignal.timeout(30_000) })
-      const take = agents.start({ part, state: "Hang", device: "iphone-16", prompt: "Check the scenario" })
+      const take = await agents.start({ part, state: "Hang", device: "iphone-16", prompt: "Check the scenario" })
       await started
       const interruptedAt = Date.now()
       if (action === "stop") await agents.stop(take)
@@ -119,7 +119,7 @@ try {
       assert(Date.now() - interruptedAt < 10_000, "SDK Stop must await bounded browser cleanup")
       assert(reportPath, "The in-flight check must settle and retain its report before Stop returns")
       assert.equal(JSON.parse(readFileSync(reportPath, "utf8")).run.termination, "Cancelled")
-      assert.notEqual(agents.views().find(view => view.take === take)?.run._tag, "Running")
+      assert.notEqual((await agents.views()).find(view => view.take === take)?.run._tag, "Running")
       assert.equal(followup, false)
     }
   } finally { await agents.close() }

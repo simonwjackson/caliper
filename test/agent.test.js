@@ -128,8 +128,8 @@ function setup(root) {
   const renders = []
   const png = join(root, "shot.png")
   writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
-  /** @type {Array<() => void>} */
-  const waiting = []
+  /** @type {Set<() => void>} */
+  const waiting = new Set()
   const agents = createTakeAgents({
     store,
     engine: () => ({ models, model: faux.getModel(), reasoning: "high" }),
@@ -138,14 +138,20 @@ function setup(root) {
       renders.push({ take, ...selection })
       return [{ part: request.part ?? subject.context?.part ?? subject.part, state: request.state, device: request.devices[0] ?? "", take, viewport: { width: 640, height: 480 }, frame: "Rendered", png, problems: [], console: [], spill: null }]
     },
-    onChange: () => { for (const resolve of waiting.splice(0)) resolve() },
+    onChange: () => { for (const resolve of waiting) { waiting.delete(resolve); resolve() } },
   })
   /** @param {string} take */
   const settled = async take => {
-    while (agents.views().find(view => view.take === take)?.run._tag === "Running") {
-      await new Promise(resolve => waiting.push(() => resolve(undefined)))
+    for (;;) {
+      let changed = () => {}
+      const next = new Promise(resolve => { changed = () => resolve(undefined); waiting.add(changed) })
+      const view = (await agents.views()).find(view => view.take === take)
+      if (view?.run._tag !== "Running") {
+        waiting.delete(changed)
+        return /** @type {import("../src/types").TakeView} */ (view)
+      }
+      await next
     }
-    return /** @type {import("../src/types").TakeView} */ (agents.views().find(view => view.take === take))
   }
   return { faux, store, agents, renders, settled }
 }
@@ -158,9 +164,9 @@ describe("a take's agent", () => {
         fauxAssistantMessage([fauxToolCall("name_take", { name: "Warm chip" })], { stopReason: "toolUse" }),
         fauxAssistantMessage([fauxText("Named the design.")]),
       ])
-      const take = agents.start({ ...ask, prompt: "Warm it up" })
+      const take = await agents.start({ ...ask, prompt: "Warm it up" })
       expect((await settled(take)).name).toBe("Warm chip")
-      expect(setup(root).agents.views().find(view => view.take === take)?.name).toBe("Warm chip")
+      expect((await setup(root).agents.views()).find(view => view.take === take)?.name).toBe("Warm chip")
     })
   })
 
@@ -168,7 +174,7 @@ describe("a take's agent", () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
       faux.setResponses([fauxAssistantMessage([fauxText("No name.")])])
-      const view = await settled(agents.start({ ...ask, prompt: "Do something" }))
+      const view = await settled(await agents.start({ ...ask, prompt: "Do something" }))
       expect(view.name).toBeUndefined()
       expect(view.nameIssue).toContain("No generated name")
     })
@@ -178,7 +184,7 @@ describe("a take's agent", () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
       faux.setResponses([fauxAssistantMessage([fauxText("Done.")])])
-      const view = await settled(agents.start({ ...ask, prompt: "Go", direction: { title: "Quiet contrast", brief: "Reduce emphasis." } }))
+      const view = await settled(await agents.start({ ...ask, prompt: "Go", direction: { title: "Quiet contrast", brief: "Reduce emphasis." } }))
       expect(view.name).toBe("Quiet contrast")
       expect(view.nameIssue).toBeUndefined()
     })
@@ -195,20 +201,20 @@ describe("a take's agent", () => {
         fauxAssistantMessage([fauxToolCall("submit_integration", { strategy: "component", summary: "A separate chip", shared: "No behavior duplicated", preserved: "The existing chip is unchanged", usage: "Import the alternate chip", preview: { part: "src/Alternate.part.tsx", state: "default" } })], { stopReason: "toolUse" }),
         fauxAssistantMessage([fauxText("Ready for review.")]),
       ])
-      const proposal = agents.alternate(source)
+      const proposal = await agents.alternate(source)
       expect(proposal).not.toBe(source)
       const view = await settled(proposal)
       expect(view.integration?._tag).toBe("Review")
       expect(store.read(source, "src/chip.css")).toContain("red")
       expect(store.original("src/chip.css")).toContain("blue")
-      expect(() => agents.accept(proposal)).toThrow("integration proposal")
+      await expect(agents.accept(proposal)).rejects.toThrow("integration proposal")
       expect(store.record(source)).not.toBeNull()
       const review = await agents.integration.check(proposal, async () => "Fixture render checks passed.")
-      agents.apply(proposal, review.revision, true)
+      await agents.apply(proposal, review.revision, true)
       /** @type {any} */
       let seen
       faux.setResponses([context => { seen = context; return fauxAssistantMessage([fauxText("New experiment.")]) }])
-      const next = agents.start({ ...ask, part: "src/Alternate.part.tsx", prompt: "A new subject" })
+      const next = await agents.start({ ...ask, part: "src/Alternate.part.tsx", prompt: "A new subject" })
       expect(next).toBe(proposal)
       await settled(next)
       expect(seen.messages.filter((/** @type {any} */ message) => message.role === "user")).toHaveLength(1)
@@ -219,13 +225,18 @@ describe("a take's agent", () => {
   test("edits a copy in its take, renders it, and reports", async () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, renders, settled } = setup(root)
+      const reply = Promise.withResolvers()
       faux.setResponses([
-        fauxAssistantMessage([fauxToolCall("edit_file", { path: "src/chip.css", old_text: "blue", new_text: "red" })], { stopReason: "toolUse" }),
+        async () => {
+          await reply.promise
+          return fauxAssistantMessage([fauxToolCall("edit_file", { path: "src/chip.css", old_text: "blue", new_text: "red" })], { stopReason: "toolUse" })
+        },
         fauxAssistantMessage([fauxToolCall("render", {})], { stopReason: "toolUse" }),
         fauxAssistantMessage([fauxText("Made the chip red in src/chip.css.")]),
       ])
-      const take = agents.start({ ...ask, prompt: "Make the chip red" })
-      expect(agents.views()[0]?.run._tag).toBe("Running")
+      const take = await agents.start({ ...ask, prompt: "Make the chip red" })
+      try { expect((await agents.views())[0]?.run._tag).toBe("Running") }
+      finally { reply.resolve(undefined) }
       const view = await settled(take)
 
       expect(view.run).toEqual({ _tag: "Idle" })
@@ -253,7 +264,7 @@ describe("a take's agent", () => {
         seen = { context, options }
         return fauxAssistantMessage([fauxText("ok")])
       }])
-      await settled(agents.start({ ...ask, prompt: "Look" }))
+      await settled(await agents.start({ ...ask, prompt: "Look" }))
       const user = seen.context.messages.find((/** @type {any} */ message) => message.role === "user")
       const kinds = user.content.map((/** @type {any} */ block) => block.type)
       expect(kinds).toEqual(["text", "text", "image"])
@@ -272,13 +283,13 @@ describe("a take's agent", () => {
         context => { seen.push(context.messages.at(-1)); return fauxAssistantMessage([fauxText("ok")]) },
       ])
       const mock = { name: "mock.png", mimeType: /** @type {const} */ ("image/png"), bytes: PNG_BYTES }
-      const take = agents.start({ ...ask, prompt: "Match this", images: [mock] })
+      const take = await agents.start({ ...ask, prompt: "Match this", images: [mock] })
       await settled(take)
       const first = seen[0].content
       expect(first.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image", "text", "image"])
       expect(first[3].text).toBe("Images I attached to this prompt: mock.png. They are reference material, not the part as it renders now.")
       expect(first[4]).toEqual({ type: "image", data: PNG_BYTES.toString("base64"), mimeType: "image/png" })
-      agents.follow(take, "And this", [{ name: "second.jpg", mimeType: "image/jpeg", bytes: JPEG_BYTES }])
+      await agents.follow(take, "And this", [{ name: "second.jpg", mimeType: "image/jpeg", bytes: JPEG_BYTES }])
       const view = await settled(take)
       const next = seen[1].content
       expect(next.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image"])
@@ -296,13 +307,13 @@ describe("a take's agent", () => {
     await inFolder(projectFiles, async root => {
       const before = setup(root)
       before.faux.setResponses([fauxAssistantMessage([fauxText("ok")])])
-      const take = before.agents.start({ ...ask, prompt: "Match this", images: [{ name: "mock.png", mimeType: "image/png", bytes: PNG_BYTES }] })
+      const take = await before.agents.start({ ...ask, prompt: "Match this", images: [{ name: "mock.png", mimeType: "image/png", bytes: PNG_BYTES }] })
       await before.settled(take)
       const { faux, agents, settled } = setup(root)
       /** @type {any} */
       let seen = null
       faux.setResponses([context => { seen = context.messages.at(-1); return fauxAssistantMessage([fauxText("ok")]) }])
-      agents.follow(take, "Go on")
+      await agents.follow(take, "Go on")
       await settled(take)
       // The render comes first, then the image from the earlier prompt.
       expect(seen.content.map((/** @type {any} */ block) => block.type)).toEqual(["text", "text", "image", "text", "image"])
@@ -325,7 +336,7 @@ describe("a take's agent", () => {
         fauxAssistantMessage([fauxText("Checked the declared scenarios.")]),
       ])
       const context = { part: "src/Home.part.tsx", state: "Ready" }
-      const take = agents.start({ ...ask, context, prompt: "Change the chip in Home" })
+      const take = await agents.start({ ...ask, context, prompt: "Change the chip in Home" })
       const view = await settled(take)
       expect(view.context).toEqual(context)
       expect(store.record(take)?.context).toEqual(context)
@@ -348,9 +359,9 @@ describe("a take's agent", () => {
       const { store } = setup(root)
       const take = store.create(ask)
       const { agents, faux, settled } = setup(root)
-      expect(agents.views()[0]?.context).toBeUndefined()
+      expect((await agents.views())[0]?.context).toBeUndefined()
       faux.setResponses([fauxAssistantMessage([fauxText("Continued.")])])
-      agents.follow(take, "Go on")
+      await agents.follow(take, "Go on")
       expect((await settled(take)).run).toEqual({ _tag: "Idle" })
     })
   })
@@ -365,7 +376,7 @@ describe("a take's agent", () => {
         return fauxAssistantMessage([fauxText("ok")])
       }])
       const direction = { title: "Shared fixtures", brief: "Use the project's fixture catalog." }
-      const take = agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases", "New layout"] })
+      const take = await agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases", "New layout"] })
       const view = await settled(take)
       const text = seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text
       expect(text).toContain("This take's direction: Shared fixtures. Use the project's fixture catalog.")
@@ -385,7 +396,7 @@ describe("a take's agent", () => {
         return fauxAssistantMessage([fauxText("ok")])
       }])
       const direction = { title: "Shelf as a timeline", brief: "Order by last play.", strange: /** @type {const} */ (true) }
-      const view = await settled(agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases"] }))
+      const view = await settled(await agents.start({ ...ask, prompt: "More variety", direction, others: ["Hard cases"] }))
       const text = seen.messages.find((/** @type {any} */ message) => message.role === "user").content[0].text
       expect(text).toContain("This is the strange direction")
       expect(view.direction).toEqual(direction)
@@ -399,7 +410,7 @@ describe("a take's agent", () => {
         fauxAssistantMessage([fauxToolCall("write_file", { path: "../escape.css", content: "x" })], { stopReason: "toolUse" }),
         fauxAssistantMessage([fauxText("I could not write that file.")]),
       ])
-      const view = await settled(agents.start({ ...ask, prompt: "Escape" }))
+      const view = await settled(await agents.start({ ...ask, prompt: "Escape" }))
       const tool = view.log.find(entry => entry._tag === "Tool")
       expect(tool).toMatchObject({ name: "write_file", outcome: "Failed" })
       expect(tool?._tag === "Tool" && tool.detail).toContain("outside the project")
@@ -411,7 +422,7 @@ describe("a take's agent", () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
       faux.setResponses([fauxAssistantMessage([], { stopReason: "error", errorMessage: "401 Unauthorized" })])
-      const view = await settled(agents.start({ ...ask, prompt: "Go" }))
+      const view = await settled(await agents.start({ ...ask, prompt: "Go" }))
       expect(view.run).toEqual({ _tag: "Failed", reason: "401 Unauthorized" })
     })
   })
@@ -425,9 +436,9 @@ describe("a take's agent", () => {
         renderFor: () => async () => [],
         onChange: () => {},
       })
-      const take = agents.start({ ...ask, prompt: "Go" })
+      const take = await agents.start({ ...ask, prompt: "Go" })
       await new Promise(resolve => setTimeout(resolve, 10))
-      expect(agents.views().find(view => view.take === take)?.run).toEqual({ _tag: "Failed", reason: "No API key for https://x/v1." })
+      expect((await agents.views()).find(view => view.take === take)?.run).toEqual({ _tag: "Failed", reason: "No API key for https://x/v1." })
     })
   })
 
@@ -435,7 +446,7 @@ describe("a take's agent", () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
       faux.setResponses([fauxAssistantMessage([fauxText("First.")])])
-      const take = agents.start({ ...ask, prompt: "One" })
+      const take = await agents.start({ ...ask, prompt: "One" })
       await settled(take)
       /** @type {any} */
       let seen = null
@@ -443,7 +454,7 @@ describe("a take's agent", () => {
         seen = context
         return fauxAssistantMessage([fauxText("Second.")])
       }])
-      agents.follow(take, "Two")
+      await agents.follow(take, "Two")
       const view = await settled(take)
       expect(seen.messages.filter((/** @type {any} */ message) => message.role === "user")).toHaveLength(2)
       expect(view.log.map(entry => entry._tag === "Tool" ? entry.name : entry._tag === "Edit" ? `Edit: ${entry.file}` : `${entry._tag}: ${entry.text.slice(0, 5)}`)).toEqual([
@@ -461,14 +472,14 @@ describe("a take's agent", () => {
         fauxAssistantMessage([fauxToolCall("write_file", { path: "src/chip.css", content: ".chip { color: green }\n" })], { stopReason: "toolUse" }),
         fauxAssistantMessage([fauxText("Done.")]),
       ])
-      const first = agents.start({ ...ask, prompt: "Red" })
+      const first = await agents.start({ ...ask, prompt: "Red" })
       await settled(first)
-      const second = agents.start({ ...ask, prompt: "Green" })
+      const second = await agents.start({ ...ask, prompt: "Green" })
       await settled(second)
-      expect(agents.accept(first)).toEqual(["src/chip.css"])
-      agents.discard(second)
+      expect(await agents.accept(first)).toEqual(["src/chip.css"])
+      await agents.discard(second)
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("red")
-      expect(agents.views()).toEqual([])
+      expect(await agents.views()).toEqual([])
     })
   })
 })
@@ -498,44 +509,44 @@ describe("chains of takes", () => {
   }
 
   test("views carry each take's parent, chain and lineage", async () => {
-    await inFolder(projectFiles, root => {
+    await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const { one, two, three, four, identity } = chainOfThree(store)
-      const view = (/** @type {string} */ take) => agents.views().find(candidate => candidate.take === take)
-      expect(view(one)).not.toHaveProperty("chain")
-      expect(view(four)).not.toHaveProperty("lineage")
-      expect(view(three)).toMatchObject({ parent: identity(two), chain: identity(one), lineage: [identity(one), identity(two)] })
+      const view = async (/** @type {string} */ take) => (await agents.views()).find(candidate => candidate.take === take)
+      expect(await view(one)).not.toHaveProperty("chain")
+      expect(await view(four)).not.toHaveProperty("lineage")
+      expect(await view(three)).toMatchObject({ parent: identity(two), chain: identity(one), lineage: [identity(one), identity(two)] })
     })
   })
 
   test("accept copies the accepted take and removes its whole chain; other chains stay", async () => {
-    await inFolder(projectFiles, root => {
+    await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const { two, four } = chainOfThree(store)
-      expect(agents.accept(two)).toEqual(["src/chip.css"])
+      expect(await agents.accept(two)).toEqual(["src/chip.css"])
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("darkred")
-      expect(agents.views().map(view => view.take)).toEqual([four])
+      expect((await agents.views()).map(view => view.take)).toEqual([four])
       expect(store.accepted().map(record => record.take)).toEqual([two])
     })
   })
 
   test("accepting the chain's first take removes the takes made from it", async () => {
-    await inFolder(projectFiles, root => {
+    await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const { one, four } = chainOfThree(store)
-      agents.accept(one)
+      await agents.accept(one)
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("color: red")
-      expect(agents.views().map(view => view.take)).toEqual([four])
+      expect((await agents.views()).map(view => view.take)).toEqual([four])
     })
   })
 
   test("discard removes one take; the takes made from it keep their lineage", async () => {
-    await inFolder(projectFiles, root => {
+    await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const { one, two, three, four, identity } = chainOfThree(store)
-      agents.discard(two)
-      expect(agents.views().map(view => view.take)).toEqual([one, three, four])
-      expect(agents.views().find(view => view.take === three)).toMatchObject({ lineage: [identity(one), { take: two }] })
+      await agents.discard(two)
+      expect((await agents.views()).map(view => view.take)).toEqual([one, three, four])
+      expect((await agents.views()).find(view => view.take === three)).toMatchObject({ lineage: [identity(one), { take: two }] })
     })
   })
 })
@@ -546,8 +557,8 @@ describe("hand edits in a take", () => {
       const { agents, store } = setup(root)
       // A take with no agent yet: after a server restart, its conversation is gone.
       const take = store.create(ask)
-      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
-      const view = agents.views().find(candidate => candidate.take === take)
+      await agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
+      const view = (await agents.views()).find(candidate => candidate.take === take)
       expect(view).toMatchObject({ run: { _tag: "Idle" }, files: ["src/chip.css"], log: [{ _tag: "Edit", file: "src/chip.css" }] })
       expect(readFileSync(join(root, ".caliper/takes", take, "src/chip.css"), "utf8")).toContain("teal")
       expect(readFileSync(join(root, "src/chip.css"), "utf8")).toContain("blue")
@@ -558,10 +569,10 @@ describe("hand edits in a take", () => {
     await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const take = store.create(ask)
-      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
-      expect(agents.editByHand(take, "src/chip.css", projectFiles["src/chip.css"])).toEqual([])
+      await agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
+      expect(await agents.editByHand(take, "src/chip.css", projectFiles["src/chip.css"])).toEqual([])
       // One entry per run of edits to the same file.
-      expect(agents.views()[0]?.log).toEqual([{ _tag: "Edit", file: "src/chip.css" }])
+      expect((await agents.views())[0]?.log).toEqual([{ _tag: "Edit", file: "src/chip.css" }])
     })
   })
 
@@ -569,8 +580,8 @@ describe("hand edits in a take", () => {
     await inFolder(projectFiles, async root => {
       const { agents, store } = setup(root)
       const take = store.create(ask)
-      expect(() => agents.editByHand(take, "../outside.css", "x")).toThrow("outside the project")
-      expect(agents.views()[0]?.files).toEqual([])
+      await expect(agents.editByHand(take, "../outside.css", "x")).rejects.toThrow("outside the project")
+      expect((await agents.views())[0]?.files).toEqual([])
     })
   })
 
@@ -584,8 +595,8 @@ describe("hand edits in a take", () => {
         return fauxAssistantMessage([fauxText("ok")])
       }])
       const take = store.create(ask)
-      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
-      agents.follow(take, "Now make it bigger")
+      await agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
+      await agents.follow(take, "Now make it bigger")
       await settled(take)
       const user = seen.messages.find((/** @type {any} */ message) => message.role === "user")
       expect(user.content[0].text).toStartWith('I already edited "src/chip.css" by hand in this take.')
@@ -597,9 +608,9 @@ describe("hand edits in a take", () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
       faux.setResponses([fauxAssistantMessage([fauxText("First.")])])
-      const take = agents.start({ ...ask, prompt: "One" })
+      const take = await agents.start({ ...ask, prompt: "One" })
       await settled(take)
-      agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
+      await agents.editByHand(take, "src/chip.css", ".chip { color: teal }\n")
       /** @type {string[]} */
       const prompts = []
       const answer = (/** @type {any} */ context) => {
@@ -607,9 +618,9 @@ describe("hand edits in a take", () => {
         return fauxAssistantMessage([fauxText("ok")])
       }
       faux.setResponses([answer, answer])
-      agents.follow(take, "Two")
+      await agents.follow(take, "Two")
       await settled(take)
-      agents.follow(take, "Three")
+      await agents.follow(take, "Three")
       await settled(take)
       expect(prompts).toEqual([
         'I edited "src/chip.css" by hand since your last turn. Read it again before you change it.\n\nTwo',
@@ -621,9 +632,11 @@ describe("hand edits in a take", () => {
   test("refuses a hand edit while the take's agent works", async () => {
     await inFolder(projectFiles, async root => {
       const { faux, agents, settled } = setup(root)
-      faux.setResponses([fauxAssistantMessage([fauxText("Done.")])])
-      const take = agents.start({ ...ask, prompt: "Go" })
-      expect(() => agents.editByHand(take, "src/chip.css", "x")).toThrow("agent is working")
+      const reply = Promise.withResolvers()
+      faux.setResponses([async () => { await reply.promise; return fauxAssistantMessage([fauxText("Done.")]) }])
+      const take = await agents.start({ ...ask, prompt: "Go" })
+      try { await expect(agents.editByHand(take, "src/chip.css", "x")).rejects.toThrow("agent is working") }
+      finally { reply.resolve(undefined) }
       await settled(take)
     })
   })

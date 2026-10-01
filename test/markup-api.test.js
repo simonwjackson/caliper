@@ -2,6 +2,13 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { createServer } from "node:http"
+import { createMarkStore } from "../src/takes/marks.js"
+import { createMarkupApi } from "../src/agent/markup.js"
+import { createTakeAgents } from "../src/agent/take-agents.js"
+import { validateTakeContext } from "../src/agent/api.js"
+import { renderJobs } from "../src/render/render.js"
+import { withViewport } from "../src/render/plan.js"
 import { manifest, withProject } from "./project-server.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
@@ -95,6 +102,60 @@ describe("the draft of marks on the dev server", () => {
 })
 
 describe("Send", () => {
+  test("a draft change during async release removes every new take and starts no agent", () => withProject({ files, modules: resolve("node_modules") }, async ({ root, project, viteUrl }) => {
+    const chromium = process.env.CHROMIUM
+    if (!chromium) throw new Error("Run with nix develop to supply CHROMIUM")
+    const store = createTakeStore(root)
+    const marks = createMarkStore(root)
+    const parents = ["Warm", "Cool"].map(prompt => store.create({ part, state: "default", device: "iphone-16", prompt }))
+    let revision = 0
+    let id = ""
+    for (const parent of parents) {
+      const source = { take: parent, created: /** @type {number} */ (store.record(parent)?.created) }
+      const added = marks.add(revision, { source, preview, device: "iphone-16", anchor: anchorOn("#caliper-host .chip", "Chip default") })
+      revision = marks.change(added.draft.revision, added.id, { note: "More space" }).revision
+      id = added.id
+    }
+    const entered = Promise.withResolvers()
+    const continueRelease = Promise.withResolvers()
+    const agents = createTakeAgents({ store, engine: () => { throw new Error("No agent must start") }, renderFor: () => async () => [], onChange: () => {} })
+    const api = createMarkupApi({
+      store,
+      marks: { ...marks, release: async (revision, ids) => { entered.resolve(undefined); await continueRelease.promise; return marks.release(revision, ids) } },
+      agents, project, validateTake: validateTakeContext, onDraft: () => {}, agentProblem: () => null,
+      render: async jobs => {
+        const viewed = await project()
+        return renderJobs({ url: viteUrl, jobs: jobs.map(job => withViewport(viewed, job)), out: join(root, ".caliper", "send-race"), executablePath: chromium })
+      },
+    })
+    const server = createServer((request, response) => { void api.handle(request.url ?? "", request, response) })
+    await new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(undefined)))
+    const port = /** @type {import("node:net").AddressInfo} */ (server.address()).port
+    try {
+      const sent = fetch(`http://127.0.0.1:${port}/marks/send`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision }) })
+      await entered.promise
+      expect(store.list()).toHaveLength(4)
+      const children = store.list().filter(take => !parents.includes(take))
+      for (const child of children) {
+        await expect(agents.discard(child)).rejects.toThrow("being changed")
+        await expect(agents.follow(child, "race")).rejects.toThrow("being changed")
+      }
+      const changed = marks.change(revision, id, { note: "Newer note" })
+      continueRelease.resolve(undefined)
+      const response = await sent
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({ draft: changed })
+      expect(store.list()).toEqual(parents)
+      expect(marks.read()).toEqual(changed)
+      expect((await agents.views()).every(view => view.log.length === 0)).toBe(true)
+    } finally {
+      continueRelease.resolve(undefined)
+      await agents.close()
+      server.closeAllConnections()
+      await new Promise(resolve => server.close(() => resolve(undefined)))
+    }
+  }), 60_000)
+
   test("makes one new take per marked take, with its marks, picture and history, and empties the draft", () => withProject({ files, options, modules: resolve("node_modules") }, async ({ url, root, get }) => {
     if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM")
     const store = createTakeStore(root)

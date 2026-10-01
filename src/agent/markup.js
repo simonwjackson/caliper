@@ -28,9 +28,9 @@ import { markupMessage, promptMarksText } from "./markup-message.js"
 
 /**
  * @param {{
- *   store: import("../takes/store.js").TakeStore,
- *   marks: import("../takes/marks.js").MarkStore,
- *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "views" | "fork" | "create" | "startMarkup">,
+ *   store: import("./host-types.js").AgentStore,
+ *   marks: import("./host-types.js").AgentMarks,
+ *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "views" | "fork" | "create" | "startMarkup" | "discardPrepared">,
  *   project: () => Promise<import("../types").Project>,
  *   validateTake: (parts: readonly import("../types").Part[], record: TakeRecord) => void,
  *   render: (jobs: DeviceJob[]) => Promise<RenderResult[]>,
@@ -62,7 +62,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       if (!viewed.devices.some(candidate => candidate.id === device)) throw new Error(unknownDevice(viewed, device))
       return
     }
-    const record = store.record(source.take)
+    const record = await store.record(source.take)
     if (record === null || record.created !== source.created) throw new Error(`Take ${source.take} is no longer the take you marked. Reload the takes.`)
     if (record.integration) throw new Error(`Take ${source.take} is an alternate. Alternates have their own review and cannot be marked.`)
     const viewed = await project()
@@ -84,7 +84,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
    */
   const handle = async (path, request, response) => {
     if (path === "/marks.json") {
-      try { json(response, 200, marks.read()) }
+      try { json(response, 200, await marks.read()) }
       catch (error) { json(response, 500, { error: message(error) }) }
       return true
     }
@@ -100,24 +100,24 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       if (path === "/marks") {
         if (!Check(NewMarkSchema, body)) throw new Error("A new mark needs the draft revision, its take, preview, device and anchor.")
         await markable(body.source, body.preview, body.device, body.subject)
-        const added = marks.add(body.revision, { source: body.source, preview: body.preview, ...(isOriginal(body.source) && body.subject ? { subject: body.subject } : {}), device: body.device, anchor: body.anchor })
+        const added = await marks.add(body.revision, { source: body.source, preview: body.preview, ...(isOriginal(body.source) && body.subject ? { subject: body.subject } : {}), device: body.device, anchor: body.anchor })
         changed(added.draft)
         json(response, 201, added)
       } else if (path === "/marks/release") {
         if (!Check(ReleaseSchema, body)) throw new Error("Releasing marks needs the draft revision and the marks.")
-        const draft = marks.current(body.revision)
+        const draft = await marks.current(body.revision)
         const ids = new Set(body.ids)
         if (draft.marks.some(mark => ids.has(mark.id) && !isOriginal(mark.source))) throw new Error("Only marks on the original go with a prompt.")
-        json(response, 200, { draft: changed(marks.release(body.revision, ids)) })
+        json(response, 200, { draft: changed(await marks.release(body.revision, ids)) })
       } else if (path === "/marks/send") {
         if (!Check(RevisionSchema, body)) throw new Error("Send needs the draft revision it shows.")
         json(response, 201, await send(body.revision))
       } else if (action === "remove") {
         if (!Check(RevisionSchema, body)) throw new Error("Removing a mark needs the draft revision.")
-        json(response, 200, { draft: changed(marks.remove(body.revision, id)) })
+        json(response, 200, { draft: changed(await marks.remove(body.revision, id)) })
       } else if (action === "") {
         if (!Check(MarkChangeSchema, body)) throw new Error("A mark change needs the draft revision and a note or an anchor.")
-        json(response, 200, { draft: changed(marks.change(body.revision, id, { ...(body.note === undefined ? {} : { note: body.note }), ...(body.anchor === undefined ? {} : { anchor: body.anchor }) })) })
+        json(response, 200, { draft: changed(await marks.change(body.revision, id, { ...(body.note === undefined ? {} : { note: body.note }), ...(body.anchor === undefined ? {} : { anchor: body.anchor }) })) })
       } else {
         json(response, 404, { error: `Marks have no action "${action}".` })
       }
@@ -142,15 +142,16 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     if (problem !== null) throw new Error(problem)
     sending = true
     try {
-      const draft = marks.current(revision)
-      const plan = check(draft)
+      const draft = await marks.current(revision)
+      const plan = await check(draft)
       const { parts, devices } = await project()
       const byId = (/** @type {string} */ id) => /** @type {Mark} */ (draft.marks.find(mark => mark.id === id))
-      const groups = plan.groups.map(group => {
+      const groups = await Promise.all(plan.groups.map(async group => {
         const own = group.marks.map(byId)
         const base = { source: group.source, marks: own, makes: group.outcome._tag === "NewTake", pointsTo: group.pointsTo.map(byId) }
         if (!isOriginal(group.source)) {
-          const record = /** @type {TakeRecord} */ (store.record(group.source.take))
+          const record = await store.record(group.source.take)
+          if (record === null || record.created !== group.source.created) throw new Error(`Take ${group.source.take} is no longer the take you marked. Reload the takes.`)
           validateTake(parts, record)
           return { ...base, record }
         }
@@ -163,7 +164,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
         const record = { part: subject.part, state: subject.state, device: first.device, ...(sameState(first.preview, subject) ? {} : { context: first.preview }) }
         validateTake(parts, /** @type {TakeRecord} */ ({ ...record, created: 0 }))
         return { ...base, record }
-      })
+      }))
       const referenced = new Set(groups.flatMap(group => group.pointsTo.map(mark => mark.id)))
       // One picture per source, preview and device its marks were placed on. Marks a note points to also get a crop.
       const pictures = groups.map(group => {
@@ -201,14 +202,16 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
       }))
       if (lost.length) throw new Error(lost.join("\n"))
 
-      // Rendering took time. From here to the end nothing awaits, so no other
-      // write can land between this check and the draft's release.
-      check(marks.current(revision))
+      // Remote calls yield. Recheck after rendering, and let release reject a
+      // draft that changes while the child takes and their briefs are made.
+      await check(await marks.current(revision))
       const labels = labelsOf(parts)
       /** @type {string[]} */
       const created = []
       /** @type {Array<{ take: string, brief: string, images: import("./images.js").AttachedImage[] }>} */
       const launches = []
+      /** @type {Draft} */
+      let released
       try {
         for (const [index, group] of groups.entries()) {
           if (!group.makes) continue
@@ -222,10 +225,10 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
           const record = isOriginal(group.source)
             ? { ...group.record, history: { prompt: null, lineage: [], passes: [] }, marks: group.marks, ...(references.length ? { references } : {}) }
             : { ...childRecord(group.source, /** @type {TakeRecord} */ (group.record), group.marks), ...(references.length ? { references } : {}) }
-          const take = isOriginal(group.source) ? agents.create(record) : agents.fork(group.source.take, record)
+          const take = isOriginal(group.source) ? await agents.create(record) : await agents.fork(group.source.take, record)
           created.push(take)
           const shots = rendered[index] ?? []
-          const sources = [...new Set([record.part, record.context?.part].filter(file => file !== undefined))].map(path => ({ path, content: store.read(take, path) }))
+          const sources = await Promise.all([...new Set([record.part, record.context?.part].filter(file => file !== undefined))].map(async path => ({ path, content: await store.read(take, path) })))
           const brief = markupMessage({
             take, record, sources,
             references: group.pointsTo.map(mark => ({ source: mark.source, mark, crop: crops.has(mark.id) })),
@@ -248,13 +251,15 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
           ]
           launches.push({ take, brief, images })
         }
+        // Check source identities and runs again before spending the draft.
+        await check(await marks.current(revision))
+        // Every mark leaves the draft, including marks used as reference material.
+        released = await marks.release(revision, new Set(groups.flatMap(group => group.marks.map(mark => mark.id))))
       } catch (error) {
-        for (const take of created) store.discard(take)
+        await Promise.all(created.map(take => agents.discardPrepared(take)))
         throw error
       }
-      // Every mark leaves the draft: its own take's, or, when a note pointed to it, as reference material.
-      const released = marks.release(revision, new Set(groups.flatMap(group => group.marks.map(mark => mark.id))))
-      for (const launch of launches) agents.startMarkup(launch.take, launch.brief, launch.images)
+      for (const launch of launches) await agents.startMarkup(launch.take, launch.brief, launch.images)
       changed(released)
       return { takes: launches.map(launch => launch.take), draft: released }
     } finally {
@@ -269,8 +274,8 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
    *
    * @param {Draft} draft
    */
-  const check = draft => {
-    const takes = agents.views().map(view => ({ take: view.take, created: view.created, kind: /** @type {"Alternate" | "Experiment"} */ (view.integration ? "Alternate" : "Experiment"), run: view.run }))
+  const check = async draft => {
+    const takes = (await agents.views()).map(view => ({ take: view.take, created: view.created, kind: /** @type {"Alternate" | "Experiment"} */ (view.integration ? "Alternate" : "Experiment"), run: view.run }))
     const plan = planSend(draft.marks.map(mark => ({ id: mark.id, name: `${mark.source.take}${mark.letter}`, note: mark.note, source: mark.source, location: { _tag: "Located" } })), takes)
     if (plan._tag === "Empty") throw new Error("The draft has no marks to send.")
     if (plan._tag === "Blocked") throw new Error(plan.reasons.join("\n"))
@@ -290,7 +295,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
   const promptMarks = async (ids, ask) => {
     if (ids === undefined) return { text: "", images: [] }
     if (!Array.isArray(ids) || !ids.length || ids.length > 26 || !ids.every(id => typeof id === "string")) throw new Error("marks must be a list of marks on the original.")
-    const draft = marks.read()
+    const draft = await marks.read()
     const preview = ask.context ?? ask
     const chosen = ids.map(id => {
       const mark = draft.marks.find(item => item.id === id)
@@ -304,7 +309,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     return { text: promptMarksText(chosen), images: [{ name: `original-${ask.device}-marks.png`, mimeType: "image/png", bytes: readFileSync(result.annotated.png) }] }
   }
 
-  return { handle, draft: () => marks.read(), promptMarks }
+  return { handle, draft: async () => marks.read(), promptMarks }
 }
 
 /**

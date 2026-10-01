@@ -77,7 +77,7 @@ for (const stage of ["initial render", "checks tool"]) {
         received?.throwIfAborted()
         return []
       } })
-      const take = agents.start({ ...ask, prompt: "Check it" })
+      const take = await agents.start({ ...ask, prompt: "Check it" })
       await entered.promise
       try {
         expect(received).toBeInstanceOf(AbortSignal)
@@ -86,10 +86,10 @@ for (const stage of ["initial render", "checks tool"]) {
         expect(received?.aborted).toBe(true)
         await Promise.resolve()
         expect(stopped).toBe(false)
-        expect(agents.views()[0]?.run._tag).toBe("Running")
+        expect((await agents.views())[0]?.run._tag).toBe("Running")
         cleanup.resolve()
         await stopping
-        expect(agents.views()[0]?.run._tag).not.toBe("Running")
+        expect((await agents.views())[0]?.run._tag).not.toBe("Running")
         expect(followup).toBe(false)
       } finally { cleanup.resolve() }
     })
@@ -102,16 +102,19 @@ test("close aborts all active takes and waits for all render cleanup", async () 
     const models = createModels()
     models.setProvider(faux.provider)
     const cleanup = deferred()
+    const entered = deferred()
     /** @type {AbortSignal[]} */
     const signals = []
     const agents = createTakeAgents({ store, engine: () => ({ models, model: faux.getModel(), reasoning: "off" }), onChange: () => {}, renderFor: () => async request => {
       if (request.signal) signals.push(request.signal)
+      if (signals.length === 2) entered.resolve()
       await cleanup.promise
       request.signal?.throwIfAborted()
       return []
     } })
-    agents.start({ ...ask, prompt: "One" })
-    agents.start({ ...ask, prompt: "Two" })
+    await agents.start({ ...ask, prompt: "One" })
+    await agents.start({ ...ask, prompt: "Two" })
+    await entered.promise
     try {
       expect(signals).toHaveLength(2)
       let closed = false
@@ -121,8 +124,8 @@ test("close aborts all active takes and waits for all render cleanup", async () 
       expect(closed).toBe(false)
       cleanup.resolve()
       await closing
-      expect(agents.views().every(view => view.run._tag !== "Running")).toBe(true)
-      expect(() => agents.start({ ...ask, prompt: "Too late" })).toThrow("closed")
+      expect((await agents.views()).every(view => view.run._tag !== "Running")).toBe(true)
+      await expect(agents.start({ ...ask, prompt: "Too late" })).rejects.toThrow("closed")
     } finally { cleanup.resolve() }
   })
 })

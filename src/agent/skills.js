@@ -18,7 +18,7 @@ import { Type } from "typebox"
  *
  * @typedef {import("../types").SkillSummary} SkillSummary
  * @typedef {import("../types").SkillsStatus} SkillsStatus
- * @typedef {{ readonly content: () => string, readonly read: (path: string) => string }} SkillReader
+ * @typedef {{ readonly content: () => string | Promise<string>, readonly read: (path: string) => string | Promise<string> }} SkillReader
  * @typedef {SkillSummary & { readonly file: string, readonly dir: string, readonly modelInvocable: boolean, readonly remote?: SkillReader }} Skill
  *   `file` is the absolute path of SKILL.md; `dir` is its folder. A project
  *   skill in the central app has `remote`: its plugin reads the files.
@@ -210,30 +210,47 @@ export function plannerSkillNote(catalog) {
  * conversation never holds the same instructions twice.
  *
  * @param {SkillCatalog} catalog
- * @returns {{ tools: AgentTool[], mentioned: (prompt: string) => Array<{ name: string, text: string }> }}
+ * @returns {{ tools: AgentTool[], mentioned: (prompt: string) => Promise<Array<{ name: string, text: string }>> }}
  */
 export function skillSession(catalog) {
   /** @type {Map<string, Skill>} */
   const byName = new Map(catalog.skills.map(skill => [skill.name, skill]))
   const loaded = new Set()
+  /** @type {Map<string, Promise<string>>} */
+  const loading = new Map()
   /** @param {string} value */
   const text = value => ({ type: /** @type {const} */ ("text"), text: value })
 
-  /** @param {Skill} skill */
-  const activate = skill => {
-    if (loaded.has(skill.name)) return `The skill "${skill.name}" is already loaded earlier in this conversation. Follow those instructions.`
-    loaded.add(skill.name)
-    return skillContent(skill)
+  /** @param {Skill} skill @param {AbortSignal} [signal] */
+  const activate = async (skill, signal) => {
+    signal?.throwIfAborted()
+    const alreadyLoaded = `The skill "${skill.name}" is already loaded earlier in this conversation. Follow those instructions.`
+    if (loaded.has(skill.name)) return alreadyLoaded
+    // Concurrent tool calls share the read, but only one adds the instructions.
+    const pending = loading.get(skill.name) ?? Promise.resolve(skillContent(skill))
+    loading.set(skill.name, pending)
+    try {
+      const content = await pending
+      signal?.throwIfAborted()
+      if (loaded.has(skill.name)) return alreadyLoaded
+      loaded.add(skill.name)
+      return content
+    } finally {
+      if (loading.get(skill.name) === pending) loading.delete(skill.name)
+    }
   }
 
   /** @param {string} prompt */
-  const mentioned = prompt => {
+  const mentioned = async prompt => {
     const names = [...prompt.matchAll(/(?:^|\s)\/([a-z0-9][a-z0-9-]*)(?=$|[\s.,;:!?)])/g)].map(match => /** @type {string} */ (match[1]))
-    return [...new Set(names)].flatMap(name => {
+    /** @type {Array<{ name: string, text: string }>} */
+    const instructions = []
+    for (const name of new Set(names)) {
       const skill = byName.get(name)
-      if (skill === undefined || loaded.has(name)) return []
-      return [{ name, text: activate(skill) }]
-    })
+      if (skill === undefined || loaded.has(name)) continue
+      instructions.push({ name, text: await activate(skill) })
+    }
+    return instructions
   }
 
   const invocable = catalog.skills.filter(skill => skill.modelInvocable).map(skill => skill.name)
@@ -246,11 +263,12 @@ export function skillSession(catalog) {
     label: "Skill",
     description: "Load a skill's full instructions. Call it when the request matches the skill's description, before you change anything.",
     parameters: Type.Object({ name: names }),
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { name } = /** @type {{ name: string }} */ (params)
       const skill = byName.get(name)
       if (skill === undefined) throw new Error(`There is no skill named "${name}".`)
-      return { content: [text(activate(skill))], details: { name } }
+      return { content: [text(await activate(skill, signal))], details: { name } }
     },
   }
 
@@ -263,11 +281,13 @@ export function skillSession(catalog) {
       name: names,
       path: Type.String({ description: "Path relative to the skill's folder, for example references/EXAMPLE.md" }),
     }),
-    execute: async (_id, params) => {
+    execute: async (_id, params, signal) => {
+      signal?.throwIfAborted()
       const { name, path } = /** @type {{ name: string, path: string }} */ (params)
       const skill = byName.get(name)
       if (skill === undefined) throw new Error(`There is no skill named "${name}".`)
-      const content = readSkillFile(skill, path)
+      const content = await readSkillFile(skill, path)
+      signal?.throwIfAborted()
       const clipped = content.length > READ_LIMIT ? `${content.slice(0, READ_LIMIT)}\n[... clipped at ${READ_LIMIT} characters]` : content
       return { content: [text(clipped)], details: { name, path } }
     },

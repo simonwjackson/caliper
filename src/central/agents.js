@@ -4,7 +4,7 @@
 // survive a restart of the project's dev server.
 import { homedir } from "node:os"
 import { MessageChannel, Worker } from "node:worker_threads"
-import { serveSyncCalls } from "./sync-call.js"
+import { serveHostCalls } from "./host-call.js"
 
 /**
  * @typedef {{ type: "takes" | "marks", data: unknown }} Broadcast
@@ -24,7 +24,7 @@ import { serveSyncCalls } from "./sync-call.js"
  *   stateDir: string,
  *   agent: () => import("../types").AgentOptions | undefined,
  *   env: Record<string, string | undefined>,
- *   hostCall: (id: string, target: string, method: string, args: unknown) => Promise<Omit<import("./sync-call.js").ReplyMessage, "id">>,
+ *   hostCall: (id: string, target: string, method: string, args: unknown, signal: AbortSignal) => Promise<Omit<import("./host-call.js").ReplyMessage, "id">>,
  * }} input
  *   `agent` is read when a project's worker starts. `hostCall` sends one call to the project's plugin;
  *   `app.server` answers with the project's checked dev server.
@@ -40,13 +40,12 @@ export function createAgentHosts({ stateDir, agent, env, hostCall }) {
    */
   const start = (id, root) => {
     const channel = new MessageChannel()
-    const flag = new SharedArrayBuffer(4)
     const option = agent()
     const worker = new Worker(new URL("./agent-host.js", import.meta.url), {
-      workerData: { id, root, stateDir, home: homedir(), agent: option, env, port: channel.port2, flag },
+      workerData: { id, root, stateDir, home: homedir(), agent: option, env, port: channel.port2 },
       transferList: [channel.port2],
     })
-    serveSyncCalls({ port: channel.port1, flag, answer: (target, method, args) => hostCall(id, target, method, args) })
+    serveHostCalls({ port: channel.port1, answer: (target, method, args, signal) => hostCall(id, target, method, args, signal) })
     /** @type {Set<(event: Broadcast) => void>} */
     const listeners = new Set()
     /** @type {Map<number, (value: any) => void>} */

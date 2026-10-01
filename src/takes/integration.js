@@ -25,6 +25,20 @@ const hash = value => createHash("sha256").update(JSON.stringify(value)).digest(
 /** @param {unknown} error */
 const reason = error => error instanceof Error ? error.message : String(error)
 
+/** @param {unknown} proposal @returns {IntegrationProposal} */
+const validate = proposal => {
+  if (!Value.Check(integrationProposalSchema, proposal)) throw new Error("Invalid integration proposal. Supply variant/component, nonblank summary, shared, preserved, usage, and preview part/state within their length limits.")
+  return structuredClone(proposal)
+}
+
+/** A summary depends only on the record, including in an overview snapshot. @param {Integration | undefined} integration */
+export function integrationSummary(integration) {
+  if (!integration) return undefined
+  return integration._tag === "Preparing"
+    ? { _tag: /** @type {const} */ ("Preparing"), sourceTake: integration.sourceTake }
+    : { _tag: /** @type {const} */ ("Review"), sourceTake: integration.sourceTake, proposal: validate(integration.proposal) }
+}
+
 /**
  * A review is bound to the submitted bytes, not the take number. Its successful
  * check survives restart, but cannot authorize changed bytes or changed sources.
@@ -128,11 +142,6 @@ export function createIntegrationReview(store) {
       const expected = Object.hasOwn(integration.base.originals, path) ? integration.base.originals[path] : hash(null)
       if (hash(content) !== expected) throw new Error(`Project source "${path}" changed after preparation. Prepare a new integration; do not overwrite the newer source.`)
     }
-  }
-  /** @param {unknown} proposal @returns {IntegrationProposal} */
-  const validate = proposal => {
-    if (!Value.Check(integrationProposalSchema, proposal)) throw new Error("Invalid integration proposal. Supply variant/component, nonblank summary, shared, preserved, usage, and preview part/state within their length limits.")
-    return structuredClone(proposal)
   }
   /** @param {string} take @param {IntegrationProposal} proposal */
   const preview = (take, proposal) => {
@@ -277,12 +286,6 @@ export function createIntegrationReview(store) {
     return current.files.map(file => file.path)
   }
   /** @param {string} take */
-  const summary = take => {
-    const integration = record(take).integration
-    if (!integration) return undefined
-    return integration._tag === "Preparing"
-      ? { _tag: /** @type {const} */ ("Preparing"), sourceTake: integration.sourceTake }
-      : { _tag: /** @type {const} */ ("Review"), sourceTake: integration.sourceTake, proposal: validate(integration.proposal) }
-  }
+  const summary = take => integrationSummary(record(take).integration)
   return { begin, submit, review, check, beginCheck, finishCheck, apply, summary }
 }
