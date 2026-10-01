@@ -88,7 +88,7 @@ async function setup() {
   /** @param {string} path */
   const get = path => fetch(`${url}${path}`)
   /** @param {string} path @param {unknown} body @param {Record<string,string>} [headers] */
-  const post = (path, body, headers = {}) => fetch(`${url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: url, ...headers }, body: JSON.stringify(body) })
+  const post = (path, body, headers = {}) => fetch(`${url}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) })
   const ready = async () => {
     for (let count = 0; count < 100; count++) {
       const view = api.snapshot()
@@ -134,11 +134,8 @@ test("HTTP run returns Running, publishes transitions and retains the Ready repo
   expect(await report.json()).toEqual(ready.report)
 }))
 
-test("write routes reject cross/null/malformed origins, wrong media types, methods and client file paths", () => fixture(async f => {
-  for (const origin of ["null", "https://evil.test", "not a URL", "https://127.0.0.1"]) {
-    expect((await f.post("/checks/run", request, { origin })).status).toBe(403)
-    expect((await f.post("/checks/approve", {}, { origin })).status).toBe(403)
-  }
+// The page's origin is the Caliper app's check, tested in write-admission.test.js.
+test("write routes reject wrong media types, methods and client file paths", () => fixture(async f => {
   for (const type of ["text/plain", "application/json-evil"]) expect((await f.post("/checks/run", request, { "content-type": type })).status).toBe(403)
   expect((await f.get("/checks/run")).status).toBe(405)
   expect((await f.post("/checks", {})).status).toBe(405)
@@ -355,7 +352,6 @@ test("Stop aborts the runner, reports progress and preserves a distinct cancelle
   const running = await (await f.post("/checks/run", request)).json()
   expect(f.api.snapshot()).toMatchObject({ _tag: "Running", progress: { phase: "First render", completed: 0, total: 2 } })
   expect((await f.get("/checks/cancel")).status).toBe(405)
-  expect((await f.post("/checks/cancel", { id: running.id }, { origin: "https://evil.test" })).status).toBe(403)
   expect((await f.post("/checks/cancel", { id: crypto.randomUUID() })).status).toBe(400)
   expect((await f.post("/checks/cancel", { id: running.id, path: "/tmp" })).status).toBe(400)
   expect((await f.post("/checks/cancel", { id: running.id })).status).toBe(202)

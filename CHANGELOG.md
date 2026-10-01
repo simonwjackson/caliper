@@ -9,6 +9,9 @@ break things.
 
 - Generated check images no longer trigger Vite's unresolved-import retries and
   reload unchanged preview frames. Product files and take copies remain watched.
+- Every write endpoint takes the same JSON content types. Code, knobs, takes
+  and marks writes now refuse a type such as `application/json-evil`, as checks
+  already did, and accept `Application/JSON`.
 
 The first public release.
 

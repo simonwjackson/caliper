@@ -1,8 +1,8 @@
 // @ts-check
 
 /**
- * The rules every Caliper write endpoint follows: who may write, how large a
- * body may be, and how answers are sent.
+ * The rules every Caliper write endpoint follows: the form a write takes, how
+ * large a body may be, and how answers are sent.
  *
  * @typedef {import("node:http").IncomingMessage} IncomingMessage
  * @typedef {import("node:http").ServerResponse} ServerResponse
@@ -14,21 +14,16 @@ export const MAX_BODY = 64 * 1024
 export const MAX_FILE_BODY = 4 * 1024 * 1024
 
 /**
- * Only the chrome may write. A write needs a POST with a JSON body, which a
- * page on another site cannot send without a CORS preflight, and an Origin,
- * when the browser sends one, of the dev server itself.
+ * The form every write takes: a POST with a JSON body. Who may write is
+ * settled before a request gets here (decision 37): the Caliper app checks
+ * the page's origin, and the dev server checks the app's token.
  *
  * @param {IncomingMessage} request
  * @returns {string | null} why the request is refused, or null
  */
 export function refuse(request) {
   if (request.method !== "POST") return "Use POST."
-  if (!(request.headers["content-type"] ?? "").startsWith("application/json")) return "Send a JSON body."
-  const origin = request.headers.origin
-  if (origin !== undefined && origin !== "null") {
-    const host = request.headers.host
-    if (host === undefined || new URL(origin).host !== host) return "Only Caliper's own page can change files and takes."
-  }
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] ?? "")) return "Send a JSON body."
   return null
 }
 

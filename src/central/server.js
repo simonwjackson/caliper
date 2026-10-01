@@ -165,6 +165,7 @@ export async function startCentral(options = {}) {
     const url = new URL(request.url ?? "/", "http://caliper.local")
     const path = url.pathname
     // Browsers send Origin on every cross-site write. Only the app's own pages write.
+    // This is the only origin check: the plugin and the agent trust what passes it (decision 37).
     if (request.method !== "GET" && request.method !== "HEAD" && !sameOrigin(request)) {
       return sendJson(response, 403, { error: "Only the Caliper app's own page can change files and takes." })
     }
@@ -221,7 +222,7 @@ export async function startCentral(options = {}) {
   const toAgent = async (request, response, entry, below) => {
     const body = await readBody(request)
     const headers = /** @type {Record<string, string>} */ ({})
-    for (const [name, value] of Object.entries(request.headers)) if (typeof value === "string" && name !== "origin") headers[name] = value
+    for (const [name, value] of Object.entries(request.headers)) if (typeof value === "string") headers[name] = value
     const answer = await hosts.get(entry.id, entry.root).request({ path: below, method: request.method ?? "GET", headers, body })
     response.writeHead(answer.status, answer.headers)
     response.end(answer.body)

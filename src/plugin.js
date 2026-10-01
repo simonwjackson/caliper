@@ -342,13 +342,10 @@ function createSession(server, root, options, env, overlay) {
   const handle = async (url, request, response) => {
     const path = url.pathname.slice(CALIPER_PATH.length)
     // Reads stay open, as Vite's own modules are. Every write needs this
-    // server's token, which only the registry file holds (decision 37).
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      if (!tokenMatches(request.headers.authorization, token)) {
-        return json(response, 401, { error: "Caliper's dev server takes writes only from the Caliper app. Open this project there." })
-      }
-      // The token proves the Caliper app, which checked the page's origin itself.
-      delete request.headers.origin
+    // server's token, which only the registry file holds (decision 37). The
+    // token proves the Caliper app, which checks the page's origin itself.
+    if (request.method !== "GET" && request.method !== "HEAD" && !tokenMatches(request.headers.authorization, token)) {
+      return json(response, 401, { error: "Caliper's dev server takes writes only from the Caliper app. Open this project there." })
     }
     if (path === "/hello") return json(response, 200, { protocol: PROTOCOL, id, pid: process.pid, name: projectName(root), root })
     if (path === "/host") return host.handle(request, response)

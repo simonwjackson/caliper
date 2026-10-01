@@ -602,6 +602,18 @@ Costs:
 - The agent's checks keep their baselines in the app's state folder,
   `~/.local/state/caliper/baselines/<id>`, not in the project.
 - The plugin also refuses `server.hmr.host`, which would move the socket.
+- Each write check has one owner (2026-10-01, the user chose "only the
+  app"). The app checks the page's `Origin`. The plugin checks the token.
+  Endpoints check only the form of a write, a POST with a JSON body, with one
+  content-type rule, and then their own body. Before, the code, knobs,
+  checks, takes and marks endpoints also compared `Origin` with `Host`, and
+  the plugin and the app removed `Origin` so those checks would pass. A probe
+  showed they never ran on a real write. With the header kept, they would
+  refuse the app's own page, because the app's forward changes `Host`. Their
+  tests mounted one module on a bare server, so they passed for a rule that
+  never ran. `test/write-admission.test.js` tests each check where a write
+  crosses it. Cost: if a future write route skips both the app and the
+  token, no second check stops a page on another site.
 
 ## 38. The chrome says each thing once
 

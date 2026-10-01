@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { lstatSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { Check } from "typebox/value"
-import { json, readJson } from "../http.js"
+import { json, readJson, refuse } from "../http.js"
 import { CheckReportSchema } from "../render/check-contract.js"
 import { approveBaselines, checkJobs } from "../render/checks.js"
 import { planRenders } from "../render/plan.js"
@@ -181,15 +181,6 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
     } finally { starting = false }
   }
 
-  /** @param {import('node:http').IncomingMessage} request */
-  const guard = request => {
-    if (!/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] ?? "")) throw new Error("Send a JSON body.")
-    const origin = request.headers.origin
-    if (origin === undefined) return // Non-browser callers have no Origin.
-    const protocol = "encrypted" in request.socket && request.socket.encrypted ? "https:" : "http:"
-    if (origin === "null" || origin !== `${protocol}//${request.headers.host}`) throw new Error("Only Caliper's own origin can run or approve checks.")
-  }
-
   /**
    * @param {string} path @param {URL} url
    * @param {import('node:http').IncomingMessage} request
@@ -202,8 +193,10 @@ export function createChecksApi({ store, project, serverUrl, chromium, cacheDir,
       json(response, 405, { error: write ? "Use POST." : "Use GET." })
       return true
     }
-    if (write) {
-      try { guard(request) } catch (error) { json(response, 403, { error: reason(error) }); return true }
+    const refusal = write ? refuse(request) : null
+    if (refusal !== null) {
+      json(response, 403, { error: refusal })
+      return true
     }
     try {
       if (path === "/checks") json(response, 200, view)
