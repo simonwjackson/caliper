@@ -68,9 +68,12 @@ describe("workspaces in the app", () => {
       ["Can Settings open with the d-pad?", "Open · no ideas yet", ""], ["Cart art", "Closed · 0 answers", ""], ["Workspace 3", "Cannot be read", "It is not JSON."],
     ])
     expect(nav.parts.flatMap(part => part.states.map(state => state.pin._tag))).toEqual(["None", "None", "None"])
+    expect(nav.scenario._tag).toBe("Selected")
     app.actions.onWorkspace("1")
     nav = app.getSnapshot().navigation
     expect(nav.workspaces.items[0]?.selected).toBe(true)
+    // The preview scenario belongs to the canvas, which the board replaces.
+    expect(nav.scenario._tag).toBe("None")
     expect(nav.parts.find(part => part.file === home)?.pinned).toBe(1)
     expect(nav.parts.find(part => part.file === home)?.states.map(state => state.pin)).toEqual([
       { _tag: "Pin", pinned: true, availability: { _tag: "Enabled" } }, { _tag: "Pin", pinned: false, availability: { _tag: "Enabled" } },

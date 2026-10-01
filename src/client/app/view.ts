@@ -109,7 +109,8 @@ function navigation(state: AppState, regions: Regions): NavigationView {
         badge: badge(part.file, item.export), takes: partTakes(state, part.file, item.export).map(navTake), comparing: !state.workspace && part.file === state.part && state.shown._tag === "Takes" && item.export === state.shown.export,
         pin: pin({ part: part.file, state: item.export }) })),
     })),
-    scenario: subject && preview ? { _tag: "Selected", subject, editingLabel: `Editing ${refLabel(state, subject)}`, choices: [null, ...contexts].map(ref => ({ key: contextKey(ref), label: ref ? refLabel(state, ref) : `Isolated · ${refLabel(state, subject)}`, context: ref })), chosen: contextKey(state.context),
+    // The preview scenario belongs to the canvas; while a workspace's board replaces it, there is none to choose.
+    scenario: subject && preview && !state.workspace ? { _tag: "Selected", subject, editingLabel: `Editing ${refLabel(state, subject)}`, choices: [null, ...contexts].map(ref => ({ key: contextKey(ref), label: ref ? refLabel(state, ref) : `Isolated · ${refLabel(state, subject)}`, context: ref })), chosen: contextKey(state.context),
       note: state.contextNote,
       whole: state.context ? { ref: preview, label: refLabel(state, preview) } : null,
       children: subjectsOf(parts, preview).map(ref => ({ ref, label: refLabel(state, ref), selected: sameState(subject, ref) })),

@@ -7,6 +7,13 @@ break things.
 
 ## Unreleased
 
+- Workspaces (decision 45): a scratch area for a question that is not about
+  one part. Pin states as rows, write the question, and the planner starts
+  several ideas. Each idea is a take with its own agent and files; the board
+  shows every row in Today and in each idea, and dims a cell that matches
+  Today. Questions and answers, with their reasons, stay after you discard the
+  ideas. Ideas cannot be accepted yet. The plugin's protocol is now 4, so
+  restart each project's dev server after you update the Caliper app.
 - Generated check images no longer trigger Vite's unresolved-import retries and
   reload unchanged preview frames. Product files and take copies remain watched.
 - Every write endpoint takes the same JSON content types. Code, knobs, takes

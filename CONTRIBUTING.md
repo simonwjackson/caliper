@@ -235,6 +235,14 @@ exercise naming and alternate preparation with a real model. `--live`,
 `~/.config/caliper/config.json` and the key in the script's own environment;
 the last two take `--model` to try another model on that endpoint.
 
+`scripts/verify-workspaces-model.mjs --root <project>` drives a workspace
+(decision 45) through the chrome of a running Caliper app, as a person would:
+New workspace, three pins, the question, a plan of three ideas, the board and
+the questions. It needs the project's dev server and the app running, spends
+model tokens on the planner and three idea agents, and writes a workspace and
+three takes into the project's `.caliper/`. Screenshots and a summary go to
+`/tmp/caliper-workspaces-model`.
+
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
 every part of a running project and checks calibration actions, a visible error
 and reload on save. It reports final physical sizing, overflow and height-budget

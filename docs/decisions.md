@@ -1037,3 +1037,13 @@ Costs:
   front, as a take's record does; the mockup drew it behind until you answer.
 - A row whose state no longer exists says so in its cells and offers Unpin,
   because the parts list has no pin for a state that is gone.
+- While a board is on screen, the parts panel has no preview scenario to
+  choose; that choice belongs to the canvas.
+- Checked end to end on 2026-10-01 with `scripts/verify-workspaces-model.mjs`
+  in the deployed app, on Pico itself, through the chrome: New workspace,
+  three pins (Home, Find, Settings), the Settings question and a plan of
+  three. The planner answered in 21 s and named the workspace. All three idea
+  agents finished within their 80 turns, in 11 minutes, and changed 6 to 12
+  files each. All 12 cells rendered. Two cells, Find and Settings in the
+  idea that added a drawer to Home only, dimmed as Same as Today. No agent
+  asked a question. Pico's four takes of parts were not touched.

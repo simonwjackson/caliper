@@ -1,6 +1,6 @@
 # Workspaces: a plan
 
-Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is in progress. The user chose parts of it one at a time. They are listed under [Settled](#settled).
+Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. Slices 2 to 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
 
 ## Problem
 

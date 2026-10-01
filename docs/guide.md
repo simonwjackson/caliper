@@ -499,6 +499,64 @@ cover discovered project files, so even an unrelated source edit requires a new
 proposal. Keep an experiment as a take when the product does not need another
 supported choice.
 
+## Answer a question in a workspace
+
+A take changes one part. Some work starts from a question instead, for
+example "A person can open Settings using only the d-pad, A and B. Does Find
+also get a focusable entry?" The answer can reuse parts, change them, add new
+parts, or end as a decision with no code. A **workspace** holds that work. It
+can use everything in the project, but nothing in it changes the project:
+there is no Accept. Decision 45 in `docs/decisions.md` records the design.
+
+1. **Open.** In the parts panel, press **New** beside Workspaces. Its board
+   replaces the canvas.
+2. **Pin rows.** While a workspace is open, every state in the parts list has
+   a pin. Each pinned state is a row on the board. Pick the states the
+   question is about.
+3. **Ask.** Write the question in the bar under the board, choose how many
+   ideas in its menu, and press **Plan 3 ideas**. The planner reads the
+   question, the rows' sources and renders, and the names of every part. It
+   gives each idea a direction, one of them strange when you ask for three or
+   more (decision 33), and names the workspace. With 1 idea there is no plan.
+4. **Compare.** Each idea is a take with its own agent and its own copy of
+   the files. The first column, Today, is the real files; each idea has a
+   column, and every row shows in every column. A cell whose page is exactly
+   Today's steps back and says "Same as Today", so the cells that changed are
+   the ones you read. Press an idea's name to focus it: the bar then sends
+   your prompt to that idea, and has its Discard. With no idea focused, the
+   bar starts a new idea from what you write.
+5. **Answer.** Press **Questions** over the board. The panel holds the
+   question, the open questions and the answered ones. You can add a question;
+   an idea's agent adds one when the question leaves a decision open or it
+   finds a problem. An answer needs its reason.
+6. **Close.** **Discard ideas** deletes the ideas and the files they edited.
+   The question, the rows and every question and answer stay, and the
+   workspace moves to Closed.
+
+Where it lives: `.caliper/workspaces/<id>/workspace.json` holds the question,
+the rows, the questions and answers, and the status. Each idea is a take in
+`.caliper/takes/<n>/` whose record names its workspace, so ideas never show
+under a state in the parts list. Git ignores `.caliper/`, so answers stay on
+your machine; copy one into the repository for others to read it.
+
+An idea's agent has the take agent's tools, and `render` renders any state
+the idea's files declare, including a part file the idea adds. `rows: true`
+renders every row once. Its run stops after 80 turns, a take's after 40; send
+it a prompt to go on. The board fits itself to its box: it shows Today beside
+one idea, then one column, and one row at a time, with a picker for the rest.
+
+Limits of this first slice:
+
+- Rows are declared states only. A row file of the workspace's own, and
+  checks that press keys in a row, come later. A board shows renders; it does
+  not prove that the d-pad reaches anything.
+- There is no way to promote an idea yet. To keep one, rebuild it as a take
+  of a part and accept that take.
+- "Same as Today" compares each page's markup and CSS in the browser, not its
+  pixels. A page that differs only in a canvas or a script's timing is never
+  dimmed, and a row compares only while its Today cell is on screen.
+- Four rows and three ideas are 16 live frames on one device.
+
 ## Edit code in Caliper
 
 The **Code** button opens the code pane. It needs no agent. The core reference
