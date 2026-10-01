@@ -53,6 +53,13 @@ Close, Escape, a click on the scrim, Done and a second press of Calibrate
 all close a window. Before this, the app kept the window's tool pressed with
 nothing in front, and the gallery moved to Takes.
 
+Code and Knobs follow the same rule (decided 2026-10-01). A second press of
+the tool while its pane is in front closes the pane, and so does the pane's
+own Close button. Then the most recent tool that is still open comes to the
+front: open Takes, then Code, then Knobs; close Knobs and Code is in front;
+close Code and Takes is in front. Before this, the Close button only sent
+the pane behind, so on a desk the Knobs panel stayed open.
+
 `frontSheet(plan, active, side)` in `layout.ts` is this rule; its tests are in
 `test/ui-layout.test.ts`. A sheet that is not in front stays mounted behind,
 so the editor and knob state survive. On the desk the rail has no Preview,
