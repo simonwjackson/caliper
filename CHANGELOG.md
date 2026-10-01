@@ -11,6 +11,9 @@ The first public release.
 
 ### Fixed
 
+- Visual checks retry a complete observation after a same-frame reload instead
+  of failing with "Execution context was destroyed". Retries stay bounded and
+  do not replay authored input or ignore source changes.
 - Caliper's self-hosting dev server skips generated direnv caches and other
   worktrees, so its file watcher does not scan Nix package trees at startup.
 - Checks skip the generated `.direnv` cache instead of hashing linked Nix

@@ -760,6 +760,16 @@ CHROMIUM=/path/to/chromium caliper-render --url http://localhost:5173 \
 ```
 
 Each run writes a unique folder with `report.json` and two sets of PNGs.
+If the same preview frame reloads, or Chromium cannot capture its image yet,
+Caliper restarts the complete observation. It tries at most three times within the
+existing 15-second render deadline. This can delay a sample but prevents a
+report from combining an old document's measurements with a new document's
+image. Navigation away from the requested frame still fails. Source changes
+still stop checks, and authored input is never replayed after navigation.
+Requests cancelled by document replacement are omitted from browser findings.
+Other errors, including requests cancelled before replacement starts, remain
+visible.
+
 Use an output directory outside the product or under `<project>/.caliper/checks`.
 Other project-local output directories are rejected before writing: their generated
 files would invalidate the source revision being checked. The JSON

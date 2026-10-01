@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { aborted, bounded, openBrowserSession } from "./browser-session.js"
+import { observeFrame } from "./frame-observation.js"
 import { runNodeWorker } from "./node-worker.js"
 import { FRAME_WATCHDOG_MS } from "../pages.js"
 import { auditAccessibility, axeVersion } from "./accessibility.js"
@@ -127,10 +128,27 @@ async function renderOne(session, url, job, out, audit, signal) {
   const viewport = { width: job.viewport.width, height: job.viewport.height }
   const context = await bounded(() => browser.newContext({ viewport, deviceScaleFactor: 1 }), { signal })
   try {
-    return await bounded(async () => {
+    return await bounded(async operationSignal => {
     const page = await context.newPage()
     /** @type {string[]} */
     const consoleErrors = []
+    let documentGeneration = 0
+    let replacingDocument = false
+    /** @type {Map<import('playwright-core').Request, number>} */
+    const requestGenerations = new Map()
+    /** @type {Array<{generation:number, replaced:boolean, reason:string, url:string}>} */
+    const requestFailures = []
+    page.on("framenavigated", frame => {
+      if (frame === page.mainFrame() && replacingDocument) {
+        documentGeneration++
+        replacingDocument = false
+      }
+    })
+    page.on("request", request => {
+      requestGenerations.set(request, documentGeneration)
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) replacingDocument = true
+    })
+    page.on("requestfinished", request => requestGenerations.delete(request))
     // Chromium's "Failed to load resource" message has no URL, so report the response instead.
     page.on("console", message => {
       if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) consoleErrors.push(message.text())
@@ -139,11 +157,16 @@ async function renderOne(session, url, job, out, audit, signal) {
     page.on("response", response => {
       if (response.status() >= 400) consoleErrors.push(`HTTP ${response.status()} for ${response.url()}`)
     })
-    page.on("requestfailed", request => consoleErrors.push(`Request failed (${request.failure()?.errorText ?? "unknown"}) for ${request.url()}`))
+    page.on("requestfailed", request => {
+      const generation = requestGenerations.get(request) ?? documentGeneration
+      requestFailures.push({ generation, replaced: replacingDocument || generation < documentGeneration, reason: request.failure()?.errorText ?? "unknown", url: request.url() })
+      requestGenerations.delete(request)
+    })
 
     const takeQuery = job.take === undefined ? "" : `&take=${encodeURIComponent(job.take)}`
     const frameUrl = new URL(`/__caliper/frame?part=${encodeURIComponent(job.part)}&state=${encodeURIComponent(job.state)}${takeQuery}`, url)
     await page.goto(frameUrl.href)
+    return observeFrame({ page, url: frameUrl.href, signal: operationSignal, observe: async () => {
     // The frame's watchdog fails the frame after FRAME_WATCHDOG_MS, so this always ends.
     await page.waitForFunction(() => {
       const state = document.documentElement.dataset.caliperState
@@ -232,7 +255,11 @@ async function renderOne(session, url, job, out, audit, signal) {
       frame: /** @type {RenderResult["frame"]} */ (report.frame),
       png,
       problems: report.problems,
-      console: consoleErrors,
+      // Only aborted requests from a replaced document are discarded. Genuine
+      // errors, including aborts in the sampled document, remain findings.
+      console: [...consoleErrors, ...requestFailures
+        .filter(failure => failure.reason !== "net::ERR_ABORTED" || !failure.replaced || failure.generation >= documentGeneration)
+        .map(failure => `Request failed (${failure.reason}) for ${failure.url}`)],
       spill: report.spill,
       ...(report.expectations ? { expectations: report.expectations } : {}),
       ...(report.expectationProblems ? { expectationProblems: report.expectationProblems } : {}),
@@ -242,6 +269,7 @@ async function renderOne(session, url, job, out, audit, signal) {
         environment: `chromium:${browser.version()};${process.platform}:${process.arch};dpr:1;axe:${axeVersion};checks:2`,
       }),
     }
+    } })
     }, { signal })
   } finally {
     await session.closeContext(context)
