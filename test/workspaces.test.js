@@ -163,6 +163,8 @@ describe("the workspace store", () => {
       expect(store.readSource("src/Home.tsx")).toBe("home")
       expect(store.readSource("../../clients/portal/src/input/bus.ts")).toContain("createInputBus")
       expect(store.listSource("../../clients/portal")).toEqual(["../../clients/portal/src/input/bus.ts"])
+      // The repository's own root lists; it is not outside.
+      expect(store.listSource("../..")).toEqual(["../../clients/portal/src/input/bus.ts", "src/Home.tsx"])
       for (const file of ["../../clients/portal/.env", "../../clients/portal/node_modules/x/index.js", "../../.git/config", "../../../outside.txt", "/etc/passwd"]) {
         expect(() => store.readSource(file)).toThrow()
       }

@@ -29,13 +29,18 @@ export function createRepoSource(root) {
     return top
   }
 
-  /** @param {string} file as the agent wrote it @returns {string} absolute */
-  const fence = file => {
+  /**
+   * @param {string} file as the agent wrote it
+   * @param {boolean} [folder] a folder to list: the repository's own root is one
+   * @returns {string} absolute
+   */
+  const fence = (file, folder = false) => {
     if (typeof file !== "string" || file.trim() === "") throw new Error("The path is empty.")
     if (isAbsolute(file)) throw new Error(`"${file}" is absolute. Use a path relative to the project root.`)
     const repo = repository()
     const absolute = resolve(realpathSync(root), file)
     const inside = relative(repo, absolute)
+    if (inside === "" && folder) return absolute
     if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) throw new Error(`"${file}" is outside the project's repository.`)
     const segments = inside.split(sep)
     const hidden = segments.find(segment => HIDDEN.has(segment))
@@ -66,7 +71,7 @@ export function createRepoSource(root) {
    * @returns {string[]} sorted
    */
   const listSource = folder => {
-    const base = folder === "" || folder === "." ? resolve(realpathSync(root)) : fence(folder)
+    const base = folder === "" || folder === "." ? resolve(realpathSync(root)) : fence(folder, true)
     const repo = repository()
     /** @type {string[]} */
     let found
