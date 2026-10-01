@@ -119,14 +119,14 @@ the central app's own event stream, because the agent runs there.
 
 ## Replace the installed legacy app
 
-Checked on 2026-09-30 on `zao`:
+Checked on 2026-09-30 on the author's machine:
 
 | Item | State |
 |---|---|
-| `~/.config/systemd/user/caliper.service` | Disabled, inactive. Runs `nix develop --command bun ./bin/caliper.mjs --port 3132 --browse-root /home/simonwjackson/code` in the main checkout. Drop-in `caliper.service.d/nofile.conf` sets `LimitNOFILE=65536`. |
+| `~/.config/systemd/user/caliper.service` | Disabled, inactive. Runs `nix develop --command bun ./bin/caliper.mjs --port 3132 --browse-root ~/code` in the main checkout. Drop-in `caliper.service.d/nofile.conf` sets `LimitNOFILE=65536`. |
 | `bin/caliper.mjs` | Gone from `main`. It was the legacy multi-project launcher, last seen in `feat-zero-touch-onboarding`. The unit cannot start today. |
 | `~/.config/systemd/user/caliper-proxy.service` | Disabled, inactive. Runs `~/.local/bin/caliper-tsnet --name caliper --state ~/.config/caliper-tsnet --upstream http://127.0.0.1:3132`. |
-| Tailnet node `caliper` (`100.76.133.33`) | Was offline for 23 days. The spike ran it by hand with `--upstream http://127.0.0.1:3140`, and it served the spike over HTTPS. |
+| Tailnet node `caliper` | Was offline for 23 days. The spike ran it by hand with `--upstream http://127.0.0.1:3140`, and it served the spike over HTTPS. |
 | `caliper-tsnet` | Source not found in this repository. It takes one `--upstream`, which is all the central app needs. |
 
 The replacement keeps the tailnet name, the tsnet state, the binary and
@@ -181,16 +181,16 @@ Gates run on the branch: `bun test` (all pass), `tsc`, `verify-chrome-core.mjs`
 hooks), `ui/verify.mjs`. Not run: `verify-markup-model` and
 `verify-references-model` (a paid model).
 
-### Deploy on zao, 2026-09-30
+### Deploy on the author's machine, 2026-09-30
 
 | Check | Result |
 |---|---|
 | `deploy/install.sh` | Wrote and enabled `caliper.service` (the app on 3132, from the main checkout) and `caliper-proxy.service` (`caliper-tsnet` to 3132). Both active; both start with the user session. A reboot was not tested. |
 | Settings | `~/.config/caliper/config.json`: `claude-opus-5-5`, reasoning medium. Endpoint and key from `~/.pi/agent/cliproxyapi.json`. |
-| Projects | Pico (Vite on `[::1]:5173`) and amaze-next (`100.114.19.92:5199`) both Ready. The IPv6 address exposed a proxy bug, fixed in `71ecc0f`. |
-| Through `https://caliper.hummingbird-lake.ts.net` (Chromium on zao) | Project list with 2 links. A Pico tab rendered in 683 ms and an amaze-next tab in 1,560 ms. The switcher listed both. Both HMR sockets went to the tailnet name at their project's path. No page errors. |
+| Projects | Pico (Vite on `[::1]:5173`) and a second, private Tailwind project (Vite on a tailnet IPv4 address) both Ready. The IPv6 address exposed a proxy bug, fixed in `71ecc0f`. |
+| Through the HTTPS tailnet name (Chromium on the same machine) | Project list with 2 links. A Pico tab rendered in 683 ms and the second project's tab in 1,560 ms. The switcher listed both. Both HMR sockets went to the tailnet name at their project's path. No page errors. |
 | A take with the real model | Pico, take 5: `activate_skill`, `name_take`, `read_file`, `edit_file`, `render` twice, all Done, through the plugin's host endpoint. Discarded after. |
 | 100 agent file reads through the plugin | 334 ms, about 3.3 ms each (HTTP to the plugin; the worker's own hop not included). |
 | Pinned tool | Moved to `71ecc0f`. `verify:chrome-delivery` passed linked, packed and self-host. `bun run tool:app` served both projects on 3133. |
-| Not done | The Fold itself, Firefox, and a reboot. The HTTPS run used Chromium on zao. |
+| Not done | The Fold itself, Firefox, and a reboot. The HTTPS run used Chromium on the same machine. |
 

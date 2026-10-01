@@ -94,8 +94,8 @@ another origin. Anything that reaches the app's port can use every project
 through it; the app listens on `127.0.0.1` unless you pass `--host`.
 
 The app knows nothing about TLS or Tailscale. To reach it from another
-device, put a TLS proxy in front of its one port. On `zao` that is
-`caliper-tsnet` at `https://caliper.hummingbird-lake.ts.net`; see `deploy/`.
+device, put a TLS proxy in front of its one port. `deploy/` holds one example
+setup: a systemd user service, and an optional tailnet TLS proxy in front of it.
 
 ## Install the dev chrome
 

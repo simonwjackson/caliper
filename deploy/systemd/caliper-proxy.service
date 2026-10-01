@@ -1,5 +1,5 @@
 [Unit]
-Description=Caliper app on the tailnet: https://caliper.hummingbird-lake.ts.net
+Description=Caliper app behind a TLS proxy on a tailnet (caliper-tsnet)
 After=network-online.target caliper.service
 Requires=caliper.service
 

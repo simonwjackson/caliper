@@ -19,7 +19,7 @@ function serverAt(address, { https = false, local = [] } = {}) {
 
 describe("listeningOrigin", () => {
   test("uses the one address Vite listens on, even when it is not loopback", () => {
-    expect(listeningOrigin(serverAt({ address: "100.114.19.92", family: "IPv4", port: 5198 }))).toBe("http://100.114.19.92:5198")
+    expect(listeningOrigin(serverAt({ address: "100.64.0.1", family: "IPv4", port: 5198 }))).toBe("http://100.64.0.1:5198")
   })
 
   test("uses loopback when Vite listens on every address", () => {

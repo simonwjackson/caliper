@@ -164,7 +164,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
       projects: { _tag: "Choices", choices: [
         { id: "2e5778d2b4c4", name: "@korri/pico", current: true, problem: "" },
         { id: "8d404a4ae70c", name: "@simonwjackson/caliper", current: false, problem: "" },
-        { id: "08fdb36dffb7", name: "amaze-next", current: false, problem: "protocol 0, this app speaks 1" },
+        { id: "08fdb36dffb7", name: "billing-portal", current: false, problem: "protocol 0, this app speaks 1" },
       ] },
       parts: [
         part("Game Detail", PART, "page", 5, { selected: true, expanded: true, states: gameDetailStates(family.takes.map(item => item.take), selected), note: "The game's page" }),

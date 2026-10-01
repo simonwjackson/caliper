@@ -514,8 +514,8 @@ checkout. The two apps run on different ports. When the checkout raises the
 protocol number, the pinned app refuses the projects that link to the
 checkout, until you move the pin.
 
-**Deployment.** Caliper knows nothing about Tailscale or TLS. On `zao`, the
-existing `caliper-tsnet` binary forwards `https://caliper.hummingbird-lake.ts.net`
+**Deployment.** Caliper knows nothing about Tailscale or TLS. On the author's
+machine, an existing TLS proxy (`caliper-tsnet`) forwards an HTTPS tailnet name
 to the central app with its one `--upstream`, with no change. The spike ran
 all its checks through it.
 
@@ -531,7 +531,7 @@ Costs:
   as `~/.pi/agent/cliproxyapi.json`.
 - On the Vite port, frame pages, Vite modules and the HMR socket stay open
   without a token, as today.
-- The central app's port has no login. On `zao`, any device on the tailnet
+- The central app's port has no login. Behind a tailnet proxy, any device on the tailnet
   can use every plugin endpoint through it, writes included. This is the same
   trust as the legacy app.
 - Decision 31 changes: Caliper registers a service worker. It only routes.
@@ -550,9 +550,8 @@ Costs:
   the one that starts Vite and the one that starts the central app.
 - Installs under a project's `/__caliper/` stop working. The install moves to
   the central app's origin.
-- The central app replaces the installed legacy launcher at
-  `caliper.hummingbird-lake.ts.net` (user units `caliper.service` and
-  `caliper-proxy.service`). The new app does not start projects, so a project
+- The central app replaces the installed legacy launcher on the author's
+  machine (user units `caliper.service` and `caliper-proxy.service`). The new app does not start projects, so a project
   shows only after you start its dev server.
 - A protocol change breaks every project on the old number until it updates.
   There is no warning period.

@@ -368,7 +368,7 @@ Deploy: `bun run build` in the main checkout, and Pico's Vite restarted with
 `nix develop <caliper> -c node node_modules/.bin/vite --host 0.0.0.0 --port
 5173 --strictPort` in `~/code/sandbox/korri/surfaces/pico`. Server code
 changes need that restart; a chrome-only change needs only the build.
-`/__caliper/marks.json` answers 200 on `zao.hummingbird-lake.ts.net:5173`.
+`/__caliper/marks.json` answers 200 on the machine's tailnet name, port 5173.
 The recovery tool is pinned to `5578e65`.
 
 Open after phase 4:
