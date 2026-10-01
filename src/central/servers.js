@@ -101,8 +101,9 @@ async function hello(entry, timeoutMs) {
 
 /** @param {unknown} error @param {URL} url @param {number} timeoutMs */
 function reasonOf(error, url, timeoutMs) {
-  const failure = /** @type {{ name?: string, message?: string, cause?: { code?: string } }} */ (error)
+  const failure = /** @type {{ name?: string, message?: string, cause?: { code?: string, message?: string } }} */ (error)
   if (failure?.name === "TimeoutError" || failure?.name === "AbortError") return `no answer from ${url.host} within ${timeoutMs / 1000} s`
   if (failure?.cause?.code === "ECONNREFUSED" || /ECONNREFUSED|Unable to connect/i.test(failure?.message ?? "")) return `nothing listens on ${url.host}`
-  return failure?.message ?? String(error)
+  // Node's fetch says only "fetch failed"; the cause says why.
+  return `${url.host}: ${failure?.cause?.message ?? failure?.message ?? String(error)}`
 }
