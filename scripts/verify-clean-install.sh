@@ -5,12 +5,14 @@
 #   npm pack --pack-destination /tmp/caliper-pack
 #   scripts/verify-clean-install.sh /tmp/caliper-pack/simonwjackson-caliper-*.tgz
 #
+# VITE_VERSION picks the consumer's Vite major. Default: 8.
 # Needs Node 24 and npm on PATH. If a Chromium is available (CHROMIUM, or the
 # browser from `npx playwright-core install chromium`), it also renders the part.
 # It uses its own registry folder and ports 5791 and 3791, so a running Caliper
 # app does not see this project.
 set -euo pipefail
 tarball="$(realpath "${1:?usage: verify-clean-install.sh <caliper .tgz>}")"
+vite_version="${VITE_VERSION:-8}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/caliper-clean-install-XXXX")"
 export XDG_RUNTIME_DIR="$work/run" XDG_CONFIG_HOME="$work/config"
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME"
@@ -40,11 +42,11 @@ EOF
 cat > vite.config.js <<'EOF'
 import { caliper } from "@simonwjackson/caliper"
 import { defineConfig } from "vite"
-export default defineConfig({ esbuild: { jsx: "automatic" }, plugins: [caliper()] })
+export default defineConfig({ plugins: [caliper()] })
 EOF
 
-npm install --no-audit --no-fund --loglevel=error react@19 react-dom@19 vite@6 "$tarball" > npm.log 2>&1 || { tail -30 npm.log; exit 1; }
-echo "installed $(node -p 'require("@simonwjackson/caliper/package.json").version') with node $(node --version)"
+npm install --no-audit --no-fund --loglevel=error react@19 react-dom@19 "vite@$vite_version" "$tarball" > npm.log 2>&1 || { tail -30 npm.log; exit 1; }
+echo "installed $(node -p 'require("@simonwjackson/caliper/package.json").version') with vite $(node -p 'require("vite/package.json").version') and node $(node --version)"
 
 node node_modules/.bin/vite --host 127.0.0.1 --port 5791 --strictPort > vite.log 2>&1 &
 vite=$!

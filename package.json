@@ -36,6 +36,9 @@
     "src",
     "bin",
     "skills",
+    "docs/guide.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "dist/chrome"
   ],
   "scripts": {

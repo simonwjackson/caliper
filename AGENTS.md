@@ -14,4 +14,6 @@ Treat its implementation status as a boundary, not a list of completed features.
 
 Read [the decision record](docs/decisions.md) before changing Caliper's architecture.
 Change a settled decision only with new evidence, and record the reason there.
-Use [README.md](README.md) for current setup, commands, and runtime limits.
+Use [README.md](README.md) for install, [docs/guide.md](docs/guide.md) for behavior,
+options and runtime limits, and [CONTRIBUTING.md](CONTRIBUTING.md) for development
+commands, tests and verification scripts.
