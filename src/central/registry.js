@@ -16,7 +16,7 @@ import { join } from "node:path"
  * 2: `hello` returns the server's pid, and the registry moved to the runtime folder.
  * 3: `project.json` carries the project's `devices`; the chrome has no built-in list.
  * 4: the host calls add `workspaces`, and take records can name an idea's workspace (decision 45).
- * 5: `workspaces` adds scratch rows: their files, their parts and the row agent's reads; its overview says what each row declares (decision 45, slice 2).
+ * 5: `workspaces` adds scratch rows: their files, their parts, the row agent's reads and the repository's root; its overview says what each row declares (decision 45, slice 2).
  */
 export const PROTOCOL = 5
 

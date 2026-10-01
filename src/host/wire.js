@@ -49,5 +49,5 @@ export const HOST_METHODS = /** @type {const} */ ({
   parts: ["discover"],
   skills: ["list", "content", "read"],
   workspaces: ["list", "read", "overview", "rowParts", "create", "setQuestion", "setName", "pin", "unpin", "ask", "answer", "close",
-    "addScratch", "writeRow", "readRow", "removeScratch", "readSource", "listSource"],
+    "addScratch", "writeRow", "readRow", "removeScratch", "readSource", "listSource", "sourceRoot"],
 })

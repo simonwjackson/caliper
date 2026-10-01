@@ -112,6 +112,7 @@ describe("a row agent", () => {
       expect(text).toContain(".caliper/workspaces/1/rows/1.part.tsx")
       expect(text).toContain("../../../../src/")
       expect(text).toContain("src/Home.page.part.tsx")
+      expect(text).toContain("The repository's root is \".\"")
       expect(system).toContain("Never weaken a check so that Today passes")
       expect(system).toContain("A check that cannot fail tests nothing")
       expect(system).toContain("If you cannot build the row the user asked for, stop and say why")

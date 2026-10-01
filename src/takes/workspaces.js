@@ -298,7 +298,7 @@ export function createWorkspaceStore(root) {
   const source = createRepoSource(root)
   return {
     root, list, read, overview, rowParts, create, setQuestion, setName, pin, unpin, ask, answer, close,
-    addScratch, writeRow, readRow, removeScratch, readSource: source.readSource, listSource: source.listSource,
+    addScratch, writeRow, readRow, removeScratch, readSource: source.readSource, listSource: source.listSource, sourceRoot: source.sourceRoot,
   }
 }
 

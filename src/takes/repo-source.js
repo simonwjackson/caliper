@@ -104,5 +104,8 @@ export function createRepoSource(root) {
       .sort()
   }
 
-  return { readSource, listSource }
+  /** The repository's root, relative to the project root: "../.." for a package two folders down, "." outside Git. */
+  const sourceRoot = () => relative(realpathSync(root), repository()).split(sep).join("/") || "."
+
+  return { readSource, listSource, sourceRoot }
 }

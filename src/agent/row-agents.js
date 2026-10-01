@@ -179,6 +179,8 @@ export function createRowAgents({ workspaces, engine, renderRow, project, onChan
     const others = record.rows.filter(row => !(row._tag === "Scratch" && row.file === file))
       .map(row => row._tag === "State" ? `- the pinned state ${row.part}, "${row.state}"` : `- the scratch row ${rowPath(workspace, row.file)}: ${row.brief}`)
     const now = await workspaces.readRow(workspace, file)
+    const top = await workspaces.sourceRoot()
+    const fromRow = `../../../../${top === "." ? "" : `${top}/`}`
     return [{
       type: "text",
       text: [
@@ -186,6 +188,7 @@ export function createRowAgents({ workspaces, engine, renderRow, project, onChan
         `What the user asks of this row: ${prompt}`,
         `Your row is ${path}. ${now === null ? "It does not exist yet." : `It holds now:\n<file path="${path}">\n${now}\n</file>`}`,
         `Import product files by paths relative to the row file: the project root is "../../../../", so src/Home.tsx is "../../../../src/Home".`,
+        `The repository's root is "${top}" from the project root: read_file and list_files take that path, for example list_files "${top}". From the row file, the repository's root is "${fromRow}".`,
         `The board shows the rows on ${device || "the board's device"}.`,
         `The board's other rows:\n${others.join("\n") || "- none yet"}`,
         `The project's parts, by file and name:\n${parts.map(part => `- ${part.file} (${part.name})`).join("\n")}`,
@@ -239,7 +242,7 @@ export function rowTools({ workspaces, workspace, file, render }) {
   /** @type {AgentTool} */
   const readFile = {
     name: "read_file", label: "Read",
-    description: "Read a file of the project's repository as it is now. Paths are relative to the project root; ../ reaches the rest of the repository, such as a sibling package the row imports.",
+    description: "Read a file of the project's repository as it is now. Paths are relative to the project root, not to the row file; ../ reaches the rest of the repository, such as a sibling package the row imports.",
     parameters: Type.Object({ path: Type.String({ description: "Path relative to the project root, for example src/Home.tsx" }) }),
     execute: async (_id, params, signal) => {
       signal?.throwIfAborted()
