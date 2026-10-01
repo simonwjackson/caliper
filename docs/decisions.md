@@ -410,6 +410,7 @@ The user chose this on 2026-09-30, over several answers:
 1. One UI connects to running Caliper servers and has a project switcher.
 2. There is no backwards compatibility yet.
 3. Plugins announce themselves in a registry under `~/.local/state/caliper/`.
+   Decision 39 moves it to the runtime folder and checks each file.
 4. Projects are agent agnostic, and the central app owns the AI settings. The
    agent reaches project files only through plugin endpoints.
 5. The central app uses one port. A fixed range of ports is refused.
@@ -627,3 +628,46 @@ away. A folded read row shows as many file names as its width holds.
 Kept on purpose: the record's chain line, the caption's device line
 (decision 34), and draft outcomes that say a take makes no take, because each
 can be the only place that fact is on screen.
+
+## 39. A registry file is a claim; the app checks it
+
+Decided 2026-10-01. The user asked how the registry stays correct after an
+unexpected reboot. Under decision 37, the app kept a file while
+`process.kill(pid, 0)` found a process with its pid. A crash or a power loss
+leaves the file. The state folder survives a reboot, and after a reboot the
+system hands out pids again. A stale file whose pid now belongs to another
+process looked alive. The app then showed the project as Ready and answered
+502. If another project's dev server held the file's port, the app routed the
+stale project's id to that other project.
+
+- **The registry is in `$XDG_RUNTIME_DIR/caliper/servers/`.** systemd keeps
+  that folder in memory and empties it at reboot and at logout. Without
+  `XDG_RUNTIME_DIR`, the registry stays in the state folder.
+  `CALIPER_REGISTRY` still overrides both.
+- **The app asks each server who it is.** Before it lists or routes an entry,
+  the app requests `<base>__caliper/hello` from the entry's URL, with a
+  1.5 s timeout and without the token. An answer stands for 2 s.
+  - If `hello` names the entry's protocol, id and pid, the entry is live.
+  - If `hello` names another project or another pid, the file is stale. The
+    app deletes it. The pid catches the same project's new server on the old
+    port, which a check of the id alone shows as a second server.
+  - If nothing answers, or the answer is not a Caliper `hello`, the project
+    shows as `Silent` with the reason. The app keeps the file and does not
+    route to it.
+- **`hello` returns the server's pid, and `PROTOCOL` is 2.**
+- **The agent's worker asks the app for its project's server** (`app.server`
+  over the host call channel). It no longer reads the registry, so its
+  renders and part reads use the same check as routing.
+
+Costs: a dev server and the app that disagree about `XDG_RUNTIME_DIR` do not
+see each other, and nothing reports it. A system without systemd keeps the
+old folder, so only the `hello` check protects it. The app sends one request
+to each project every 2 s while a project list is open. A hung server holds a
+routing request for up to 1.5 s. A `Silent` file stays until its pid ends or
+the system reboots. Every running dev server must restart once, because a
+protocol 1 plugin writes to the old folder.
+
+Checked by `test/central.test.js` (a reused pid with nothing on its port, a
+port that another project took, a port that the same project's new server
+took, a server that never answers) and `scripts/verify-central.mjs`
+(15 of 15).

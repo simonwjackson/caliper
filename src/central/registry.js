@@ -1,8 +1,9 @@
 // @ts-check
-// The registry of running Caliper dev servers (decision 37). Each plugin writes
-// one file when Vite listens and removes it when Vite closes. The central app
-// reads the folder for each request, so a server that restarts on another
-// port keeps its project id and keeps working.
+// The registry of running Caliper dev servers (decisions 37 and 39). Each
+// plugin writes one file when Vite listens and removes it when Vite closes.
+// The central app reads the folder for each request, so a server that
+// restarts on another port keeps its project id and keeps working. A file
+// only claims a server; `servers.js` checks the claim.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -12,8 +13,9 @@ import { join } from "node:path"
  * The wire version. The central app routes only to a plugin with the same
  * number. Raise it for any change to the registry file, the routing paths,
  * `hello` or the host calls. There is no support for older numbers.
+ * 2: `hello` returns the server's pid, and the registry moved to the runtime folder.
  */
-export const PROTOCOL = 1
+export const PROTOCOL = 2
 
 /**
  * @typedef {{
@@ -23,13 +25,17 @@ export const PROTOCOL = 1
  */
 
 /**
- * The folder of registry files. `CALIPER_REGISTRY` names another folder, for
- * tests and for running two separate sets of servers.
+ * The folder of registry files: `$XDG_RUNTIME_DIR/caliper/servers`, which
+ * systemd empties at reboot and logout, so no file outlives its server's
+ * boot. Without that variable, the state folder, which a reboot keeps.
+ * `CALIPER_REGISTRY` names another folder, for tests and for running two
+ * separate sets of servers. The app and every plugin must agree on it.
  *
  * @param {Record<string, string | undefined>} [env]
  */
 export function registryDir(env = process.env) {
   if (env.CALIPER_REGISTRY) return env.CALIPER_REGISTRY
+  if (env.XDG_RUNTIME_DIR) return join(env.XDG_RUNTIME_DIR, "caliper/servers")
   return join(env.XDG_STATE_HOME || join(homedir(), ".local/state"), "caliper/servers")
 }
 
@@ -70,11 +76,29 @@ export function tokenMatches(header, token) {
 export function writeEntry(dir, entry) {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   chmodSync(dir, 0o700)
-  const file = join(dir, `${entry.pid}-${entry.id}.json`)
+  const file = entryFile(dir, entry)
   const partial = `${file}.tmp`
   writeFileSync(partial, `${JSON.stringify(entry, null, 2)}\n`, { mode: 0o600 })
   renameSync(partial, file)
   return () => rmSync(file, { force: true })
+}
+
+/** @param {string} dir @param {Entry} entry */
+const entryFile = (dir, entry) => join(dir, `${entry.pid}-${entry.id}.json`)
+
+/**
+ * Delete an entry's file, if it still holds that entry. A server that
+ * restarted in the same process wrote the same name with a new token; that
+ * file stays.
+ *
+ * @param {string} dir
+ * @param {Entry} entry
+ */
+export function removeEntry(dir, entry) {
+  const file = entryFile(dir, entry)
+  try {
+    if (JSON.parse(readFileSync(file, "utf8"))?.token === entry.token) rmSync(file, { force: true })
+  } catch { /* already gone, or mid-write */ }
 }
 
 /**
@@ -92,6 +116,7 @@ function isEntry(value) {
 
 /**
  * Every entry whose process still runs. Files of dead processes are deleted.
+ * A running pid proves little: after a crash another process can hold it.
  * A file that is not an entry is skipped, not deleted: it can be mid-write.
  *
  * @param {string} dir

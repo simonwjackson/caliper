@@ -8,13 +8,13 @@ import { parentPort, workerData } from "node:worker_threads"
 import { createTakesApi } from "../agent/api.js"
 import { resolveAgent } from "../agent/config.js"
 import { discoverSkills } from "../agent/skills.js"
-import { readRegistry } from "./registry.js"
 import { remoteHost } from "./remote-host.js"
+import { pluginUrl } from "./servers.js"
 import { syncCaller } from "./sync-call.js"
 
 /**
  * @typedef {{
- *   id: string, root: string, registry: string, stateDir: string, home: string,
+ *   id: string, root: string, stateDir: string, home: string,
  *   agent: import("../types").AgentOptions | undefined, env: Record<string, string | undefined>,
  *   port: import("node:worker_threads").MessagePort, flag: SharedArrayBuffer,
  * }} HostData
@@ -24,16 +24,20 @@ const data = /** @type {HostData} */ (workerData)
 const main = /** @type {import("node:worker_threads").MessagePort} */ (parentPort)
 const TAKES_DELAY_MS = 100
 
-/** The project's current registry entry; the server can restart on another port. */
+const call = syncCaller({ port: data.port, flag: data.flag })
+/**
+ * The project's dev server now, as the app checked it; the server can
+ * restart on another port, and a stale registry file must not lead here.
+ *
+ * @returns {{ url: string, base: string }}
+ */
 const entry = () => {
-  const found = readRegistry(data.registry).filter(candidate => candidate.id === data.id)
-  if (found.length !== 1) throw new Error(found.length === 0 ? "The project's dev server is not running. Start it and try again." : "Two dev servers serve this project. Stop one of them.")
-  return /** @type {import("./registry.js").Entry} */ (found[0])
+  const reply = call("app", "server", [])
+  if (reply.error !== undefined) throw new Error(reply.error)
+  return /** @type {{ url: string, base: string }} */ (reply.value)
 }
-/** @param {import("./registry.js").Entry} server @param {string} path below `__caliper/` */
-const pluginUrl = (server, path) => new URL(`${server.base.replace(/\/?$/, "/").replace(/^\/?/, "")}__caliper/${path}`, server.url)
 
-const host = remoteHost({ call: syncCaller({ port: data.port, flag: data.flag }), root: data.root })
+const host = remoteHost({ call, root: data.root })
 const agent = resolveAgent({ option: data.agent, env: data.env, home: data.home })
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */

@@ -68,8 +68,8 @@ process.on("message", async value => {
     const state = mkdtempSync(join(tmpdir(), "caliper-test-app-"))
     app = await startCentral({ port: 0, registry: process.env.CALIPER_REGISTRY, stateDir: state, settings: join(state, "none.json"), agent })
     const id = projectId(root)
-    let url = app.projectUrl(id)
-    for (const end = Date.now() + 5000; url === null && Date.now() < end; url = app.projectUrl(id)) await sleep(10)
+    let url = await app.projectUrl(id)
+    for (const end = Date.now() + 5000; url === null && Date.now() < end; url = await app.projectUrl(id)) await sleep(10)
     if (url === null) throw new Error("The dev server did not register with the Caliper app.")
     process.send?.({ type: "ready", url, viteUrl })
   } catch (error) {

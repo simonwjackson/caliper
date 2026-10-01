@@ -40,7 +40,8 @@ target device. It has two pieces (decision 37):
    ```
 
 4. Run `vite` in the project. The plugin announces the dev server in
-   `~/.local/state/caliper/servers/`, and the app lists it at
+   `$XDG_RUNTIME_DIR/caliper/servers/` (or `~/.local/state/caliper/servers/`
+   without that variable), and the app lists it at
    `http://127.0.0.1:3132/__caliper/`. Open it there. Each tab shows one
    project; open two tabs for two projects. The **Project** menu at the top of
    the parts panel opens another running project in the same tab.
@@ -64,6 +65,11 @@ contract's executable spec. See
 
 Everything goes through the app's one port. A project's dev server keeps the
 port Vite gives it; the app reads it from the registry for each request.
+A registry file only claims a server. The app asks the server at the file's
+URL for its `hello`, at most every 2 s, and routes only when the answer
+names the file's project and pid. It deletes a file that another server
+answers for, and shows a project whose server does not answer as `Silent`
+(decision 39).
 
 | Path on the app | What it is |
 |---|---|

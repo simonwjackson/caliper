@@ -58,7 +58,7 @@ export async function projectBase(app, root, timeout = 30_000) {
   const id = projectId(root)
   const end = Date.now() + timeout
   for (;;) {
-    const url = app.projectUrl(id)
+    const url = await app.projectUrl(id)
     if (url !== null) return url
     if (Date.now() > end) throw new Error(`The dev server for ${root} did not register within ${timeout} ms.`)
     await new Promise(resolve => setTimeout(resolve, 50))

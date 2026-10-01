@@ -20,14 +20,15 @@ import { serveSyncCalls } from "./sync-call.js"
 
 /**
  * @param {{
- *   registry: string, stateDir: string,
+ *   stateDir: string,
  *   agent: () => import("../types").AgentOptions | undefined,
  *   env: Record<string, string | undefined>,
  *   hostCall: (id: string, target: string, method: string, args: unknown) => Promise<Omit<import("./sync-call.js").ReplyMessage, "id">>,
  * }} input
- *   `agent` is read when a project's worker starts. `hostCall` sends one call to the project's plugin.
+ *   `agent` is read when a project's worker starts. `hostCall` sends one call to the project's plugin;
+ *   `app.server` answers with the project's checked dev server.
  */
-export function createAgentHosts({ registry, stateDir, agent, env, hostCall }) {
+export function createAgentHosts({ stateDir, agent, env, hostCall }) {
   /** @type {Map<string, AgentHost>} */
   const hosts = new Map()
 
@@ -41,7 +42,7 @@ export function createAgentHosts({ registry, stateDir, agent, env, hostCall }) {
     const flag = new SharedArrayBuffer(4)
     const option = agent()
     const worker = new Worker(new URL("./agent-host.js", import.meta.url), {
-      workerData: { id, root, registry, stateDir, home: homedir(), agent: option, env, port: channel.port2, flag },
+      workerData: { id, root, stateDir, home: homedir(), agent: option, env, port: channel.port2, flag },
       transferList: [channel.port2],
     })
     serveSyncCalls({ port: channel.port1, flag, answer: (target, method, args) => hostCall(id, target, method, args) })

@@ -53,8 +53,8 @@ html, body.cal-home { margin: 0; min-height: 100%; background: var(--dr-room, #1
 .cal-home__name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .cal-home__where { grid-column: 1 / -1; color: var(--dr-ink-3, #6E717A); font-size: var(--dr-fs-1, 12px); overflow-wrap: anywhere; }
 .cal-home__status { color: var(--dr-ink-2, #A3A6AE); font-size: var(--dr-fs-1, 12px); justify-self: end; }
-.cal-home__row[data-status="Protocol"] .cal-home__status, .cal-home__row[data-status="Duplicate"] .cal-home__status { color: var(--dr-warn, #E9B565); }
-.cal-home__row[data-status="Protocol"], .cal-home__row[data-status="Duplicate"] { background: transparent; box-shadow: 0 0 0 1px var(--dr-edge, #303237); }
+.cal-home__row[data-status="Protocol"] .cal-home__status, .cal-home__row[data-status="Duplicate"] .cal-home__status, .cal-home__row[data-status="Silent"] .cal-home__status { color: var(--dr-warn, #E9B565); }
+.cal-home__row[data-status="Protocol"], .cal-home__row[data-status="Duplicate"], .cal-home__row[data-status="Silent"] { background: transparent; box-shadow: 0 0 0 1px var(--dr-edge, #303237); }
 .cal-home__empty { color: var(--dr-ink-2, #A3A6AE); line-height: 1.5; max-width: 34rem; }
 .cal-home code { font-family: var(--dr-mono, monospace); font-size: .95em; }
 `

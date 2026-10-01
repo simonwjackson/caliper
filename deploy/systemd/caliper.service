@@ -7,7 +7,8 @@ StartLimitBurst=5
 [Service]
 Type=simple
 # The main checkout. The app reads its settings from ~/.config/caliper/config.json
-# and the registry from ~/.local/state/caliper/servers/. `nix develop` supplies CHROMIUM.
+# and the registry from $XDG_RUNTIME_DIR/caliper/servers/, which systemd sets for user
+# units and empties at reboot (decision 39). `nix develop` supplies CHROMIUM.
 WorkingDirectory=%h/code/github/simonwjackson/caliper
 ExecStart=/run/current-system/sw/bin/nix develop --command node bin/caliper.mjs --port 3132 --host 127.0.0.1
 Restart=on-failure

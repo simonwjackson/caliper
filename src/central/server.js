@@ -21,7 +21,8 @@ import { chromePage } from "../pages.js"
 import { createAgentHosts } from "./agents.js"
 import { readSettings, settingsFile } from "./config.js"
 import { homePage } from "./home.js"
-import { PROTOCOL, readRegistry, registryDir } from "./registry.js"
+import { PROTOCOL, registryDir } from "./registry.js"
+import { createServerCheck, pluginUrl } from "./servers.js"
 
 const PWA_DIR = fileURLToPath(new URL("../pwa/", import.meta.url))
 const SERVICE_WORKER = fileURLToPath(new URL("./sw.js", import.meta.url))
@@ -45,14 +46,15 @@ const PROJECTS_POLL_MS = 1000
 
 /**
  * @typedef {import("./registry.js").Entry} Entry
- * @typedef {{ id: string, name: string, root: string, url: string, base: string, chrome: string, protocol: number, status: "Ready" | "Protocol" | "Duplicate", problem?: string }} ProjectView
+ * @typedef {import("./servers.js").Seen} Seen
+ * @typedef {{ id: string, name: string, root: string, url: string, base: string, chrome: string, protocol: number, status: "Ready" | "Protocol" | "Duplicate" | "Silent", problem?: string }} ProjectView
  */
 
 /**
  * The projects in the registry, as the chrome shows them. A project that
  * cannot be routed carries the reason.
  *
- * @param {Entry[]} entries
+ * @param {Seen[]} entries
  * @returns {ProjectView[]}
  */
 export function projectViews(entries) {
@@ -67,6 +69,7 @@ export function projectViews(entries) {
     const base = { id: entry.id, name: entry.name, root: entry.root, url: entry.url, base: entry.base, chrome: `/__caliper/p/${entry.id}${slashBase(entry.base)}__caliper/`, protocol: entry.protocol }
     if ((count.get(entry.id) ?? 0) > 1) return [{ ...base, status: /** @type {const} */ ("Duplicate"), problem: `${count.get(entry.id)} dev servers serve it; stop all but one` }]
     if (entry.protocol !== PROTOCOL) return [{ ...base, status: /** @type {const} */ ("Protocol"), problem: `protocol ${entry.protocol}, this app speaks ${PROTOCOL}` }]
+    if (entry.silent !== undefined) return [{ ...base, status: /** @type {const} */ ("Silent"), problem: `its dev server is not answering: ${entry.silent}` }]
     return [{ ...base, status: /** @type {const} */ ("Ready") }]
   }).sort((left, right) => left.name.localeCompare(right.name) || left.root.localeCompare(right.root))
 }
@@ -81,7 +84,7 @@ const slashBase = base => base.replace(/\/?$/, "/").replace(/^\/?/, "/")
  *   env?: Record<string, string | undefined>,
  * }} [options]
  *   `agent` replaces the settings file's agent, for tests and scripts.
- * @returns {Promise<{ url: string, port: number, projectUrl: (id: string) => string | null, close: () => Promise<void>, misses: string[] }>}
+ * @returns {Promise<{ url: string, port: number, projectUrl: (id: string) => Promise<string | null>, close: () => Promise<void>, misses: string[] }>}
  */
 export async function startCentral(options = {}) {
   const env = options.env ?? process.env
@@ -96,18 +99,27 @@ export async function startCentral(options = {}) {
   /** @type {string[]} */
   const misses = []
 
-  /** @returns {Entry[]} */
-  const entries = () => readRegistry(registry)
-  /** The one routable entry for a project id. @param {string} id */
-  const routable = id => {
-    const found = entries().filter(entry => entry.id === id)
-    return found.length === 1 && found[0]?.protocol === PROTOCOL ? found[0] : null
+  const servers = createServerCheck({ registry })
+  /** @returns {Promise<Seen[]>} */
+  const entries = () => servers.list()
+  /**
+   * The one routable entry for a project id: one server, this protocol, and it answers.
+   *
+   * @param {string} id
+   * @returns {Promise<Entry | null>}
+   */
+  const routable = async id => {
+    const found = (await entries()).filter(entry => entry.id === id)
+    const only = found.length === 1 ? found[0] : undefined
+    return only !== undefined && only.protocol === PROTOCOL && only.silent === undefined ? only : null
   }
 
   const hosts = createAgentHosts({
-    registry, stateDir, agent: agentOption, env,
+    stateDir, agent: agentOption, env,
     hostCall: async (id, target, method, args) => {
-      const entry = routable(id)
+      const entry = await routable(id)
+      // The agent's worker asks where the project's server is now; it can restart on another port.
+      if (target === "app" && method === "server") return entry === null ? { error: "The project's dev server is not running, or cannot be routed. Start it and try again." } : { value: { url: entry.url, base: entry.base } }
       if (entry === null) return { error: "The project's dev server is not running, or cannot be routed. Start it and try again." }
       const response = await pluginFetch(entry, "host", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target, method, args }) })
       const reply = /** @type {Record<string, unknown>} */ (await response.json().catch(() => ({ error: `The dev server answered ${response.status}.` })))
@@ -120,7 +132,7 @@ export async function startCentral(options = {}) {
   const pluginFetch = (entry, path, init = {}) => {
     const headers = new Headers(init.headers)
     headers.set("authorization", `Bearer ${entry.token}`)
-    return fetch(new URL(`${slashBase(entry.base).slice(1)}__caliper/${path}`, entry.url), { ...init, headers })
+    return fetch(pluginUrl(entry, path), { ...init, headers })
   }
 
   const themeColor = JSON.parse(readFileSync(join(PWA_DIR, "manifest.webmanifest"), "utf8")).theme_color
@@ -156,7 +168,7 @@ export async function startCentral(options = {}) {
       response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store", "service-worker-allowed": "/" })
       return response.end(readFileSync(SERVICE_WORKER))
     }
-    if (path === "/__caliper/api/projects") return sendJson(response, 200, { protocol: PROTOCOL, projects: projectViews(entries()) })
+    if (path === "/__caliper/api/projects") return sendJson(response, 200, { protocol: PROTOCOL, projects: projectViews(await entries()) })
     if (path === "/__caliper/api/projects/events") return projectEvents(response)
     if (path.startsWith("/__caliper/assets/")) return sendAsset(response, path.slice("/__caliper/assets/".length))
     const pwaType = PWA_FILES.get(path.slice("/__caliper/".length))
@@ -171,9 +183,9 @@ export async function startCentral(options = {}) {
     }
     const id = /** @type {string} */ (routed[1])
     const inner = /** @type {string} */ (routed[2])
-    const entry = routable(id)
+    const entry = await routable(id)
     if (entry === null) {
-      const view = projectViews(entries()).find(project => project.id === id)
+      const view = projectViews(await entries()).find(project => project.id === id)
       return sendJson(response, 502, { error: view?.problem ?? `No running dev server has project ${id}. Start its dev server; the page reconnects when it is up.` })
     }
     const caliper = `${slashBase(entry.base)}__caliper`
@@ -322,19 +334,27 @@ export async function startCentral(options = {}) {
   const projectEvents = response => {
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" })
     let last = ""
-    const tick = () => {
-      const now = JSON.stringify({ protocol: PROTOCOL, projects: projectViews(entries()) })
-      if (now !== last) response.write(`event: projects\ndata: ${now}\n\n`)
-      last = now
+    let busy = false
+    const tick = async () => {
+      // A check can outlast the interval; one at a time keeps the events in order.
+      if (busy) return
+      busy = true
+      try {
+        const now = JSON.stringify({ protocol: PROTOCOL, projects: projectViews(await entries()) })
+        if (now !== last && !response.writableEnded) response.write(`event: projects\ndata: ${now}\n\n`)
+        last = now
+      } finally { busy = false }
     }
-    tick()
-    const timer = setInterval(tick, PROJECTS_POLL_MS)
+    void tick()
+    const timer = setInterval(() => void tick(), PROJECTS_POLL_MS)
     response.on("close", () => clearInterval(timer))
   }
 
-  server.on("upgrade", (request, socket, head) => {
+  server.on("upgrade", async (request, socket, head) => {
     const match = /\/__caliper\/hmr\/([0-9a-f]{12})(?:\?|$)/.exec(request.url ?? "")
-    const entry = match ? routable(/** @type {string} */ (match[1])) : null
+    // The check below waits; a socket that fails meanwhile must not throw.
+    socket.on("error", () => socket.destroy())
+    const entry = match ? await routable(/** @type {string} */ (match[1])) : null
     if (entry === null) { socket.end("HTTP/1.1 404 Not Found\r\n\r\n"); return }
     const target = new URL(entry.url)
     const upstream = connect(Number(target.port), socketHost(target), () => {
@@ -364,8 +384,8 @@ export async function startCentral(options = {}) {
     port: address.port,
     misses,
     /** The chrome's URL for a project, or null when no dev server can be routed for it. @param {string} id */
-    projectUrl: id => {
-      const entry = routable(id)
+    projectUrl: async id => {
+      const entry = await routable(id)
       return entry === null ? null : `${origin}/__caliper/p/${id}${slashBase(entry.base)}`
     },
     close: async () => {

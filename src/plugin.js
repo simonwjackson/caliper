@@ -346,7 +346,7 @@ function createSession(server, root, options, env, overlay) {
       // The token proves the Caliper app, which checked the page's origin itself.
       delete request.headers.origin
     }
-    if (path === "/hello") return json(response, 200, { protocol: PROTOCOL, id, name: projectName(root), root })
+    if (path === "/hello") return json(response, 200, { protocol: PROTOCOL, id, pid: process.pid, name: projectName(root), root })
     if (path === "/host") return host.handle(request, response)
     if (await code.handle(path, url, request, response)) return undefined
     if (await knobs.handle(path, request, response)) return undefined
