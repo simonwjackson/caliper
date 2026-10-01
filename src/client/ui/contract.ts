@@ -281,7 +281,54 @@ export type BoardRowView = {
   readonly key: string; readonly ref: StateRef; readonly part: string; readonly state: string; readonly site: string
   /** The state no longer exists. Its cells say so; you can unpin it. */
   readonly missing: boolean
+  /** How many named checks the row declares. With none, its cells have no check line. */
+  readonly checks: number
+  /** A row the workspace's row agent writes (slice 2), or null for a pinned state. */
+  readonly scratch: ScratchRowView | null
+  /** The row's record is open in the side panel. */
+  readonly open: boolean
 }
+/**
+ * A scratch row: one file in the workspace folder that a row agent writes.
+ * Until the agent writes the file, the row waits; `name` is then the start of what you asked.
+ */
+export type ScratchRowView = { readonly id: string; readonly run: TakeRun; readonly written: boolean; readonly focused: boolean }
+/** How the row's checks went in one cell. */
+export type CellChecksView =
+  /** The row declares no checks. */
+  | { readonly _tag: "None" }
+  /** No result since the app started. */
+  | { readonly _tag: "NotRun" }
+  | { readonly _tag: "Waiting" }
+  | { readonly _tag: "Running" }
+  /** `stale`: the row, the idea or the project changed after this run. */
+  | { readonly _tag: "Done"; readonly passed: number; readonly total: number; readonly stale: boolean }
+  /** The run could not finish, for example because the page failed or the browser was lost. */
+  | { readonly _tag: "Unknown"; readonly reason: string }
+/** One named check of a row, and how it went in each column. */
+export type RowCheckView = {
+  readonly name: string; readonly line: number
+  readonly results: readonly { readonly column: string; readonly status: "Passed" | "Failed" | "Inconclusive" | "NotRun" | "Waiting" | "Running"; readonly detail: string; readonly image: string | null }[]
+}
+/**
+ * A row's record, in the side panel where the questions sit: what you
+ * asked, the file, each check in each column, and the row agent's log. A
+ * pinned state's record has its checks only.
+ */
+export type RowRecordView =
+  | { readonly _tag: "Closed" }
+  | {
+      readonly _tag: "Open"; readonly row: string; readonly title: string; readonly file: string
+      /** What you asked the row agent; empty for a pinned state. */
+      readonly brief: string
+      readonly scratch: { readonly id: string; readonly run: TakeRun; readonly stop: Availability; readonly remove: Availability } | null
+      readonly columns: readonly { readonly key: string; readonly label: string }[]
+      /** The column whose results unfold, and whose image shows. */
+      readonly column: string
+      readonly checks: readonly RowCheckView[]
+      readonly checkAgain: Availability
+      readonly log: readonly LogEntry[]
+    }
 export type BoardColumnView =
   | { readonly _tag: "Today"; readonly key: string }
   /** A place the planner is filling. */
@@ -294,20 +341,23 @@ export type BoardColumnView =
  * One row in one column. `frame` is null while its column is planned or its
  * idea's agent works. `same`: the frame shows exactly what Today shows.
  */
-export type BoardCellView = { readonly row: string; readonly column: string; readonly frame: FrameView | null; readonly same: boolean }
+export type BoardCellView = { readonly row: string; readonly column: string; readonly frame: FrameView | null; readonly same: boolean; readonly checks: CellChecksView }
 export type QuestionView =
   | { readonly _tag: "Open"; readonly id: string; readonly text: string; readonly by: string }
   | { readonly _tag: "Answered"; readonly id: string; readonly text: string; readonly by: string; readonly answer: string; readonly reason: string }
 /**
  * The bar under the board. Ask: you write the question, and the main button
  * plans the ideas. More: the prompt describes another idea. Idea: the prompt
- * goes to the focused idea. Closed: nothing more can start.
+ * goes to the focused idea. NewRow: the prompt says what a new row must show
+ * and check. Row: the prompt goes to the focused row's agent. Closed: nothing
+ * more can start.
  */
 export type WorkspaceBarView = {
-  readonly mode: "Ask" | "More" | "Idea" | "Closed"
+  readonly mode: "Ask" | "More" | "Idea" | "NewRow" | "Row" | "Closed"
   readonly prompt: string; readonly placeholder: string; readonly edit: Availability
   readonly count: 1 | 2 | 3 | 4; readonly go: { readonly label: string; readonly availability: Availability }
   readonly idea: { readonly take: string; readonly label: string; readonly discard: Availability; readonly stop: Availability } | null
+  readonly row: { readonly id: string; readonly label: string; readonly remove: Availability; readonly stop: Availability } | null
   readonly notices: readonly Notice[]
 }
 export type BoardView =
@@ -323,6 +373,10 @@ export type BoardView =
       /** What Discard deletes and keeps, for its confirmation. */
       readonly discard: { readonly availability: Availability; readonly ideas: number; readonly files: number; readonly answered: number; readonly open: number }
       readonly bar: WorkspaceBarView
+      /** New row: the bar then asks what a new scratch row must show and check. */
+      readonly newRow: Availability
+      /** A row's record holds the side panel in place of the questions. */
+      readonly record: RowRecordView
     }
 
 export type SaveState =
@@ -549,5 +603,16 @@ export type ChromeActions = {
   readonly onIdeaDiscard: (take: string) => void
   /** Delete every idea; the question and the answers stay, and the workspace closes. */
   readonly onWorkspaceDiscard: (id: string) => void
+  /** Workspaces slice 2. Put the bar in New row, where the prompt says what a new row must show and check, or take it out. */
+  readonly onRowNew: (open: boolean) => void
+  /** Open a row's record in the side panel, with one column's results unfolded; null closes it. A scratch row is also focused, so the bar talks to its agent. */
+  readonly onRowRecord: (row: string | null, column?: string) => void
+  /** New row: start a row agent with the prompt. Row: send the prompt to the focused row's agent. */
+  readonly onRowWrite: () => void
+  readonly onRowStop: (id: string) => void
+  /** Delete a scratch row: its agent stops, and its file and its place on the board go. */
+  readonly onRowDelete: (id: string) => void
+  /** Run one row's checks again, in every column whose agent is idle. */
+  readonly onRowCheck: (row: string) => void
 }
 export type ChromeProps = { readonly view: ChromeView; readonly actions: ChromeActions }

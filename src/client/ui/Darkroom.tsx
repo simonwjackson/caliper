@@ -16,6 +16,7 @@ import { Connection } from "./tools/Connection"
 import { Board } from "./board/Board"
 import { WorkspaceBar } from "./board/WorkspaceBar"
 import { Questions } from "./board/Questions"
+import { RowRecord } from "./board/RowRecord"
 import "./tokens.css"
 import "./atoms/atoms.css"
 import "./darkroom.css"
@@ -101,7 +102,9 @@ export default function Darkroom({ view, actions, scheme }: DarkroomProps) {
       {side && <aside className="dr-side" data-place={plan.side} hidden={plan.side === "sheet" && front !== "side"}>
         {view.tools.side === "knobs"
           ? <KnobsPanel view={view} actions={actions} sheet={plan.side === "sheet"} />
-          : board ? <Questions view={view} actions={actions} sheet={plan.side === "sheet"} />
+          : board ? (view.workspace._tag === "Open" && view.workspace.record._tag === "Open"
+            ? <RowRecord view={view} actions={actions} sheet={plan.side === "sheet"} />
+            : <Questions view={view} actions={actions} sheet={plan.side === "sheet"} />)
             : <TakeRecord view={view} actions={actions} sheet={plan.side === "sheet"} />}
       </aside>}
       <ChecksWindow view={view} actions={actions} />

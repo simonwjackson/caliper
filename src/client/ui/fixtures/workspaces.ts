@@ -20,9 +20,9 @@ function imagePage(image: string): string {
 
 type RowId = keyof typeof PICO_BOARD.today
 const ROWS: readonly (BoardRowView & { readonly id: RowId })[] = [
-  { id: "home", key: "src/pages/PicoHome.page.part.tsx#default", ref: { part: "src/pages/PicoHome.page.part.tsx", state: "default" }, part: "Home", state: "Default", site: "src/pages/PicoHome.page.part.tsx", missing: false },
-  { id: "find", key: "src/pages/PicoFind.page.part.tsx#default", ref: { part: "src/pages/PicoFind.page.part.tsx", state: "default" }, part: "Find", state: "Default", site: "src/pages/PicoFind.page.part.tsx", missing: false },
-  { id: "settings", key: "src/pages/PicoSettings.page.part.tsx#default", ref: { part: "src/pages/PicoSettings.page.part.tsx", state: "default" }, part: "Settings", state: "Default", site: "src/pages/PicoSettings.page.part.tsx", missing: false },
+  { id: "home", key: "src/pages/PicoHome.page.part.tsx#default", ref: { part: "src/pages/PicoHome.page.part.tsx", state: "default" }, part: "Home", state: "Default", site: "src/pages/PicoHome.page.part.tsx", missing: false, checks: 0, scratch: null, open: false },
+  { id: "find", key: "src/pages/PicoFind.page.part.tsx#default", ref: { part: "src/pages/PicoFind.page.part.tsx", state: "default" }, part: "Find", state: "Default", site: "src/pages/PicoFind.page.part.tsx", missing: false, checks: 0, scratch: null, open: false },
+  { id: "settings", key: "src/pages/PicoSettings.page.part.tsx#default", ref: { part: "src/pages/PicoSettings.page.part.tsx", state: "default" }, part: "Settings", state: "Default", site: "src/pages/PicoSettings.page.part.tsx", missing: false, checks: 0, scratch: null, open: false },
 ]
 type IdeaId = "1" | "2" | "3"
 const IDEAS: Readonly<Record<IdeaId, { readonly name: string; readonly brief: string; readonly strange: boolean; readonly files: number }>> = {
@@ -68,10 +68,10 @@ export function workspaceScene(base: ChromeView, scene: Scene): ChromeView {
     verdict: { _tag: "Rendered" }, problems: [], markable: blocked("A workspace compares ideas; marks are for takes."), marks: [],
   })
   const cells: BoardCellView[] = rows.flatMap(row => columns.map((column): BoardCellView => {
-    if (column._tag === "Today") return { row: row.key, column: column.key, frame: frame(row, null), same: false }
-    if (column._tag === "Planned" || column.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false }
+    if (column._tag === "Today") return { row: row.key, column: column.key, frame: frame(row, null), same: false, checks: { _tag: "None" } }
+    if (column._tag === "Planned" || column.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
     const take = column.take as IdeaId
-    return { row: row.key, column: column.key, frame: frame(row, take), same: SAME.has(`${take}:${row.id}`) }
+    return { row: row.key, column: column.key, frame: frame(row, take), same: SAME.has(`${take}:${row.id}`), checks: { _tag: "None" } }
   }))
   const questions = scene.questions ?? []
   const focused = scene.focused ?? null
@@ -85,6 +85,7 @@ export function workspaceScene(base: ChromeView, scene: Scene): ChromeView {
     edit: open && !planning ? enabled : blocked(open ? "Ideas are being planned." : "This workspace is closed."),
     go: { label: mode === "Ask" ? "Plan 3 ideas" : mode === "Idea" ? `Send to idea ${focused}` : mode === "More" ? "New idea" : "Closed", availability: goWhy ? blocked(goWhy) : enabled },
     idea: focused ? { take: focused, label: `Idea ${focused}`, discard: enabled, stop: blocked("No agent is running.") } : null,
+    row: null,
   }
   const answered = questions.filter(question => question._tag === "Answered").length
   const title = scene.status === "New" ? "New workspace" : "Settings with the d-pad"
@@ -93,7 +94,7 @@ export function workspaceScene(base: ChromeView, scene: Scene): ChromeView {
     question: scene.status === "New" ? "" : QUESTION, asked: scene.status === "New" ? "" : "Asked on 1 Oct.",
     rows, columns, cells, questions, ask: open ? enabled : blocked("This workspace is closed."), answer: open ? enabled : blocked("This workspace is closed."),
     discard: { availability: open ? enabled : blocked("This workspace is closed."), ideas: scene.ideas.length, files: scene.ideas.reduce((sum, idea) => sum + IDEAS[idea.take].files, 0), answered, open: questions.length - answered },
-    bar,
+    bar, newRow: open ? enabled : blocked("This workspace is closed."), record: { _tag: "Closed" },
   }
   const pinned = (part: NavPart, state: string) => rows.some(row => row.ref.part === part.file && row.ref.state === state)
   const showing = new Set(["src/pages/PicoHome.page.part.tsx", "src/pages/PicoSettings.page.part.tsx"])

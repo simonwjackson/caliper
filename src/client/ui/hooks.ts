@@ -19,6 +19,8 @@ export const CAL = Object.freeze({
   board: "board", boardIdea: "board-idea", boardCell: "board-cell", questionsOpen: "questions-open", questions: "questions",
   questionAsk: "question-ask", questionAnswer: "question-answer", workspaceDiscard: "workspace-discard",
   workspaceStart: "workspace-start", ideaFollow: "idea-follow", ideaDiscard: "idea-discard",
+  rowNew: "row-new", boardRow: "board-row", cellChecks: "cell-checks", rowRecord: "row-record", rowCheck: "row-check",
+  rowWrite: "row-write", rowDelete: "row-delete",
 } as const)
 export type CalHook = typeof CAL[keyof typeof CAL]
 export function calSelector(hook: CalHook): string { return `[data-cal="${hook}"]` }

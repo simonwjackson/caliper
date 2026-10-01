@@ -83,11 +83,68 @@
 .ws-picker__item { border: 0; background: none; border-radius: 4px; padding: .2rem .55rem; min-width: 1.9rem; font: inherit; font-size: var(--dr-fs-1); color: var(--dr-ink-2); white-space: nowrap; cursor: pointer; }
 .ws-picker__item:hover { color: var(--dr-ink); }
 .ws-picker__item[aria-pressed="true"] { background: var(--dr-card-2); color: var(--dr-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--dr-edge-2); }
+/* New row ends the row picker. It acts, so it has the dashed edge of New row under the rows, not the look of a choice. */
+.ws-picker__action { outline: 1px dashed var(--dr-edge-2); outline-offset: -3px; color: var(--dr-ink-2); }
+.ws-picker__action[aria-pressed="true"] { outline-style: solid; outline-color: var(--dr-ink-2); box-shadow: none; }
 .dr-root[data-tools="dock"] .ws-picker__item { padding-block: .35rem; }
 
 .ws-empty { max-width: 26rem; margin: auto; padding: 2rem 1rem; display: grid; gap: .5rem; text-align: center; color: var(--dr-ink-2); font-size: var(--dr-fs-2); line-height: 1.5; }
 .ws-empty__lead { color: var(--dr-ink); font-size: var(--dr-fs-3); font-weight: 600; }
 .ws-empty p { margin: 0; }
+
+/* --- slice 2: scratch rows and their checks --------------------------------------------- */
+/* A row with checks, or a scratch row, names itself as a button: it opens the row's record. */
+.ws-row__name { display: inline-flex; gap: .5rem; align-items: baseline; min-width: 0; max-width: 100%; border: 0; background: none; padding: 0; font: inherit; color: var(--dr-ink-3);
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; cursor: pointer; }
+.ws-row__name > b { color: var(--dr-ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-row__name > span { white-space: nowrap; }
+.ws-row__name > .dr-dot { align-self: center; }
+.ws-row__name:hover, .ws-row__name[aria-expanded="true"] { text-decoration-color: currentColor; }
+
+/* The line under a cell: a sign and a count, in the colour of the result. It costs one fixed line, --ws-check-line. */
+.ws-check { display: flex; gap: .35rem; align-items: center; width: 100%; height: var(--ws-check-line); box-sizing: border-box; margin: 0; padding: 0 .1rem;
+  border: 0; background: none; font: inherit; font-size: 11px; color: var(--dr-ink-3); text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.ws-check > svg { width: 14px; height: 14px; flex: none; }
+.ws-check > span { overflow: hidden; text-overflow: ellipsis; }
+.ws-check[data-tone="good"] { color: var(--dr-good); }
+.ws-check[data-tone="bad"] { color: var(--dr-bad); }
+.ws-check[data-tone="warn"] { color: var(--dr-warn); }
+.ws-check:hover > span { text-decoration: underline; text-underline-offset: 2px; }
+.ws-cell[data-same] .ws-check { opacity: .7; }
+
+/* New row, at the end of the rows it extends. */
+.ws-row__add { display: flex; padding-top: .7rem; }
+.ws-newrow { display: inline-flex; gap: .3rem; align-items: center; border: 1px dashed var(--dr-edge-2); border-radius: 6px; background: none; padding: .25rem .65rem .25rem .45rem;
+  font: inherit; font-size: var(--dr-fs-1); color: var(--dr-ink-2); cursor: pointer; }
+.ws-newrow > svg { width: 14px; height: 14px; }
+.ws-newrow:hover { color: var(--dr-ink); border-color: var(--dr-ink-3); }
+.ws-newrow[aria-pressed="true"] { color: var(--dr-ink); border-style: solid; border-color: var(--dr-ink-2); background: var(--dr-card); }
+.ws-newrow:disabled { opacity: .5; cursor: default; }
+
+/* A row's record: the count first, then each check with one line, as a test report reads. */
+.ws-rec { overflow-y: auto; overscroll-behavior: contain; }
+.ws-rec p { margin: 0; }
+.ws-rec__file { font-family: var(--dr-mono); font-size: 11px; color: var(--dr-ink-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-rec__head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .45rem; }
+.ws-rec__head .ws-q__head { margin: 0; }
+.ws-rec__columns { flex-wrap: wrap; margin-bottom: .45rem; }
+.ws-rec__column { display: inline-flex; gap: .25rem; align-items: center; }
+.ws-rec__tally { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dr-ink-3); }
+.ws-rec__column[data-tone="good"] > .ws-rec__tally { color: var(--dr-good); }
+.ws-rec__column[data-tone="bad"] > .ws-rec__tally { color: var(--dr-bad); }
+.ws-rec__count { color: var(--dr-ink-2); margin-bottom: .5rem; }
+.ws-rec__list { list-style: none; padding: 0; margin: 0; display: grid; gap: .45rem; }
+.ws-rc { display: grid; gap: .4rem; padding: .55rem .65rem; border-radius: 6px; background: var(--dr-room); }
+.ws-rc__head { display: flex; gap: .45rem; align-items: baseline; line-height: 1.4; }
+.ws-rc__sign { flex: none; align-self: center; display: inline-grid; color: var(--dr-ink-3); }
+.ws-rc__sign > svg { width: 14px; height: 14px; }
+.ws-rc[data-status="Passed"] .ws-rc__sign { color: var(--dr-good); }
+.ws-rc[data-status="Failed"] .ws-rc__sign { color: var(--dr-bad); }
+.ws-rc__none { display: block; width: 8px; height: 8px; margin: 3px; border-radius: 50%; border: 1px solid currentColor; }
+.ws-rc__name { flex: 1; min-width: 0; color: var(--dr-ink); font-weight: 600; }
+.ws-rc__line { flex: none; font-family: var(--dr-mono); font-size: 11px; color: var(--dr-ink-3); }
+.ws-rc__detail { color: var(--dr-ink-2); line-height: 1.5; }
+.ws-rc__image { display: block; width: 100%; max-width: 16rem; height: auto; image-rendering: pixelated; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / .8); }
 
 /* --- the questions panel ------------------------------------------------------------- */
 .ws-q { overflow-y: auto; overscroll-behavior: contain; }

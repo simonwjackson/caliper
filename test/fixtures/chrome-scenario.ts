@@ -30,6 +30,7 @@ export function createChromeScenario(initial: ChromeView) {
     onPxPerMm: record("onPxPerMm"), onResetCalibration: record("onResetCalibration"), onCalibrationClose: record("onCalibrationClose"), onFrameMount: record("onFrameMount"), onFrameGeometry: record("onFrameGeometry"), onEditorMount: record("onEditorMount"), onReviewDiffMount: record("onReviewDiffMount"),
     onWorkspace: record("onWorkspace"), onWorkspaceNew: record("onWorkspaceNew"), onPin: record("onPin"), onIdea: record("onIdea"), onQuestions: record("onQuestions"), onAsk: record("onAsk"), onAnswer: record("onAnswer"),
     onWorkspaceStart: record("onWorkspaceStart"), onIdeaFollow: record("onIdeaFollow"), onIdeaDiscard: record("onIdeaDiscard"), onWorkspaceDiscard: record("onWorkspaceDiscard"),
+    onRowNew: record("onRowNew"), onRowRecord: record("onRowRecord"), onRowWrite: record("onRowWrite"), onRowStop: record("onRowStop"), onRowDelete: record("onRowDelete"), onRowCheck: record("onRowCheck"),
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,

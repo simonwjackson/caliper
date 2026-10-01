@@ -37,6 +37,8 @@ export const ROW_HEAD = 34
 export const ROW_PICK_W = 112
 /** One choice in a row picker that stands beside the cells. The picker must fit beside them whole. */
 export const PICK_ITEM_H = 26
+/** The line under a cell that says how the row's checks went (slice 2). Only a board with checks has it. */
+export const CHECK_LINE = 24
 
 export type BoardColumns =
   /** Every column side by side. */
@@ -60,12 +62,15 @@ export type BoardPlan = {
 /**
  * @param width the board's content width
  * @param height the board's content height, under the title and over the caption
- * @param count how many columns (Today plus each idea) and how many rows the board holds
+ * @param count how many columns (Today plus each idea) and how many rows the board holds, and
+ *   `line`, the height of the line under each cell: CHECK_LINE when any row has checks, else 0
  * @param frame one frame at true size: the device's physical size at the calibrated px per mm
  */
-export function planBoard(width: number, height: number, count: { readonly columns: number; readonly rows: number }, frame: { readonly width: number; readonly height: number } = { width: FRAME_W, height: FRAME_H }): BoardPlan {
+export function planBoard(width: number, height: number, count: { readonly columns: number; readonly rows: number; readonly line?: number }, frame: { readonly width: number; readonly height: number } = { width: FRAME_W, height: FRAME_H }): BoardPlan {
   const FRAME_W = frame.width
   const FRAME_H = frame.height
+  // The line under a cell does not scale with it, so it comes off the height before the cell does.
+  height -= count.line ?? 0
   const choices = [...new Set([count.columns, Math.min(2, count.columns), 1])]
   const shape = (columns: number): BoardColumns => columns === count.columns ? { _tag: "All" } : columns === 2 ? { _tag: "Pair" } : { _tag: "One" }
   const picker = (columns: number) => columns === count.columns ? 0 : PICKER_H

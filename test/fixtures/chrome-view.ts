@@ -4,6 +4,7 @@ import type { AcceptRecord, ChainTake } from "../../src/takes/chains.js"
 import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupOutcome, MarkupView, TakeSummary } from "../../src/client/ui/contract"
 import { STANDARD_DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
 import { WORKSPACE_SCENES, workspaceScene } from "../../src/client/ui/fixtures/workspaces"
+import { ROWS_SCENES, rowsScene } from "../../src/client/ui/fixtures/workspace-rows"
 
 export const enabled: Availability = { _tag: "Enabled" }
 export const blocked: Availability = { _tag: "Disabled", reason: "Unavailable in this scenario" }
@@ -189,6 +190,9 @@ export function contractViews(): Record<string, ChromeView> {
     // Decision 45: a board with its questions open and an idea focused, and one that waits for its question.
     workspaceBoard: expanded(workspaceScene(ready, WORKSPACE_SCENES.workspaceBoard)),
     workspaceFrame: workspaceScene(ready, WORKSPACE_SCENES.workspaceFrame),
+    // Workspaces slice 2: a checked scratch row with its record open, and New row in the bar.
+    workspaceRowChecked: rowsScene(ready, ROWS_SCENES.workspaceRowChecked),
+    workspaceRowNew: rowsScene(ready, ROWS_SCENES.workspaceRowNew),
     failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", chains: [], frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
     planning: { ...ready, plan: { _tag: "Planning", count: 3, message: "Planning 3 takes…" }, composer: { ...ready.composer, edit: blocked, attach: blocked } },

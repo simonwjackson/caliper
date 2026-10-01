@@ -14,7 +14,7 @@ import type { ChromeView } from "../../src/client/ui/contract"
 import { CAL } from "../../src/client/ui/hooks"
 import type { CalHook } from "../../src/client/ui/hooks"
 
-export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string; readonly pairs?: string; readonly boardColumns?: string }): CalHook[] {
+export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string; readonly pairs?: string; readonly boardColumns?: string; readonly boardRows?: string }): CalHook[] {
   // Decision 45: a workspace's board replaces the canvas.
   const board = view.workspace._tag === "None" ? null : view.workspace
   const hooks = new Set<CalHook>([CAL.root, CAL.connection, CAL.tool, CAL.navToggle, board ? CAL.board : CAL.canvas])
@@ -97,9 +97,25 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
       // A column picker holds the ideas that do not fit; one column shows an idea's name only when that idea is focused.
       const ideas = board.columns.filter(column => column._tag === "Idea")
       if (ideas.length && (layout.boardColumns !== "One" || ideas.some(column => column._tag === "Idea" && column.focused))) add(CAL.boardIdea)
-      if (board.status !== "Closed" && board.rows.some(row => row.missing)) add(CAL.pin)
+      if (board.status !== "Closed" && board.rows.some(row => row.missing && !row.scratch)) add(CAL.pin)
+      // Slice 2: a row's checks in its cells, and a name that opens its record while the rows are stacked.
+      // While a picker holds the rows, only the first row's cells are on screen; the others are one press away.
+      const picked = layout.boardRows === "PickSide" || layout.boardRows === "PickTop"
+      const onScreen = new Set((picked ? board.rows.slice(0, 1) : board.rows).map(row => row.key))
+      if (board.cells.some(cell => cell.checks._tag !== "None" && onScreen.has(cell.row))) add(CAL.cellChecks)
+      if (layout.boardRows === "Stack" && board.rows.some(row => row.scratch || row.checks > 0)) add(CAL.boardRow)
     }
-    if (view.tools.side === "record") {
+    // New row: under the stacked rows, in the empty board, or at the end of the row picker while it can start.
+    if (board.status !== "Closed" && (layout.boardRows !== "PickSide" && layout.boardRows !== "PickTop" || board.newRow._tag === "Enabled")) add(CAL.rowNew)
+    if (view.tools.side === "record" && board.record._tag === "Open") {
+      add(CAL.rowRecord, CAL.rowCheck)
+      const scratch = board.record.scratch
+      if (scratch) {
+        add(CAL.log)
+        if (board.status !== "Closed") add(CAL.rowDelete)
+        if (scratch.run._tag === "Running") add(CAL.stop)
+      }
+    } else if (view.tools.side === "record") {
       add(CAL.questions)
       if (board.status !== "Closed") add(CAL.questionAsk, CAL.workspaceDiscard)
     }
@@ -111,6 +127,10 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
         if (board.bar.mode === "Idea" && board.bar.idea) {
           add(CAL.ideaFollow, CAL.ideaDiscard)
           if (board.bar.idea.stop._tag === "Enabled") add(CAL.stop)
+        } else if (board.bar.mode === "NewRow") add(CAL.rowWrite, CAL.rowNew)
+        else if (board.bar.mode === "Row" && board.bar.row) {
+          add(CAL.rowWrite, CAL.rowDelete)
+          if (board.bar.row.stop._tag === "Enabled") add(CAL.stop)
         } else add(CAL.workspaceStart)
       }
       if (view.composer.attachments.length) add(CAL.attachments, CAL.attachmentRemove)

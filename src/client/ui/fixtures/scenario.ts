@@ -13,7 +13,7 @@ import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, familyOf, readChoices, takeKey, withChains } from "./chains"
 import type { ChainChoices } from "./chains"
 import { createLocalTools } from "./tools"
-import { answerLocally, askLocally, discardLocally, focusLocally, pinLocally, promptLocally } from "./workspace-actions"
+import { answerLocally, askLocally, discardLocally, focusLocally, pinLocally, promptLocally, rowNewLocally, rowRecordLocally } from "./workspace-actions"
 import type { MarkRect } from "../contract"
 
 export type Call = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
@@ -229,6 +229,10 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onAnswer: record("onAnswer", (id, answer, reason) => update(answerLocally(view, id, answer, reason))),
     onWorkspaceStart: record("onWorkspaceStart"), onIdeaFollow: record("onIdeaFollow"), onIdeaDiscard: record("onIdeaDiscard"),
     onWorkspaceDiscard: record("onWorkspaceDiscard", () => update(discardLocally(view))),
+    // Workspaces slice 2. Writing, stopping, deleting and checking a row are core's; the bar and the record are local.
+    onRowNew: record("onRowNew", open => update(rowNewLocally(view, open))),
+    onRowRecord: record("onRowRecord", (row, column) => update(rowRecordLocally(view, row, column))),
+    onRowWrite: record("onRowWrite"), onRowStop: record("onRowStop"), onRowDelete: record("onRowDelete"), onRowCheck: record("onRowCheck"),
   }
   return {
     actions, calls, getView: () => view, update,

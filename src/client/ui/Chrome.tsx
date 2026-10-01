@@ -197,13 +197,26 @@ function WorkspaceReference({ view, actions }: ChromeProps) {
       ? <button key={column.key} type="button" data-cal={CAL.boardIdea} data-take={column.take} aria-current={column.focused} title={column.brief} onClick={() => actions.onIdea(column.focused ? null : column.take)}>{column.take} · {column.name} · {column.run._tag}</button>
       : <span key={column.key}>{column._tag}</span>)}
     {board.rows.map(row => <section key={row.key} aria-label={`${row.part}, ${row.state}`}>
-      <h2>{row.part} · {row.state}</h2>
-      {row.missing && <button type="button" data-cal={CAL.pin} data-part={row.ref.part} data-state={row.ref.state} onClick={() => actions.onPin(row.ref, false)}>Unpin</button>}
+      {row.scratch || row.checks > 0
+        ? <h2><button type="button" data-cal={CAL.boardRow} data-row={row.key} aria-expanded={row.open} onClick={() => actions.onRowRecord(row.open ? null : row.key)}>{row.part} · {row.state} · {row.checks} checks</button></h2>
+        : <h2>{row.part} · {row.state}</h2>}
+      {row.missing && !row.scratch && <button type="button" data-cal={CAL.pin} data-part={row.ref.part} data-state={row.ref.state} onClick={() => actions.onPin(row.ref, false)}>Unpin</button>}
       {board.cells.filter(cell => cell.row === row.key).map(cell => <figure key={cell.column} data-cal={CAL.boardCell} data-column={cell.column} data-same={cell.same || undefined}>
         {cell.frame ? <BoardCellFrame frame={cell.frame} view={view} actions={actions} /> : <p>Waiting</p>}{cell.same && <figcaption>Same as Today</figcaption>}
+        {cell.checks._tag !== "None" && <button type="button" data-cal={CAL.cellChecks} onClick={() => actions.onRowRecord(row.key, cell.column)}>
+          {cell.checks._tag === "Done" ? `${cell.checks.passed} of ${cell.checks.total} checks pass${cell.checks.stale ? ", out of date" : ""}` : cell.checks._tag}</button>}
       </figure>)}
     </section>)}
-    {view.tools.side === "record" && <section data-cal={CAL.questions} aria-label="Questions">
+    {board.status !== "Closed" && <Action hook={CAL.rowNew} availability={board.newRow} action={() => actions.onRowNew(bar.mode !== "NewRow")}>New row</Action>}
+    {view.tools.side === "record" && board.record._tag === "Open" && <section data-cal={CAL.rowRecord} aria-label={`${board.record.title} record`}>
+      <button type="button" onClick={() => actions.onRowRecord(null)}>Close</button>
+      <p>{board.record.brief} · {board.record.file}</p>
+      {board.record.columns.map(column => <button key={column.key} type="button" aria-pressed={board.record._tag === "Open" && column.key === board.record.column} onClick={() => actions.onRowRecord(board.record._tag === "Open" ? board.record.row : null, column.key)}>{column.label}</button>)}
+      {board.record.checks.map(check => <p key={check.name}>{check.name} · line {check.line} · {check.results.map(result => `${result.column}: ${result.status}`).join(", ")}</p>)}
+      <Action hook={CAL.rowCheck} availability={board.record.checkAgain} action={() => board.record._tag === "Open" && actions.onRowCheck(board.record.row)}>Check again</Action>
+      {board.record.scratch && <Action hook={CAL.rowDelete} availability={board.record.scratch.remove} action={() => board.record._tag === "Open" && board.record.scratch && actions.onRowDelete(board.record.scratch.id)}>Delete row</Action>}
+    </section>}
+    {view.tools.side === "record" && board.record._tag === "Closed" && <section data-cal={CAL.questions} aria-label="Questions">
       <button type="button" onClick={() => actions.onQuestions(false)}>Close</button>
       {board.questions.map(question => <div key={question.id}><p>{question.text} · {question.by}</p>
         {question._tag === "Answered" ? <p>{question.answer} Because {question.reason}</p>
@@ -218,9 +231,11 @@ function WorkspaceReference({ view, actions }: ChromeProps) {
     <form aria-label="Workspace composer" onSubmit={event => event.preventDefault()}>
       <textarea aria-label="Prompt" placeholder={bar.placeholder} disabled={disabled(bar.edit)} value={bar.prompt} onChange={event => actions.onPrompt(event.currentTarget.value)} />
       {bar.idea && <Action hook={CAL.ideaDiscard} take={bar.idea.take} availability={bar.idea.discard} action={() => bar.idea && actions.onIdeaDiscard(bar.idea.take)}>Discard</Action>}
+      {bar.mode === "Row" && bar.row && <Action hook={CAL.rowDelete} availability={bar.row.remove} action={() => bar.row && actions.onRowDelete(bar.row.id)}>Delete row</Action>}
       {bar.mode === "Idea" && bar.idea
         ? <Action hook={CAL.ideaFollow} take={bar.idea.take} availability={bar.go.availability} action={() => bar.idea && actions.onIdeaFollow(bar.idea.take)}>{bar.go.label}</Action>
-        : bar.mode !== "Closed" && <Action hook={CAL.workspaceStart} availability={bar.go.availability} action={actions.onWorkspaceStart}>{bar.go.label}</Action>}
+        : bar.mode === "NewRow" || bar.mode === "Row" ? <Action hook={CAL.rowWrite} availability={bar.go.availability} action={actions.onRowWrite}>{bar.go.label}</Action>
+          : bar.mode !== "Closed" && <Action hook={CAL.workspaceStart} availability={bar.go.availability} action={actions.onWorkspaceStart}>{bar.go.label}</Action>}
       <Notices notices={bar.notices} />
     </form>
   </section>

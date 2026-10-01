@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { COLUMN_HEAD, COMPACT_HEAD, FLOOR_SCALE, FRAME_H, FRAME_W, GAP, MIN_SCALE, PICKER_H, ROW_HEAD, ROW_PICK_W, planBoard } from "../src/client/ui/board/plan-board"
+import { CHECK_LINE, COLUMN_HEAD, COMPACT_HEAD, FLOOR_SCALE, FRAME_H, FRAME_W, GAP, MIN_SCALE, PICKER_H, ROW_HEAD, ROW_PICK_W, planBoard } from "../src/client/ui/board/plan-board"
 import type { BoardPlan } from "../src/client/ui/board/plan-board"
 
 const BOARD = { columns: 4, rows: 3 }
@@ -34,6 +34,17 @@ describe("planBoard", () => {
     const height = COLUMN_HEAD + ROW_HEAD + FRAME_H
     expect(planBoard(widthFor(4, 1), height, BOARD).rows._tag).toBe("Stack")
     expect(planBoard(widthFor(4, 1), height - 1, BOARD).rows._tag).toBe("Pick")
+  })
+
+  test("a check line under the cells counts against the height of a row (slice 2)", () => {
+    const height = COLUMN_HEAD + ROW_HEAD + FRAME_H + CHECK_LINE
+    const checked = { ...BOARD, line: CHECK_LINE }
+    expect(planBoard(widthFor(4, 1), height, checked).rows._tag).toBe("Stack")
+    expect(planBoard(widthFor(4, 1), height - 1, checked).rows._tag).toBe("Pick")
+    // One row at a time: the cell shrinks so that its line still fits under it.
+    const picked = planBoard(widthFor(4, 1), COMPACT_HEAD + FRAME_H, checked)
+    expect(picked.rows._tag).toBe("Pick")
+    expect(COMPACT_HEAD + FRAME_H * picked.scale + CHECK_LINE).toBeLessThanOrEqual(COMPACT_HEAD + FRAME_H + 0.5)
   })
 
   test("a column picker counts against the height of the first row", () => {

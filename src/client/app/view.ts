@@ -157,7 +157,8 @@ function board(state: AppState): BoardView {
   const planning = state.plan._tag === "Ideas" && state.plan.workspace === workspace.id ? state.plan : null
   const rows: BoardRowView[] = workspace.rows.map(row => {
     const part = parts.find(item => item.file === row.part)
-    return { key: rowKey(row), ref: { part: row.part, state: row.state }, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row) }
+    // Slice 2 fills checks, scratch and open from the row checks; until then, no row has checks.
+    return { key: rowKey(row), ref: { part: row.part, state: row.state }, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row), checks: 0, scratch: null, open: false }
   })
   const focused = workspace.ideas.find(idea => idea.take === state.idea) ?? null
   const columns: BoardColumnView[] = [
@@ -169,7 +170,7 @@ function board(state: AppState): BoardView {
     ...Array.from({ length: planning?.count ?? 0 }, (_, index): BoardColumnView => ({ _tag: "Planned", key: `planned:${index}` })),
   ]
   const cell = (row: BoardRowView, column: BoardColumnView, idea: IdeaView | null): BoardCellView => {
-    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false }
+    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
     const key = cellKey(row.ref, idea)
     const report = state.reports.get(key)
     const frame: FrameView = {
@@ -179,7 +180,7 @@ function board(state: AppState): BoardView {
       ...(idea ? { run: idea.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [],
       markable: disabled("A workspace compares ideas; marks are for takes."), marks: [],
     }
-    return { row: row.key, column: column.key, frame, same: idea !== null && state.same.has(key) }
+    return { row: row.key, column: column.key, frame, same: idea !== null && state.same.has(key), checks: { _tag: "None" } }
   }
   const cells = rows.flatMap(row => columns.map(column => cell(row, column, column._tag === "Idea" ? workspace.ideas.find(idea => idea.take === column.take) ?? null : null)))
   const questions: QuestionView[] = workspace.questions.map(question => {
@@ -206,6 +207,7 @@ function board(state: AppState): BoardView {
       take: focused.take, label: `Idea ${focused.take}`,
       discard: write, stop: focused.run._tag === "Running" && ready ? enabled : disabled("No agent is running."),
     } : null,
+    row: null,
   }
   return {
     _tag: "Open", id: workspace.id, title: workspaceTitle(workspace), status,
@@ -215,6 +217,7 @@ function board(state: AppState): BoardView {
     ask: write, answer: write,
     discard: { availability: write, ideas: workspace.ideas.length, files, answered: questions.filter(question => question._tag === "Answered").length, open: questions.filter(question => question._tag === "Open").length },
     bar,
+    newRow: disabled("Scratch rows are not built yet."), record: { _tag: "Closed" },
   }
 }
 

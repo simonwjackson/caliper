@@ -1261,7 +1261,9 @@ for (const size of [...LADDER, ...SIZES]) {
   for (const fixture of ["takes", "log", "knobs", "code", "planning", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin",
     "references", "typeahead", "original", "withPrompt",
     // Decision 45: a workspace's board, at the same ladder.
-    "workspaceNew", "workspaceFrame", "workspacePlanning", "workspaceRunning", "workspaceBoard", "workspaceClosed"]) {
+    "workspaceNew", "workspaceFrame", "workspacePlanning", "workspaceRunning", "workspaceBoard", "workspaceClosed",
+    // Workspaces slice 2: a scratch row and its checks.
+    "workspaceRowNew", "workspaceRowWriting", "workspaceRowChecking", "workspaceRowChecked", "workspaceRowBoard"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)
       try {

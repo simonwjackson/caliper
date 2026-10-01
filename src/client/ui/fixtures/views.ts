@@ -26,6 +26,7 @@ import { sourceOf, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, takeKey, withChains } from "./chains"
 import { WORKSPACE_SCENES, workspaceScene } from "./workspaces"
+import { ROWS_SCENES, rowsScene } from "./workspace-rows"
 import type { ChainChoices, ChainFamily } from "./chains"
 
 export const enabled: Availability = { _tag: "Enabled" }
@@ -719,4 +720,10 @@ export const FIXTURES = {
   workspaceRunning: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceRunning),
   workspaceBoard: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceBoard),
   workspaceClosed: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceClosed),
+  // Workspaces slice 2: a scratch row and its checks, as docs/design/mockups/workspaces-rows/ draws them.
+  workspaceRowNew: () => rowsScene(emptyView(), ROWS_SCENES.workspaceRowNew),
+  workspaceRowWriting: () => rowsScene(emptyView(), ROWS_SCENES.workspaceRowWriting),
+  workspaceRowChecking: () => rowsScene(emptyView(), ROWS_SCENES.workspaceRowChecking),
+  workspaceRowChecked: () => rowsScene(emptyView(), ROWS_SCENES.workspaceRowChecked),
+  workspaceRowBoard: () => rowsScene(emptyView(), ROWS_SCENES.workspaceRowBoard),
 } satisfies Record<string, () => ChromeView>

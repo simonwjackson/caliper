@@ -479,6 +479,8 @@ export function createChromeApp(input: RuntimeInput) {
     onIdeaFollow: take => immediate(() => followIdea(take)),
     onIdeaDiscard: take => immediate(() => discardIdea(take)),
     onWorkspaceDiscard: id => { if (openWorkspace(state)?.id === id) immediate(async () => { await workspaceWrite("Discarding the ideas", "discard"); set({ ...state, idea: null }) }) },
+    // Workspaces slice 2. The view offers none of these until scratch rows are built (`newRow` is disabled).
+    onRowNew: () => {}, onRowRecord: () => {}, onRowWrite: () => {}, onRowStop: () => {}, onRowDelete: () => {}, onRowCheck: () => {},
   }
   function reloadFrames(onlyTake?: string, file?: string) {
     const reports = new Map(state.reports)

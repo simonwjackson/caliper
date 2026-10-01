@@ -35,11 +35,34 @@ export function focusLocally(view: ChromeView, take: string | null): ChromeView 
   })
 }
 
+/** New row puts the bar in New row, or takes it out (slice 2). */
+export function rowNewLocally(view: ChromeView, open: boolean): ChromeView {
+  return onBoard(view, board => {
+    if (board.newRow._tag === "Disabled" || board.bar.mode === "Closed") return board
+    const bar = open
+      ? { ...board.bar, mode: "NewRow" as const, prompt: "", idea: null, row: null, placeholder: "Say what the new row shows, and what its checks press and expect",
+        go: { label: "Write row", availability: { _tag: "Disabled" as const, reason: "Say what the row must show and check first." } } }
+      : { ...board.bar, mode: "More" as const, prompt: "", idea: null, row: null, placeholder: "Describe another idea for this question",
+        go: { label: "New idea", availability: { _tag: "Disabled" as const, reason: "Describe the idea first." } } }
+    return { ...board, bar }
+  })
+}
+
+/** A row's record unfolds another column, or closes; the side slot then holds nothing. */
+export function rowRecordLocally(view: ChromeView, row: string | null, column?: string): ChromeView {
+  if (view.workspace._tag !== "Open") return view
+  const record = view.workspace.record
+  if (row === null) return { ...onBoard(view, board => ({ ...board, record: { _tag: "Closed" }, rows: board.rows.map(item => ({ ...item, open: false })) })), tools: { ...view.tools, side: "closed" } }
+  if (record._tag !== "Open" || record.row !== row) return view
+  return { ...onBoard(view, board => ({ ...board, record: { ...record, column: column ?? record.column } })), tools: { ...view.tools, side: "record" } }
+}
+
 /** The bar's prompt, and what its main button can do with it. */
 export function promptLocally(view: ChromeView, prompt: string): ChromeView {
   return onBoard(view, board => {
     if (board.bar.edit._tag === "Disabled") return board
-    const why = !prompt.trim() ? (board.bar.mode === "Ask" ? "Pin a state and write the question first." : board.bar.mode === "Idea" ? "Write what to change first." : "Describe the idea first.")
+    const why = !prompt.trim() ? (board.bar.mode === "Ask" ? "Pin a state and write the question first." : board.bar.mode === "Idea" || board.bar.mode === "Row" ? "Write what to change first."
+      : board.bar.mode === "NewRow" ? "Say what the row must show and check first." : "Describe the idea first.")
       : board.bar.mode === "Ask" && board.rows.length === 0 ? "Pin a state and write the question first." : ""
     return { ...board, bar: { ...board.bar, prompt, go: { ...board.bar.go, availability: why ? { _tag: "Disabled", reason: why } : { _tag: "Enabled" } } } }
   })

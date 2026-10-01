@@ -21,7 +21,10 @@ const COUNTS = [1, 2, 3, 4] as const
  * is, so the hands know it. Ask: you write the question, and the main button
  * plans the ideas. More: the prompt describes another idea. Idea: the
  * prompt goes to the focused idea, whose Discard and Stop sit beside the well.
- * While the planner works, the well holds the status and Cancel.
+ * NewRow: the prompt says what a new row must show and check, and Cancel
+ * leaves. Row: the prompt goes to the focused row's agent, whose Delete row
+ * and Stop sit beside the well (slice 2). While the planner works, the well
+ * holds the status and Cancel.
  */
 export function WorkspaceBar({ view, actions, hidden = false }: { readonly view: ChromeView; readonly actions: ChromeActions; readonly hidden?: boolean }) {
   const board = view.workspace
@@ -46,14 +49,17 @@ export function WorkspaceBar({ view, actions, hidden = false }: { readonly view:
     if (lead.current) observer.observe(lead.current)
     if (go.current) observer.observe(go.current)
     return () => observer.disconnect()
-  }, [bar?.mode, bar?.idea?.take, view.plan._tag])
+  }, [bar?.mode, bar?.idea?.take, bar?.row?.id, view.plan._tag])
   if (!bar) return null
   const composer = view.composer
   const planning = view.plan._tag === "Planning" ? view.plan : null
   const idea = bar.idea
+  const row = bar.mode === "Row" ? bar.row : null
+  const rowMode = bar.mode === "NewRow" || bar.mode === "Row"
   const goNow = () => {
     if (planning || bar.go.availability._tag !== "Enabled") return
     if (bar.mode === "Idea" && idea) actions.onIdeaFollow(idea.take)
+    else if (rowMode) actions.onRowWrite()
     else if (bar.mode === "Ask" || bar.mode === "More") actions.onWorkspaceStart()
   }
   const canAttach = composer.attach._tag === "Enabled" && bar.mode !== "Closed"
@@ -64,11 +70,24 @@ export function WorkspaceBar({ view, actions, hidden = false }: { readonly view:
     {agent._tag === "Off" && <p className="dr-bar__agent" data-cal={CAL.agent} role="status">No agent. {agent.hint}</p>}
     <Notices notices={bar.notices} />
     <div className="dr-bar__layout">
-      {idea && !planning && <div ref={lead} className="dr-bar__take">
+      {bar.mode === "Idea" && idea && !planning && <div ref={lead} className="dr-bar__take">
         <div className="dr-take-actions" data-take={idea.take} role="group" aria-label={idea.label}>
           <span className="dr-take-actions__name"><b>{idea.label}</b></span>
           {idea.stop._tag === "Enabled" && <Button hook={CAL.stop} take={idea.take} availability={idea.stop} onClick={() => actions.onStop(idea.take)}><Icon name="stop" />Stop</Button>}
           <Button hook={CAL.ideaDiscard} take={idea.take} availability={idea.discard} onClick={() => actions.onIdeaDiscard(idea.take)}>Discard</Button>
+        </div>
+      </div>}
+      {bar.mode === "NewRow" && !planning && <div ref={lead} className="dr-bar__take">
+        <div className="dr-take-actions" role="group" aria-label="New row">
+          <span className="dr-take-actions__name"><b>New row</b></span>
+          <Button hook={CAL.rowNew} onClick={() => actions.onRowNew(false)}>Cancel</Button>
+        </div>
+      </div>}
+      {row && !planning && <div ref={lead} className="dr-bar__take">
+        <div className="dr-take-actions" data-row={row.id} role="group" aria-label={row.label}>
+          <span className="dr-take-actions__name"><b>{row.label}</b></span>
+          {row.stop._tag === "Enabled" && <Button hook={CAL.stop} availability={row.stop} onClick={() => actions.onRowStop(row.id)}><Icon name="stop" />Stop</Button>}
+          <Button hook={CAL.rowDelete} availability={row.remove} onClick={() => actions.onRowDelete(row.id)}>Delete row</Button>
         </div>
       </div>}
       <div className="dr-well" data-disabled={bar.edit._tag === "Disabled" || undefined}>
@@ -80,7 +99,7 @@ export function WorkspaceBar({ view, actions, hidden = false }: { readonly view:
               onClick={() => actions.onRemoveAttachment(image.id)}><Icon name="close" /></button>
           </li>)}
         </ul>}
-        <textarea className="dr-well__text" data-cal={CAL.prompt} aria-label={bar.mode === "Ask" ? "Question" : "Prompt"} rows={1} placeholder={bar.placeholder} value={bar.prompt}
+        <textarea className="dr-well__text" data-cal={CAL.prompt} aria-label={bar.mode === "Ask" ? "Question" : bar.mode === "NewRow" ? "What the new row shows and checks" : "Prompt"} rows={1} placeholder={bar.placeholder} value={bar.prompt}
           readOnly={bar.edit._tag === "Disabled"} aria-readonly={bar.edit._tag === "Disabled" || undefined}
           title={bar.edit._tag === "Disabled" ? bar.edit.reason : undefined}
           onChange={event => actions.onPrompt(event.currentTarget.value)}
@@ -99,7 +118,7 @@ export function WorkspaceBar({ view, actions, hidden = false }: { readonly view:
             <Button hook={CAL.planCancel} onClick={actions.onPlanCancel}>Cancel</Button>
           </>}
           {!planning && bar.mode !== "Closed" && <span className="dr-split">
-            <button type="button" className="dr-btn dr-btn--primary dr-split__main" data-cal={bar.mode === "Idea" ? CAL.ideaFollow : CAL.workspaceStart} data-take={idea?.take}
+            <button type="button" className="dr-btn dr-btn--primary dr-split__main" data-cal={bar.mode === "Idea" ? CAL.ideaFollow : rowMode ? CAL.rowWrite : CAL.workspaceStart} data-take={bar.mode === "Idea" ? idea?.take : undefined}
               disabled={bar.go.availability._tag === "Disabled"} title={bar.go.availability._tag === "Disabled" ? bar.go.availability.reason : "Ctrl+Enter"} onClick={goNow}>{bar.go.label}</button>
             <MenuButton label="More ways to start" triggerClass="dr-btn dr-btn--primary dr-split__more" menuClass="dr-split__menu" trigger={<Icon name="chevron-down" />}>
               {bar.mode === "Ask" && <><div role="group" aria-label="How many ideas" data-cal={CAL.count}>

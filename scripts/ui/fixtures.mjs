@@ -58,6 +58,12 @@ export const SHOTS = [
   { fixture: "workspaceRunning", mockup: "workspaces/running" },
   { fixture: "workspaceBoard", mockup: "workspaces/board" },
   { fixture: "workspaceClosed", mockup: null, note: "Decision 45: the ideas are discarded; the question and its answers stay." },
+  // Workspaces slice 2: a scratch row and its checks. These renders are its mockup (docs/design/mockups/workspaces-rows/).
+  { fixture: "workspaceRowNew", mockup: null, note: "Slice 2: New row. The bar says what the row must show and check." },
+  { fixture: "workspaceRowWriting", mockup: null, note: "Slice 2: the row agent writes the row; it waits at the bottom of the board." },
+  { fixture: "workspaceRowChecking", mockup: null, note: "Slice 2: Today is checked, idea 5 is checking, ideas 6 and 7 wait." },
+  { fixture: "workspaceRowChecked", mockup: null, note: "Slice 2: every column checked. Today fails both checks; the row's record says why." },
+  { fixture: "workspaceRowBoard", mockup: null, note: "Slice 2: the checked board with the side panel closed." },
 ]
 
 export const FIXTURE_NAMES = [...new Set(SHOTS.map(shot => shot.fixture))]
