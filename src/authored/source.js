@@ -1,13 +1,15 @@
 // @ts-check
 import { discoverParts } from "../derive/parts.js"
 import { takeParts } from "../takes/parts.js"
+import { rowParts } from "../takes/workspaces.js"
 
 /** Derive check identity from product syntax, never by importing consumer code.
  * @param {{store:import('../takes/store.js').TakeStore, revision:ReturnType<typeof import('../checks/source-revision.js').createSourceRevision>, take?:string}} input
  * @returns {import('./contract.js').CheckSource}
  */
 export function checkSource({ store, revision, take }) {
-  const originals = discoverParts(store.root)
+  // Workspace scratch rows check like parts, though discovery never lists them (decision 18, workspaces slice 2).
+  const originals = [...discoverParts(store.root), ...rowParts(store.root)]
   const parts = take === undefined ? originals : takeParts(store, take, originals)
   /** @param {readonly import('../types').Part[]} parts */
   const declarations = parts =>

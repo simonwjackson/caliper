@@ -173,7 +173,7 @@ function labelFor(exportName) {
  * @param {string} exportName
  * @returns {string | undefined}
  */
-function stringExport(source, exportName) {
+export function stringExport(source, exportName) {
   const match = source.match(
     new RegExp(`export\\s+const\\s+${exportName}\\s*(?::\\s*string\\s*)?=\\s*(["'\`])((?:\\\\.|(?!\\1).)*)\\1`),
   )

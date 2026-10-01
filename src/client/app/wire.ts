@@ -9,7 +9,7 @@ import { integrationProposalSchema } from "../../takes/integration-contract.js"
 import { KnobHintsSchema } from "../../knobs/contract.js"
 import { TakeIdentitySchema } from "../../takes/marks-contract.js"
 import { AcceptRecordSchema } from "../../takes/accepted-contract.js"
-import { WorkspaceSchema } from "../../takes/workspace-contract.js"
+import { CellCheckSchema, ScratchFactsSchema, WorkspaceSchema } from "../../takes/workspace-contract.js"
 import type { Project, TakesSnapshot } from "../../types"
 
 const text = Type.String()
@@ -84,6 +84,9 @@ export const TakesSchema = Type.Object({
         name: Type.Optional(text), direction: Type.Optional(DirectionSchema),
         run: RunSchema, files: strings, images: Type.Array(ImageSchema), log: Type.Array(LogEntrySchema),
       })),
+      // Slice 2: each scratch row's file and its agent, and how each row's checks went in each column.
+      scratch: Type.Array(Type.Object({ ...ScratchFactsSchema.properties, run: RunSchema, log: Type.Array(LogEntrySchema) })),
+      checks: Type.Array(CellCheckSchema),
     }),
     Type.Object({ _tag: tag("Damaged"), id: text, reason: text }),
   ])),

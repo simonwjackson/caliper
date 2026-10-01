@@ -20,10 +20,58 @@ export const MAX_TEXT = 8_000
 export const MAX_ROWS = 24
 export const MAX_QUESTIONS = 200
 
-/** One row of the board. Slice 1 has only declared states; scratch rows come in slice 2. */
+/** A scratch row's file, relative to its workspace's folder. Caliper names it; the row agent writes it. */
+export const ROW_FILE = /^rows\/[1-9]\d*\.part\.tsx$/
+/** A scratch row's file, relative to the project root: the part path frames and checks use. */
+export const ROW_PATH = /^\.caliper\/workspaces\/([1-9]\d*)\/(rows\/[1-9]\d*\.part\.tsx)$/
+/** The project-relative path of a scratch row's file. @param {string} workspace @param {string} file */
+export const rowPath = (workspace, file) => `.caliper/workspaces/${workspace}/${file}`
+/** The longest row file, in characters. */
+export const MAX_ROW = 300_000
+
+/**
+ * One row of the board: a declared state, or from slice 2 a scratch row, a
+ * file in the workspace's folder with one state, its default export. `brief`
+ * is what you asked the row agent.
+ */
 export const RowSchema = Type.Union([
   Type.Object({ _tag: Type.Literal("State"), part: Type.String({ minLength: 1, maxLength: 1024 }), state: Type.String({ minLength: 1, maxLength: 256 }) }, { additionalProperties: false }),
+  Type.Object({ _tag: Type.Literal("Scratch"), file: Type.String({ pattern: ROW_FILE.source }), brief: text() }, { additionalProperties: false }),
 ])
+
+/**
+ * The part and state a row renders: a pinned state as it is, a scratch row as
+ * its file's default export, by its project-relative path.
+ *
+ * @param {string} workspace
+ * @param {import("typebox").Static<typeof RowSchema>} row
+ * @returns {{ part: string, state: string }}
+ */
+export const rowRef = (workspace, row) => row._tag === "State" ? { part: row.part, state: row.state } : { part: rowPath(workspace, row.file), state: "default" }
+
+/**
+ * How one row's checks went in one column of the board (slice 2). `row` and
+ * `state` are the row's part and state (`rowRef`); `column` is "today" or the
+ * idea's take. `stale`: the row, the idea or the project changed after the
+ * run. `image` is a key the workspace serves at `checks/<key>`.
+ */
+export const CellCheckSchema = Type.Object({
+  row: Type.String(), state: Type.String(), column: Type.String(),
+  status: Type.Union([Type.Literal("Waiting"), Type.Literal("Running"), Type.Literal("Done"), Type.Literal("Unknown")]),
+  reason: Type.String(), stale: Type.Boolean(),
+  results: Type.Array(Type.Object({
+    name: Type.String(), line: Type.Integer({ minimum: 1 }),
+    status: Type.Union([Type.Literal("Passed"), Type.Literal("Failed"), Type.Literal("Inconclusive"), Type.Literal("NotRun")]),
+    detail: Type.String(), image: Type.Union([Type.String({ pattern: "^[a-f0-9]{16,64}$" }), Type.Null()]),
+  }, { additionalProperties: false })),
+}, { additionalProperties: false })
+
+/** What a scratch row's file declares, read without running it. `written`: the file exists. */
+export const ScratchFactsSchema = Type.Object({
+  file: Type.String({ pattern: ROW_FILE.source }), written: Type.Boolean(), name: Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
+  checks: Type.Array(Type.Object({ name: Type.String(), line: Type.Integer({ minimum: 1 }) }, { additionalProperties: false })),
+  problems: Type.Array(Type.String()),
+}, { additionalProperties: false })
 
 /** Who asked a question: you, or the agent of an idea. The idea's title stays after a discard. */
 export const AskerSchema = Type.Union([

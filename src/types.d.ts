@@ -347,9 +347,17 @@ export type IdeaView = {
 
 export type Workspace = import("./takes/workspaces.js").Workspace
 
-/** A workspace and its ideas, oldest first; or a workspace file Caliper cannot read, and why. */
+/** A scratch row's file, as its source declares it, and the row agent that writes it (slice 2). */
+export type ScratchView = import("./takes/workspaces.js").ScratchFacts & { readonly run: TakeRun; readonly log: readonly TakeLogEntry[] }
+/** How one row's checks went in one column of a board (slice 2). */
+export type CellCheck = import("typebox").Static<typeof import("./takes/workspace-contract.js").CellCheckSchema>
+
+/**
+ * A workspace and its ideas, oldest first, its scratch rows in board order,
+ * and its checks in cells; or a workspace file Caliper cannot read, and why.
+ */
 export type WorkspaceView =
-  | (Workspace & { readonly _tag: "Ready"; readonly ideas: readonly IdeaView[] })
+  | (Workspace & { readonly _tag: "Ready"; readonly ideas: readonly IdeaView[]; readonly scratch: readonly ScratchView[]; readonly checks: readonly CellCheck[] })
   | { readonly _tag: "Damaged"; readonly id: string; readonly reason: string }
 
 /** What the event stream sends as `takes`. */

@@ -26,7 +26,7 @@ const idea = (take: string, overrides: Partial<IdeaView> = {}): IdeaView => ({
   run: { _tag: "Idle" }, files: ["src/Home.tsx"], images: [], log: [], ...overrides,
 })
 function workspace(overrides: Partial<Extract<WorkspaceView, { _tag: "Ready" }>> = {}): WorkspaceView {
-  return { _tag: "Ready", id: "1", created, question: "", status: { _tag: "Open" }, rows: [], questions: [], ideas: [], ...overrides }
+  return { _tag: "Ready", id: "1", created, question: "", status: { _tag: "Open" }, rows: [], questions: [], ideas: [], scratch: [], checks: [], ...overrides }
 }
 function snapshot(workspaces: readonly WorkspaceView[]): TakesSnapshot {
   return {

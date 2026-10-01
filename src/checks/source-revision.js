@@ -1,6 +1,6 @@
 // @ts-check
 import { createHash, randomUUID } from "node:crypto"
-import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
 import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import { TAKES_DIR } from "../takes/store.js"
 
@@ -16,9 +16,12 @@ export function createSourceRevision({ root: directory, cacheDir, store }) {
   const epoch = randomUUID()
   let generation = 0
   const takes = new Map()
+  /** A workspace's scratch row file, or its rows folder: product-like source in .caliper (workspaces slice 2). @param {string} path root-relative */
+  const rowSource = path => /^\.caliper\/workspaces\/[1-9]\d*\/rows(?:\/[^/]+)?$/.test(path.split(sep).join("/"))
   /** @param {string} file */
   const excluded = file => {
     const path = relative(root, file)
+    if (rowSource(path)) return false
     const segments = path.split(sep)
     return (
       !path ||
@@ -58,6 +61,13 @@ export function createSourceRevision({ root: directory, cacheDir, store }) {
       }
     }
     walk(root, new Set(), false)
+    const workspaces = join(root, ".caliper", "workspaces")
+    if (existsSync(workspaces) && !lstatSync(workspaces).isSymbolicLink()) {
+      for (const id of readdirSync(workspaces).filter(name => /^[1-9]\d*$/.test(name)).sort()) {
+        const rows = join(workspaces, id, "rows")
+        if (existsSync(rows) && !lstatSync(rows).isSymbolicLink()) walk(rows, new Set(), true)
+      }
+    }
     if (request.take !== undefined) {
       if (!/^[1-9][0-9]*$/.test(request.take) || store.record(request.take) === null)
         throw new Error(`Take ${request.take} no longer exists.`)

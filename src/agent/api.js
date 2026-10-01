@@ -22,6 +22,7 @@ import { MAX_IMAGES } from "../client/images.js"
 import { createMarkupApi } from "./markup.js"
 import { createMarkStore } from "../takes/marks.js"
 import { createWorkspaceStore } from "../takes/workspaces.js"
+import { ROW_PATH, rowRef } from "../takes/workspace-contract.js"
 import { createWorkspacesApi } from "./workspaces.js"
 import { Type } from "typebox"
 
@@ -118,6 +119,8 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     if (problems.length) throw new Error(`The proposed files have invalid composition declarations:\n${problems.join("\n")}`)
   }
 
+  const workspaceStore = host.workspaces ?? createWorkspaceStore(store.root)
+
   /**
    * Render a part, as a take changes it or as the real files are.
    *
@@ -126,7 +129,9 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
    */
   const renderPart = async (part, { state, devices, take }) => {
     const original = await project()
-    const viewed = take === undefined ? original : { ...original, parts: await proposedParts(take) }
+    // A workspace's scratch row is not a discovered part (decision 18); it renders when it is asked for.
+    const rows = ROW_PATH.test(part) ? await workspaceStore.rowParts() : []
+    const viewed = { ...original, parts: [...take === undefined ? original.parts : await proposedParts(take), ...rows] }
     const plan = planRenders(viewed, { part, state, devices, ...(take === undefined ? {} : { take }) })
     if (plan._tag === "Invalid") throw new Error(plan.reason)
     if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
@@ -135,7 +140,6 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     return trackRender(() => renderJobs({ url, jobs: plan.jobs, out: join(renderDir, take === undefined ? "real" : `take-${take}`), executablePath: chromium, signal: shutdown.signal }))
   }
 
-  const workspaceStore = host.workspaces ?? createWorkspaceStore(store.root)
   const agents = createTakeAgents({
     store,
     workspaces: workspaceStore,
@@ -145,14 +149,16 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
       const signal = request.signal ? AbortSignal.any([shutdown.signal, request.signal]) : shutdown.signal
       signal.throwIfAborted()
       const original = await project(signal)
-      const viewed = { ...original, parts: await proposedParts(take) }
+      // An idea renders the workspace's scratch rows too, as its overlay changes what they import.
+      const rows = isIdea(ask) ? await workspaceStore.rowParts() : []
+      const viewed = { ...original, parts: [...await proposedParts(take), ...rows] }
       /** @type {import("../render/plan.js").RenderJob[]} */
       let jobs
       if (isIdea(ask)) {
         // The rows as they are now: you can pin and unpin while the idea works.
         const workspace = await workspaceStore.read(ask.subject.workspace)
         if (workspace === null) throw new Error(`Workspace ${ask.subject.workspace} does not exist.`)
-        jobs = planIdeaRenders(viewed, workspace.rows, request, take)
+        jobs = planIdeaRenders(viewed, workspace.rows.map(row => rowRef(workspace.id, row)), request, take)
       } else {
         validateTakeContext(original.parts, ask)
         jobs = planTakeRenders(viewed, ask, request, take, Boolean((await store.record(take))?.integration))
@@ -184,12 +190,15 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     plan: async ({ workspace, count, device, images }) => {
       const connected = engine()
       const { parts } = await project()
+      const refs = workspace.rows.map(row => rowRef(workspace.id, row))
       /** @type {import("./planner.js").Content[]} */
-      const context = await Promise.all([...new Set(workspace.rows.map(row => row.part))].map(async file => ({
-        type: /** @type {const} */ ("text"), text: `<file path="${file}">\n${await readProjectFile(file)}\n</file>`,
-      })))
+      const context = await Promise.all(workspace.rows.filter((row, index) => row._tag === "Scratch" || refs.findIndex(ref => ref.part === refs[index]?.part) === index).map(async row => {
+        const file = rowRef(workspace.id, row).part
+        const text = row._tag === "State" ? await readProjectFile(file) : await workspaceStore.readRow(workspace.id, row.file)
+        return { type: /** @type {const} */ ("text"), text: text === null ? `The scratch row ${file} is not written yet.` : `<file path="${file}">\n${text}\n</file>` }
+      }))
       context.push({ type: "text", text: `The project's parts, by file and name:\n${parts.map(part => `- ${part.file} (${part.name}, ${part.states.length} states)`).join("\n")}` })
-      for (const row of workspace.rows.slice(0, MAX_TAKES)) {
+      for (const row of refs.slice(0, MAX_TAKES)) {
         try {
           const [result] = await renderPart(row.part, { state: row.state, devices: [device] })
           if (result === undefined) continue
@@ -199,7 +208,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
           context.push({ type: "text", text: `Caliper could not render ${row.part}, state "${row.state}": ${error instanceof Error ? error.message : String(error)}` })
         }
       }
-      return planIdeas({ engine: connected, question: workspace.question, count, rows: workspace.rows, device, context, images, skills: await skills() })
+      return planIdeas({ engine: connected, question: workspace.question, count, rows: refs, device, context, images, skills: await skills() })
     },
   })
 

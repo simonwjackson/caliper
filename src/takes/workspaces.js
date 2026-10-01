@@ -1,9 +1,11 @@
 // @ts-check
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 import { Check } from "typebox/value"
+import { readPart, stringExport } from "../derive/parts.js"
+import { createRepoSource } from "./repo-source.js"
 import { CALIPER_DIR } from "./store.js"
-import { MAX_QUESTIONS, MAX_ROWS, MAX_TEXT, WORKSPACE_ID, WorkspaceSchema } from "./workspace-contract.js"
+import { MAX_QUESTIONS, MAX_ROW, MAX_ROWS, MAX_TEXT, ROW_FILE, WORKSPACE_ID, WorkspaceSchema, rowPath } from "./workspace-contract.js"
 
 /**
  * Workspaces of one project, on disk (decision 45):
@@ -20,7 +22,9 @@ import { MAX_QUESTIONS, MAX_ROWS, MAX_TEXT, WORKSPACE_ID, WorkspaceSchema } from
  * @typedef {Workspace["rows"][number]} Row
  * @typedef {Workspace["questions"][number]} Question
  * @typedef {Question["by"]} Asker
- * @typedef {{ _tag: "Read", workspace: Workspace } | { _tag: "Damaged", id: string, reason: string }} Listed
+ * @typedef {Extract<Row, { _tag: "Scratch" }>} ScratchRow
+ * @typedef {import("typebox").Static<typeof import("./workspace-contract.js").ScratchFactsSchema>} ScratchFacts
+ * @typedef {{ _tag: "Read", workspace: Workspace, scratch: ScratchFacts[] } | { _tag: "Damaged", id: string, reason: string }} Listed
  */
 
 export const WORKSPACES_DIR = `${CALIPER_DIR}/workspaces`
@@ -70,15 +74,58 @@ export function createWorkspaceStore(root) {
     return value
   }
 
+  /**
+   * A scratch row's file, after checking that the workspace's record names
+   * it, so no other path in the workspace folder is reachable.
+   *
+   * @param {Workspace} workspace
+   * @param {string} file
+   */
+  const rowFile = (workspace, file) => {
+    if (typeof file !== "string" || !ROW_FILE.test(file)) throw new Error(`"${file}" is not a row file. A row file is rows/<n>.part.tsx.`)
+    if (!workspace.rows.some(row => row._tag === "Scratch" && row.file === file)) throw new Error(`Workspace ${workspace.id} has no row ${file}.`)
+    return unlinked(join(folder, workspace.id, file))
+  }
+
+  /**
+   * What each scratch row's file declares, read without running it.
+   *
+   * @param {Workspace} workspace
+   * @returns {ScratchFacts[]}
+   */
+  const scratchFacts = workspace => workspace.rows.flatMap(/** @returns {ScratchFacts[]} */ row => {
+    if (row._tag !== "Scratch") return []
+    const path = rowFile(workspace, row.file)
+    if (!existsSync(path)) return [{ file: row.file, written: false, name: null, checks: [], problems: [] }]
+    const source = readFileSync(path, "utf8")
+    const part = readPart(root, rowPath(workspace.id, row.file), source)
+    const checks = (part.authoredChecks?.default ?? []).map(check => ({ name: check.name, line: check.line }))
+    return [{ file: row.file, written: true, name: stringExport(source, "name")?.slice(0, 200) ?? null, checks, problems: [...part.authoredCheckProblems ?? []] }]
+  })
+
   /** @returns {Listed[]} every workspace, and the ones that cannot be read */
   const overview = () => list().flatMap(/** @returns {Listed[]} */ id => {
     try {
       const workspace = read(id)
-      return workspace === null ? [] : [{ _tag: "Read", workspace }]
+      return workspace === null ? [] : [{ _tag: "Read", workspace, scratch: scratchFacts(workspace) }]
     } catch (error) {
       return [{ _tag: "Damaged", id, reason: error instanceof Error ? error.message : String(error) }]
     }
   })
+
+  /**
+   * Every written scratch row of every workspace, as a part whose file is
+   * relative to the project root. Discovery never lists them (decision 18);
+   * frames, check runs and the render tool add them where a row is asked for.
+   *
+   * @returns {import("../types").Part[]}
+   */
+  const rowParts = () => overview().flatMap(entry => entry._tag !== "Read" ? [] : entry.workspace.rows.flatMap(row => {
+    if (row._tag !== "Scratch") return []
+    const path = join(folder, entry.workspace.id, row.file)
+    if (!existsSync(path)) return []
+    return [readPart(root, rowPath(entry.workspace.id, row.file), readFileSync(path, "utf8"))]
+  }))
 
   /** @param {Workspace} workspace */
   const save = workspace => {
@@ -134,19 +181,79 @@ export function createWorkspaceStore(root) {
    * Add a row. A state already on the board stays where it is.
    *
    * @param {string} id
-   * @param {Row} row
+   * @param {{ part: string, state: string }} row
    */
   const pin = (id, row) => {
     const workspace = open(id)
-    if (workspace.rows.some(other => sameRow(other, row))) return workspace
+    const pinned = { _tag: /** @type {const} */ ("State"), part: row.part, state: row.state }
+    if (workspace.rows.some(other => sameRow(other, pinned))) return workspace
     if (workspace.rows.length >= MAX_ROWS) throw new Error(`A board holds at most ${MAX_ROWS} rows. Unpin one first.`)
-    return save({ ...workspace, rows: [...workspace.rows, { _tag: "State", part: row.part, state: row.state }] })
+    return save({ ...workspace, rows: [...workspace.rows, pinned] })
   }
 
-  /** @param {string} id @param {Row} row */
+  /** Take a pinned state off the board. Scratch rows stay. @param {string} id @param {{ part: string, state: string }} row */
   const unpin = (id, row) => {
     const workspace = open(id)
-    return save({ ...workspace, rows: workspace.rows.filter(other => !sameRow(other, row)) })
+    const pinned = { _tag: /** @type {const} */ ("State"), part: row.part, state: row.state }
+    return save({ ...workspace, rows: workspace.rows.filter(other => !sameRow(other, pinned)) })
+  }
+
+  /**
+   * Add a scratch row at the end of the board, for a row agent to write.
+   * Caliper names its file now, so the record names the row before the file
+   * exists. A number in use, in the record or on disk, is never given again.
+   *
+   * @param {string} id
+   * @param {string} brief what you asked the row agent
+   * @returns {{ row: ScratchRow, workspace: Workspace }}
+   */
+  const addScratch = (id, brief) => {
+    const workspace = open(id)
+    if (workspace.rows.length >= MAX_ROWS) throw new Error(`A board holds at most ${MAX_ROWS} rows. Remove one first.`)
+    const rows = unlinked(join(folder, id, "rows"))
+    const onDisk = existsSync(rows) ? readdirSync(rows) : []
+    const used = [...workspace.rows.flatMap(row => row._tag === "Scratch" ? [row.file] : []), ...onDisk.map(name => `rows/${name}`)]
+      .flatMap(file => ROW_FILE.test(file) ? [Number(file.slice(5, -9))] : [])
+    /** @type {ScratchRow} */
+    const row = { _tag: "Scratch", file: `rows/${Math.max(0, ...used) + 1}.part.tsx`, brief: written(brief, "brief") }
+    return { row, workspace: save({ ...workspace, rows: [...workspace.rows, row] }) }
+  }
+
+  /**
+   * Write a scratch row's file: the only file a row agent writes. The whole
+   * file is renamed into place, so a frame never loads half a row.
+   *
+   * @param {string} id
+   * @param {string} file the row's file, rows/<n>.part.tsx
+   * @param {string} content
+   */
+  const writeRow = (id, file, content) => {
+    const workspace = open(id)
+    const path = rowFile(workspace, file)
+    if (typeof content !== "string") throw new Error("A row file is text.")
+    if (content.length > MAX_ROW) throw new Error(`The row file is longer than ${MAX_ROW} characters.`)
+    mkdirSync(unlinked(join(folder, id, "rows")), { recursive: true })
+    const partial = unlinked(`${path}.${process.pid}.tmp`)
+    writeFileSync(partial, content)
+    renameSync(partial, path)
+    return file
+  }
+
+  /** A scratch row's file as it is now, or null before its agent writes it. @param {string} id @param {string} file */
+  const readRow = (id, file) => {
+    const workspace = read(id)
+    if (workspace === null) throw new Error(`Workspace ${id} does not exist.`)
+    const path = rowFile(workspace, file)
+    return existsSync(path) ? readFileSync(path, "utf8") : null
+  }
+
+  /** Take a scratch row off the board and delete its file. @param {string} id @param {string} file */
+  const removeScratch = (id, file) => {
+    const workspace = open(id)
+    const path = rowFile(workspace, file)
+    const saved = save({ ...workspace, rows: workspace.rows.filter(row => !(row._tag === "Scratch" && row.file === file)) })
+    rmSync(path, { force: true })
+    return saved
   }
 
   /**
@@ -188,12 +295,27 @@ export function createWorkspaceStore(root) {
    */
   const close = id => save({ ...open(id), status: { _tag: "Closed", at: Date.now(), promoted: [] } })
 
-  return { root, list, read, overview, create, setQuestion, setName, pin, unpin, ask, answer, close }
+  const source = createRepoSource(root)
+  return {
+    root, list, read, overview, rowParts, create, setQuestion, setName, pin, unpin, ask, answer, close,
+    addScratch, writeRow, readRow, removeScratch, readSource: source.readSource, listSource: source.listSource,
+  }
 }
 
 /** @typedef {ReturnType<typeof createWorkspaceStore>} WorkspaceStore */
 
+/**
+ * Every written scratch row of the project, as parts (see the store's `rowParts`).
+ *
+ * @param {string} root
+ */
+export function rowParts(root) {
+  return createWorkspaceStore(root).rowParts()
+}
+
 /** @param {Row} left @param {Row} right */
 export function sameRow(left, right) {
-  return left._tag === right._tag && left.part === right.part && left.state === right.state
+  if (left._tag === "Scratch") return right._tag === "Scratch" && left.file === right.file
+  if (right._tag === "Scratch") return false
+  return left.part === right.part && left.state === right.state
 }

@@ -11,6 +11,7 @@ import { imageContent } from "./images.js"
 import { identityKey } from "../takes/chains.js"
 import { isIdea } from "../takes/store.js"
 import { createWorkspaceStore } from "../takes/workspaces.js"
+import { rowPath, rowRef } from "../takes/workspace-contract.js"
 
 /**
  * The chain a take belongs to: its record's `chain`, or the take itself.
@@ -406,7 +407,8 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
         : first
         ? [
           ...await (isIdea(record)
-            ? ideaFirstMessage(record, await workspaceOf(record), `${named}${handNote(edited, true)}`, prompt, render, store, take)
+            ? ideaFirstMessage(record, await workspaceOf(record), `${named}${handNote(edited, true)}`, prompt, render, store, take,
+              async file => workspaces.readRow(record.subject.workspace, file))
             : firstMessage(record, `${named}${handNote(edited, true)}${prompt}`, render, store, take)),
           // A new agent in an old take, after a restart, has not seen the take's earlier images.
           ...imageContent(await earlierImages(store, take, attachedImages), "earlier prompts in this take"),
@@ -443,7 +445,8 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
   const createAgent = async (take, ask, render, entry, devices) => {
     const { models, model, reasoning } = engine()
     const idea = isIdea(ask) ? await workspaceOf(ask) : null
-    const preview = isIdea(ask) ? { part: idea?.rows[0]?.part, state: idea?.rows[0]?.state ?? "default" } : ask.context ?? ask
+    const firstRow = idea?.rows[0]
+    const preview = isIdea(ask) ? (idea && firstRow ? rowRef(idea.id, firstRow) : { part: undefined, state: "default" }) : ask.context ?? ask
     const catalog = await skills()
     const session = skillSession(catalog)
     entry.skills = session
@@ -740,15 +743,22 @@ function directionText(ask, noun = "take") {
  * @param {RenderTake} render
  * @param {TakeStore} store
  * @param {string} take
+ * @param {(file: string) => Promise<string | null>} rowSource a scratch row's file as it is now, or null before it is written
  * @returns {Promise<Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>>}
  */
-async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, take) {
+async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, take, rowSource) {
   const described = prompt.trim() === workspace.question.trim() ? "" : `\n\nThe user describes this idea: ${prompt}`
-  const rows = workspace.rows.length ? workspace.rows.map(row => `- ${row.part}, state "${row.state}"`).join("\n") : "- none yet"
-  const sources = await Promise.all([...new Set(workspace.rows.map(row => row.part))].map(async file => {
+  const rows = workspace.rows.length ? workspace.rows.map(row => row._tag === "State" ? `- ${row.part}, state "${row.state}"`
+    : `- the scratch row ${rowPath(workspace.id, row.file)}, which the workspace owns and you cannot edit. It was asked for as: ${row.brief}`).join("\n") : "- none yet"
+  const sources = await Promise.all([...new Set(workspace.rows.flatMap(row => row._tag === "State" ? [row.part] : []))].map(async file => {
     try { return `<file path="${file}">\n${await store.read(take, file)}\n</file>` }
     catch (error) { return `Caliper could not read ${file}: ${error instanceof Error ? error.message : String(error)}` }
   }))
+  for (const row of workspace.rows) {
+    if (row._tag !== "Scratch") continue
+    const text = await rowSource(row.file).catch(() => null)
+    sources.push(text === null ? `The scratch row ${rowPath(workspace.id, row.file)} is not written yet.` : `<file path="${rowPath(workspace.id, row.file)}">\n${text}\n</file>`)
+  }
   /** @type {Array<{ type: "text", text: string } | { type: "image", data: string, mimeType: string }>} */
   const content = [{
     type: "text",
@@ -757,7 +767,7 @@ async function ideaFirstMessage(ask, workspace, lead, prompt, render, store, tak
   const first = workspace.rows[0]
   if (first === undefined) return content
   try {
-    const results = await render({ state: first.state, devices: [ask.device], related: true })
+    const results = await render({ state: rowRef(workspace.id, first).state, devices: [ask.device], related: true })
     for (const { png, ...verdict } of results.slice(0, 4)) {
       content.push({ type: "text", text: `How ${verdict.part}, state "${verdict.state}", renders now:\n${JSON.stringify(verdict, null, 2)}` })
       content.push({ type: "image", data: readFileSync(png).toString("base64"), mimeType: "image/png" })

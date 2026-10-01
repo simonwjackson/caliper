@@ -6,6 +6,7 @@ import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js
 import { MAX_IMAGES } from "../images.js"
 import type { AppState } from "./state"
 import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey, deviceName, deviceOf, devicesOf, currentWorkspace, openWorkspace } from "./state"
+import { rowRef } from "../../takes/workspace-contract.js"
 
 /** Marks as the markup controller sees them. `frame` reads its current locations; it does no I/O. */
 export type MarkupRegion = {
@@ -96,7 +97,7 @@ function navigation(state: AppState, regions: Regions): NavigationView {
   const project = state.project
   // Decision 45: while an open workspace is selected, every state has a pin.
   const pinning = openWorkspace(state)
-  const pinned = (ref: StateRef) => pinning?.rows.some(row => sameState(row, ref)) ?? false
+  const pinned = (ref: StateRef) => pinning?.rows.some(row => row._tag === "State" && sameState(row, ref)) ?? false
   const pin = (ref: StateRef): PinView => pinning ? { _tag: "Pin", pinned: pinned(ref), availability: state.operation._tag === "Working" ? disabled("A request is pending.") : enabled } : { _tag: "None" }
   return {
     project: project?.name ?? "Caliper", projects: projectsView(state), workspaces: workspacesNav(state), filter: state.filter,
@@ -156,9 +157,17 @@ function board(state: AppState): BoardView {
   const status = !open ? "Closed" : workspace.question.trim() === "" && workspace.ideas.length === 0 ? "New" : "Open"
   const planning = state.plan._tag === "Ideas" && state.plan.workspace === workspace.id ? state.plan : null
   const rows: BoardRowView[] = workspace.rows.map(row => {
+    const ref = rowRef(workspace.id, row)
+    if (row._tag === "Scratch") {
+      // A scratch row (slice 2): its file's name, or the start of what you asked until the agent names it.
+      const facts = workspace.scratch.find(item => item.file === row.file)
+      const name = facts?.name ?? (row.brief.length > 48 ? `${row.brief.slice(0, 47).trimEnd()}…` : row.brief)
+      return { key: rowKey(ref), ref, part: name, state: "Scratch", site: ref.part, missing: false, checks: facts?.checks.length ?? 0,
+        scratch: { id: row.file, run: facts?.run ?? { _tag: "Idle" }, written: facts?.written ?? false, focused: false }, open: false }
+    }
     const part = parts.find(item => item.file === row.part)
-    // Slice 2 fills checks, scratch and open from the row checks; until then, no row has checks.
-    return { key: rowKey(row), ref: { part: row.part, state: row.state }, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row), checks: 0, scratch: null, open: false }
+    return { key: rowKey(ref), ref, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row),
+      checks: part?.authoredChecks?.[row.state]?.length ?? 0, scratch: null, open: false }
   })
   const focused = workspace.ideas.find(idea => idea.take === state.idea) ?? null
   const columns: BoardColumnView[] = [
@@ -170,7 +179,7 @@ function board(state: AppState): BoardView {
     ...Array.from({ length: planning?.count ?? 0 }, (_, index): BoardColumnView => ({ _tag: "Planned", key: `planned:${index}` })),
   ]
   const cell = (row: BoardRowView, column: BoardColumnView, idea: IdeaView | null): BoardCellView => {
-    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
+    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running" || row.scratch && !row.scratch.written) return { row: row.key, column: column.key, frame: null, same: false, checks: { _tag: "None" } }
     const key = cellKey(row.ref, idea)
     const report = state.reports.get(key)
     const frame: FrameView = {

@@ -23,7 +23,8 @@ import { json } from "./http.js"
 import { createHostApi } from "./host/api.js"
 import { createMarkStore } from "./takes/marks.js"
 import { createIntegrationReview } from "./takes/integration.js"
-import { createWorkspaceStore } from "./takes/workspaces.js"
+import { createWorkspaceStore, rowParts } from "./takes/workspaces.js"
+import { ROW_PATH } from "./takes/workspace-contract.js"
 import { newToken, projectId, PROTOCOL, registryDir, tokenMatches, writeEntry } from "./central/registry.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
@@ -435,7 +436,9 @@ function createSession(server, root, options, env, overlay) {
   const sendFrame = async (partFile, stateName, take, response) => {
     await dependenciesReady()
     const { project } = await load()
-    const parts = take !== null && isTakeId(take) && store.record(take) !== null ? takeParts(store, take, project.parts) : project.parts
+    const discovered = take !== null && isTakeId(take) && store.record(take) !== null ? takeParts(store, take, project.parts) : project.parts
+    // A workspace's scratch row (slice 2) is no discovered part (decision 18); its frame serves it by its exact path.
+    const parts = ROW_PATH.test(partFile) ? [...discovered, ...rowParts(root)] : discovered
     const part = parts.find(candidate => candidate.file === partFile)
     const problem = part === undefined
       ? `"${partFile}" is not a part of ${project.name}. Pick a part from the list.`

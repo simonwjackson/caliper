@@ -76,6 +76,8 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, onChang
     return listed.map(/** @returns {WorkspaceView} */ entry => entry._tag === "Damaged" ? entry : {
       _tag: "Ready", ...entry.workspace,
       ideas: ideas.filter(idea => idea.workspace === entry.workspace.id).map(({ workspace: _workspace, ...idea }) => idea),
+      scratch: entry.scratch.map(facts => ({ ...facts, run: { _tag: /** @type {const} */ ("Idle") }, log: [] })),
+      checks: [],
     })
   }
 
