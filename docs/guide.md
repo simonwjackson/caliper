@@ -15,7 +15,7 @@ answers for, and shows a project whose server does not answer as `Silent`
 
 | Path on the app | What it is |
 |---|---|
-| `/__caliper/` | The list of running projects. |
+| `/__caliper/` | The list of running projects. A line under the title says whether the page is connecting, watching, or has lost the app. With no project, the page shows the setup steps. When it loses the app, it keeps the last list, dimmed and not clickable, and connects again by itself. |
 | `/__caliper/p/<id>/<path>` | `<path>` on the project's dev server. The chrome is `<base>__caliper/` under it. `<id>` is the first 12 hex digits of the SHA-256 of the project root. |
 | `<base>__caliper/hmr/<id>` | The project's Vite HMR socket. The plugin sets `server.ws.path` to this (`server.hmr.path` before Vite 8.1). |
 | `/__caliper/sw.js` | The routing service worker. |
