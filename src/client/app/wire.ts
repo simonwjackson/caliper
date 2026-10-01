@@ -9,6 +9,7 @@ import { integrationProposalSchema } from "../../takes/integration-contract.js"
 import { KnobHintsSchema } from "../../knobs/contract.js"
 import { TakeIdentitySchema } from "../../takes/marks-contract.js"
 import { AcceptRecordSchema } from "../../takes/accepted-contract.js"
+import { WorkspaceSchema } from "../../takes/workspace-contract.js"
 import type { Project, TakesSnapshot } from "../../types"
 
 const text = Type.String()
@@ -43,6 +44,13 @@ export const ProjectSchema = Type.Object({
   devices: Type.Array(Type.Object({ id: text, name: text, widthMm: Type.Number({ exclusiveMinimum: 0 }), heightMm: Type.Number({ exclusiveMinimum: 0 }), cssWidth: Type.Number({ exclusiveMinimum: 0 }), cssHeight: Type.Number({ exclusiveMinimum: 0 }), viewportNote: Type.String() }), { minItems: 1 }),
 })
 export const DirectionSchema = Type.Object({ title: text, brief: text, strange: Type.Optional(tag(true)) })
+const RunSchema = Type.Union([Type.Object({ _tag: tag("Idle") }), Type.Object({ _tag: tag("Running") }), Type.Object({ _tag: tag("Failed"), reason: text })])
+const ImageSchema = Type.Object({ file: text, name: text, mimeType: Type.Union([tag("image/png"), tag("image/jpeg"), tag("image/webp"), tag("image/gif")]) })
+const LogEntrySchema = Type.Union([
+  Type.Object({ _tag: tag("User"), text, images: Type.Optional(strings) }),
+  Type.Object({ _tag: tag("Assistant"), text }), Type.Object({ _tag: tag("Edit"), file: text }),
+  Type.Object({ _tag: tag("Tool"), id: text, name: text, subject: text, outcome: Type.Union([tag("Running"), tag("Done"), tag("Failed")]), detail: text }),
+])
 export const PlanSchema = Type.Object({ directions: Type.Array(DirectionSchema, { maxItems: 4 }), note: Type.Optional(text) })
 export const TakesSchema = Type.Object({
   agent: Type.Union([
@@ -61,16 +69,24 @@ export const TakesSchema = Type.Object({
       Type.Object({ _tag: tag("Preparing"), sourceTake: text }),
       Type.Object({ _tag: tag("Review"), sourceTake: text, proposal: integrationProposalSchema }),
     ])),
-    run: Type.Union([Type.Object({ _tag: tag("Idle") }), Type.Object({ _tag: tag("Running") }), Type.Object({ _tag: tag("Failed"), reason: text })]),
+    run: RunSchema,
     files: strings,
-    images: Type.Array(Type.Object({ file: text, name: text, mimeType: Type.Union([tag("image/png"), tag("image/jpeg"), tag("image/webp"), tag("image/gif")]) })),
-    log: Type.Array(Type.Union([
-      Type.Object({ _tag: tag("User"), text, images: Type.Optional(strings) }),
-      Type.Object({ _tag: tag("Assistant"), text }), Type.Object({ _tag: tag("Edit"), file: text }),
-      Type.Object({ _tag: tag("Tool"), id: text, name: text, subject: text, outcome: Type.Union([tag("Running"), tag("Done"), tag("Failed")]), detail: text }),
-    ])),
+    images: Type.Array(ImageSchema),
+    log: Type.Array(LogEntrySchema),
   })),
   accepted: Type.Array(AcceptRecordSchema),
+  workspaces: Type.Array(Type.Union([
+    Type.Object({
+      ...WorkspaceSchema.properties,
+      _tag: tag("Ready"),
+      ideas: Type.Array(Type.Object({
+        take: Type.String({ pattern: "^[1-9][0-9]*$" }), created: Type.Number({ minimum: 0, maximum: 8.64e15 }), device: text,
+        name: Type.Optional(text), direction: Type.Optional(DirectionSchema),
+        run: RunSchema, files: strings, images: Type.Array(ImageSchema), log: Type.Array(LogEntrySchema),
+      })),
+    }),
+    Type.Object({ _tag: tag("Damaged"), id: text, reason: text }),
+  ])),
 })
 export const ModelsSchema = Type.Object({ current: text, favorites: strings, models: strings, problem: Type.Optional(text) })
 export const CodeChangeSchema = Type.Object({ file: text, take: Type.Union([text, Type.Null()]) })

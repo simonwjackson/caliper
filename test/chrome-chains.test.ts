@@ -37,7 +37,7 @@ function chainTakes(): TakeView[] {
   ]
 }
 function snapshot(list: readonly TakeView[], accepted: TakesSnapshot["accepted"] = []): TakesSnapshot {
-  return { agent: { _tag: "Off", hint: "No agent in this test." }, skills: { skills: [], problems: [] }, takes: list, accepted }
+  return { agent: { _tag: "Off", hint: "No agent in this test." }, skills: { skills: [], problems: [] }, takes: list, accepted, workspaces: [] }
 }
 type App = ReturnType<typeof createChromeApp>
 const apps = new Set<App>()

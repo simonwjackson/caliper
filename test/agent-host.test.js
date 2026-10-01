@@ -10,6 +10,7 @@ import { remoteHost } from "../src/central/remote-host.js"
 import { createHostApi } from "../src/host/api.js"
 import { createTakeStore } from "../src/takes/store.js"
 import { createMarkStore, StaleDraft } from "../src/takes/marks.js"
+import { createWorkspaceStore } from "../src/takes/workspaces.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
 import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
@@ -27,7 +28,7 @@ async function delayedHost(slow = { target: "store", method: "overview" }) {
   const store = createTakeStore(root)
   const marks = createMarkStore(root)
   const integration = createIntegrationReview(store)
-  const api = createHostApi({ store, marks, integration, root, home: root })
+  const api = createHostApi({ store, marks, integration, workspaces: createWorkspaceStore(root), root, home: root })
   const entered = Promise.withResolvers()
   const release = Promise.withResolvers()
   const project = { name: "test", devices: STANDARD_DEVICES, parts: [{ file: ask.part, name: "Chip", states: [{ export: "default", name: "Default" }] }] }

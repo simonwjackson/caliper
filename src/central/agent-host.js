@@ -87,6 +87,7 @@ const api = createTakesApi({
     readFile: host.readFile,
     marks: host.marks,
     integration: host.integration,
+    workspaces: host.workspaces,
     baselines: join(data.stateDir, "baselines", data.id),
   },
 })

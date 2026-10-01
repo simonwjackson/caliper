@@ -11,7 +11,7 @@ function Scenario({ initial }: { initial: "ready" | "calibrate" | "unreachable" 
   const [app] = useState(() => {
     const app = createChromeApp({ request: async () => { throw new Error("This local scenario has no source or agent server.") } })
     app.receiveProject({ name: "Caliper subject", parts: [], entry: { _tag: "Overridden", value: { file: "src/client/app/entry.tsx" }, option: "entry" }, css: { _tag: "Overridden", value: { stylesheets: [], unresolved: [] }, option: "css" }, wrapper: { _tag: "Overridden", value: { elements: [] }, option: "wrap" }, devices: STANDARD_DEVICES })
-    app.receiveTakes({ agent: { _tag: "Off", hint: "This scenario supplies local inputs and does not start an agent." }, skills: { skills: [], problems: [] }, takes: [], accepted: [] })
+    app.receiveTakes({ agent: { _tag: "Off", hint: "This scenario supplies local inputs and does not start an agent." }, skills: { skills: [], problems: [] }, takes: [], accepted: [], workspaces: [] })
     if (initial === "calibrate") app.actions.onTool("calibrate")
     if (initial === "unreachable") app.unreachable("The local scenario records an unreachable subject server.")
     return app

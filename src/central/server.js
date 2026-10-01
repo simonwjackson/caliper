@@ -40,8 +40,8 @@ const PWA_FILES = new Map([
   ["icon-maskable-512.png", "image/png"],
 ])
 const HOP = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"])
-/** Take and mark requests: the app's agent answers them, not the plugin. */
-const AGENT_PATHS = /^\/(?:takes(?:\.json|\/.*)?|marks(?:\.json|\/.*)?)$/
+/** Take, mark and workspace requests: the app's agent answers them, not the plugin. */
+const AGENT_PATHS = /^\/(?:takes(?:\.json|\/.*)?|marks(?:\.json|\/.*)?|workspaces(?:\/.*)?)$/
 /** Knob writes into a take are edits by hand; the take's agent must be idle. */
 const KNOB_WRITES = new Set(["/knobs/write", "/knobs/promote"])
 const PROJECTS_POLL_MS = 1000

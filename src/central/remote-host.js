@@ -50,6 +50,7 @@ export function remoteHost({ call, root }) {
   })
 
   const marks = /** @type {AgentMarks} */ (/** @type {unknown} */ (proxy("marks")))
+  const workspaces = /** @type {import("../agent/host-types").AgentWorkspaces} */ (/** @type {unknown} */ ({ ...proxy("workspaces"), root }))
   const integrationCalls = proxy("integration")
   const integration = /** @type {AgentIntegration} */ (/** @type {unknown} */ ({
     ...integrationCalls,
@@ -85,5 +86,5 @@ export function remoteHost({ call, root }) {
       })),
     }
   }
-  return { store, marks, integration, parts, readFile, projectSkills }
+  return { store, marks, integration, workspaces, parts, readFile, projectSkills }
 }

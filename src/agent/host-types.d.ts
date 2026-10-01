@@ -12,4 +12,5 @@ export type AgentStore = AwaitableHost<import("../takes/store.js").TakeStore> & 
   withSignal?: <T>(signal: AbortSignal, run: () => Promise<T>) => Promise<T>
 }
 export type AgentMarks = AwaitableHost<import("../takes/marks.js").MarkStore>
+export type AgentWorkspaces = AwaitableHost<import("../takes/workspaces.js").WorkspaceStore>
 export type AgentIntegration = AwaitableHost<ReturnType<typeof import("../takes/integration.js").createIntegrationReview>>

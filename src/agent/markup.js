@@ -7,6 +7,7 @@ import { json, readJson, refuse } from "../http.js"
 import { isOriginal, planSend } from "../takes/send-plan.js"
 import { MarkChangeSchema, NewMarkSchema, ReleaseSchema, RevisionSchema } from "../takes/marks-contract.js"
 import { StaleDraft } from "../takes/marks.js"
+import { isIdea } from "../takes/store.js"
 import { markupMessage, promptMarksText } from "./markup-message.js"
 
 /**
@@ -20,7 +21,8 @@ import { markupMessage, promptMarksText } from "./markup-message.js"
  *
  * @typedef {import("../takes/marks-contract.js").Draft} Draft
  * @typedef {import("../takes/marks-contract.js").Mark} Mark
- * @typedef {import("../takes/store.js").TakeRecord} TakeRecord
+ * @typedef {import("../takes/store.js").StateTakeRecord} TakeRecord
+ *   Marks go only on takes of a part; an idea of a workspace cannot be marked.
  * @typedef {import("../takes/store.js").TakeIdentity} TakeIdentity
  * @typedef {import("../render/plan.js").DeviceJob} DeviceJob
  * @typedef {import("../render/render.js").RenderResult} RenderResult
@@ -65,6 +67,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
     const record = await store.record(source.take)
     if (record === null || record.created !== source.created) throw new Error(`Take ${source.take} is no longer the take you marked. Reload the takes.`)
     if (record.integration) throw new Error(`Take ${source.take} is an alternate. Alternates have their own review and cannot be marked.`)
+    if (isIdea(record)) throw new Error(`Take ${source.take} is an idea of a workspace. Ideas cannot be marked.`)
     const viewed = await project()
     if (!sameState(preview, record) && !contextsFor(viewed.parts, record).some(context => sameState(context, preview))) throw new Error(`Take ${source.take} does not show ${preview.part} · ${preview.state}.`)
     if (!viewed.devices.some(candidate => candidate.id === device)) throw new Error(unknownDevice(viewed, device))
@@ -152,6 +155,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
         if (!isOriginal(group.source)) {
           const record = await store.record(group.source.take)
           if (record === null || record.created !== group.source.created) throw new Error(`Take ${group.source.take} is no longer the take you marked. Reload the takes.`)
+          if (isIdea(record)) throw new Error(`Take ${group.source.take} is an idea of a workspace. Ideas cannot be marked.`)
           validateTake(parts, record)
           return { ...base, record }
         }
@@ -160,7 +164,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
         if (subjects.length > 1) throw new Error("The marks on the original are on more than one part or state. Send them one subject at a time: remove the others first.")
         const first = /** @type {Mark} */ (own[0])
         const subject = first.subject ?? first.preview
-        /** @type {Omit<TakeRecord, "created">} */
+        /** @type {import("../takes/store.js").NewStateTakeRecord} */
         const record = { part: subject.part, state: subject.state, device: first.device, ...(sameState(first.preview, subject) ? {} : { context: first.preview }) }
         validateTake(parts, /** @type {TakeRecord} */ ({ ...record, created: 0 }))
         return { ...base, record }
@@ -319,7 +323,7 @@ export function createMarkupApi({ store, marks, agents, project, validateTake, r
  * @param {TakeIdentity} source
  * @param {TakeRecord} parent
  * @param {Mark[]} sent
- * @returns {Omit<TakeRecord, "created"> & { parent: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] }}
+ * @returns {import("../takes/store.js").NewStateTakeRecord & { parent: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] }}
  */
 export function childRecord(source, parent, sent) {
   const identity = { take: source.take, created: source.created }

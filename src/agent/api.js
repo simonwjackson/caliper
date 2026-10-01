@@ -11,7 +11,7 @@ import { planRenders, unknownDevice, withViewport } from "../render/plan.js"
 import { renderJobs } from "../render/render.js"
 import { checkJobs } from "../render/checks.js"
 import { json, MAX_BODY, MAX_FILE_BODY, readJson, refuse, validFile } from "../http.js"
-import { isTakeId } from "../takes/store.js"
+import { isIdea, isTakeId } from "../takes/store.js"
 import { connectEngine } from "./model.js"
 import { planDirections } from "./planner.js"
 import { createTakeAgents } from "./take-agents.js"
@@ -21,6 +21,8 @@ import { MAX_IMAGES_BODY, readImages } from "./images.js"
 import { MAX_IMAGES } from "../client/images.js"
 import { createMarkupApi } from "./markup.js"
 import { createMarkStore } from "../takes/marks.js"
+import { createWorkspaceStore } from "../takes/workspaces.js"
+import { createWorkspacesApi } from "./workspaces.js"
 import { Type } from "typebox"
 
 /**
@@ -90,9 +92,23 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     await Promise.all((await store.files(take)).filter(file => file.endsWith(PART_SUFFIX)).map(async file => /** @type {[string, string]} */ ([file, await store.read(take, file)]))),
   ))
 
+  /**
+   * A take of a part. An idea belongs to its workspace's board, which has its
+   * own routes; these routes refuse it.
+   *
+   * @param {string} take
+   * @returns {Promise<import("../takes/store.js").StateTakeRecord>}
+   */
+  const stateTake = async take => {
+    const record = await store.record(take)
+    if (record === null) throw new Error(`Take ${take} does not exist.`)
+    if (isIdea(record)) throw new Error(`Take ${take} is an idea of workspace ${record.subject.workspace}. Use the workspace's board for it.`)
+    return record
+  }
+
   /** Both replacement and alternate proposals preserve their subject and context. @param {string} take */
   const validateProposedContext = async take => {
-    const record = /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take))
+    const record = await stateTake(take)
     const baseline = await discover()
     validateTakeContext(baseline, record)
     const proposed = await proposedParts(take)
@@ -147,6 +163,13 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     onChange,
     skills,
     devices: async signal => (await project(signal)).devices,
+  })
+
+  const workspaces = createWorkspacesApi({
+    workspaces: host.workspaces ?? createWorkspaceStore(store.root),
+    agents,
+    project,
+    onChange,
   })
 
   const markup = createMarkupApi({
@@ -227,7 +250,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   /** @returns {Promise<TakesSnapshot>} */
   const snapshot = async () => (store.batch ?? (read => read()))(async () => ({
     agent: status, skills: status._tag === "Ready" ? skillsStatus(await skills()) : { skills: [], problems: [] },
-    takes: await agents.views(), accepted: await store.accepted(),
+    takes: await agents.views(), accepted: await store.accepted(), workspaces: await workspaces.views(),
   }))
 
   /**
@@ -238,6 +261,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
    */
   const handle = async (path, request, response) => {
     if (await markup.handle(path, request, response)) return true
+    if (await workspaces.handle(path, request, response)) return true
     if (path === "/takes.json") {
       json(response, 200, await snapshot())
       return true
@@ -269,13 +293,18 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
       }
       const [, , take = "", action = ""] = path.split("/")
       if (isTakeId(take) && action === "stop") await agents.stop(take)
-      if (!isTakeId(take) || await store.record(take) === null) {
+      const record = isTakeId(take) ? await store.record(take) : null
+      if (record === null) {
         json(response, 404, { error: `Take ${take} does not exist.` })
+        return true
+      }
+      if (isIdea(record)) {
+        json(response, 409, { error: `Take ${take} is an idea of workspace ${record.subject.workspace}. Use the workspace's board for it.` })
         return true
       }
       if (checking.has(take)) throw new Error("This integration is being checked. Wait before changing it.")
       if (action === "alternate") {
-        validateTakeContext(await discover(), /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take)))
+        validateTakeContext(await discover(), await stateTake(take))
         json(response, 201, { take: await agents.alternate(take) })
       } else if (action === "review") {
         agents.assertIdle(take)
@@ -292,7 +321,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
         const { file, content } = validFile(body)
         json(response, 200, { take, files: await agents.editByHand(take, file, content) })
       } else if (action === "prompt") {
-        validateTakeContext((await project()).parts, /** @type {import("../takes/store.js").TakeRecord} */ (await store.record(take)))
+        validateTakeContext((await project()).parts, await stateTake(take))
         await agents.follow(take, validPrompt(body), readImages(body))
         json(response, 200, { take })
       } else if (action === "stop") {
@@ -407,6 +436,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
  *   parts?: (overrides?: Map<string, string>) => import("../types").Part[] | Promise<import("../types").Part[]>,
  *   readFile?: (file: string) => string | Promise<string>,
  *   marks?: import("./host-types").AgentMarks,
+ *   workspaces?: import("./host-types").AgentWorkspaces,
  *   integration?: import("./host-types").AgentIntegration,
  *   baselines?: string,
  * }} Host

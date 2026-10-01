@@ -121,7 +121,7 @@ describe("a take made from marks", () => {
     const direction = { title: "Cover wide", brief: "Cover art two thirds wide." }
     /** @type {import("../src/takes/marks-contract.js").Mark} */
     const onOne = { id: "m1", source: { take: "1", created: 10 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", letter: "A", note: "cover is too wide", anchor }
-    const root = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 10, prompt: "Give the cover room", direction })
+    const root = /** @type {import("../src/takes/store.js").StateTakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 10, prompt: "Give the cover room", direction })
     const six = { ...childRecord({ take: "1", created: 10 }, root, [onOne]), created: 60 }
     expect(six).toMatchObject({ parent: { take: "1", created: 10 }, chain: { take: "1", created: 10 }, history: { prompt: "Give the cover room", direction, lineage: [{ take: "1", created: 10 }], passes: [] }, marks: [onOne] })
     const onSix = { ...onOne, id: "m6", source: { take: "6", created: 60 }, note: "love this", anchor: { ...anchor, afterInput: true } }
@@ -149,7 +149,7 @@ describe("a take made from marks", () => {
   })
 
   test("says when the first prompt was never recorded, and names region contents", () => {
-    const old = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 5 })
+    const old = /** @type {import("../src/takes/store.js").StateTakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 5 })
     /** @type {import("../src/takes/marks-contract.js").Mark} */
     const region = { id: "r", source: { take: "2", created: 5 }, preview: { part: "src/Chip.part.tsx", state: "default" }, device: "iphone-16", letter: "B", note: "", anchor: { ...anchor, kind: "Region", rect: { x: 141.4, y: 77, width: 166, height: 125 }, elements: [anchor.element] } }
     const brief = markupMessage({
@@ -196,7 +196,7 @@ describe("phase 6: references and the original", () => {
   }))
 
   test("the brief names the marks a note points to, their crops, and read access", () => {
-    const parent = /** @type {import("../src/takes/store.js").TakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 30, prompt: "Warm" })
+    const parent = /** @type {import("../src/takes/store.js").StateTakeRecord} */ ({ part: "src/Chip.part.tsx", state: "default", device: "iphone-16", created: 30, prompt: "Warm" })
     const own = markOn("3", 30, "A", "use 2A here")
     const record = { ...childRecord({ take: "3", created: 30 }, parent, [own]), references: [{ source: { take: "2", created: 20 }, marks: [markOn("2", 20, "A", "nice gap")] }] }
     const brief = markupMessage({ take: "7", record, sources: [], pictures: [picture], references: [

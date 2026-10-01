@@ -48,4 +48,5 @@ export const HOST_METHODS = /** @type {const} */ ({
   integration: ["begin", "submit", "review", "beginCheck", "finishCheck", "apply", "summary"],
   parts: ["discover"],
   skills: ["list", "content", "read"],
+  workspaces: ["list", "read", "overview", "create", "setQuestion", "setName", "pin", "unpin", "ask", "answer", "close"],
 })

@@ -21,7 +21,7 @@ const project: Project = {
 }
 const takes: TakesSnapshot = {
   agent: { _tag: "Ready", model: "local", baseUrl: "http://localhost:8080/v1", reasoning: "off", api: "chat-completions", baseUrlFrom: "test configuration", keyFrom: "test environment" },
-  skills: { skills: [], problems: [] }, accepted: [], takes: [],
+  skills: { skills: [], problems: [] }, accepted: [], takes: [], workspaces: [],
 }
 
 type Step = { [K in keyof ChromeActions]: [K, ...Parameters<ChromeActions[K]>] }[keyof ChromeActions]

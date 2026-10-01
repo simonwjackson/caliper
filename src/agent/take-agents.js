@@ -9,6 +9,7 @@ import { createIntegrationReview, integrationSummary } from "../takes/integratio
 import { skillPrompt, skillSession } from "./skills.js"
 import { imageContent } from "./images.js"
 import { identityKey } from "../takes/chains.js"
+import { isIdea } from "../takes/store.js"
 
 /**
  * The chain a take belongs to: its record's `chain`, or the take itself.
@@ -133,7 +134,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * first message. The parent does not change.
    *
    * @param {string} parent
-   * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
+   * @param {import("../takes/store.js").NewTakeRecord} record
    * @returns {Promise<string>} the take number
    */
   const fork = async (parent, record) => whileCollection(async () => {
@@ -147,7 +148,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
    * Start a take made from marks on the original: a new take of the real files.
    * Its agent is started with `startMarkup`.
    *
-   * @param {Omit<import("../takes/store.js").TakeRecord, "created">} record
+   * @param {import("../takes/store.js").NewTakeRecord} record
    * @returns {Promise<string>} the take number
    */
   const create = async record => whileCollection(async () => {
@@ -258,6 +259,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     if (live.get(take)?.run._tag === "Running") throw new Error(`Take ${take} is still working. Stop it before you accept it.`)
     return whileIdle(take, async () => {
       const accepting = await store.record(take)
+      if (accepting !== null && isIdea(accepting)) throw new Error(`Take ${take} is an idea. A workspace compares ideas; it does not accept them.`)
       if (accepting?.integration) throw new Error("This is an integration proposal. Review and check it before applying it.")
       // Plan decision 12: accept removes the accepted take's whole chain. Check every member before the first write.
       const chain = accepting ? chainKey({ take, created: accepting.created, chain: accepting.chain }) : null
@@ -292,11 +294,11 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     }))
   }
 
-  /** @returns {Promise<TakeView[]>} */
+  /** The takes of parts. An idea is on its workspace's board, never under a state. @returns {Promise<TakeView[]>} */
   const views = async () => (store.batch ?? (read => read()))(async () => {
     const entries = await Promise.all((await store.list()).map(async take => {
       const record = await store.record(take)
-      if (record === null) return []
+      if (record === null || isIdea(record)) return []
       const state = live.get(take)
       return [{
         take, part: record.part, state: record.state, device: record.device, created: record.created,
@@ -309,6 +311,28 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
         ...(record.chain ? { chain: record.chain } : {}),
         ...(record.history ? { lineage: record.history.lineage } : {}),
         run: state?.run ?? { _tag: "Idle" },
+        files: await store.files(take), images: record.images ?? [], log: state?.log ?? [],
+      }]
+    }))
+    return entries.flat()
+  })
+
+  /**
+   * The ideas of every workspace (decision 45), oldest first, each with the
+   * workspace it answers.
+   *
+   * @returns {Promise<Array<import("../types").IdeaView & { workspace: string }>>}
+   */
+  const ideas = async () => (store.batch ?? (read => read()))(async () => {
+    const entries = await Promise.all((await store.list()).map(async take => {
+      const record = await store.record(take)
+      if (record === null || !isIdea(record)) return []
+      const state = live.get(take)
+      return [{
+        workspace: record.subject.workspace, take, device: record.device, created: record.created,
+        ...(record.direction === undefined ? {} : { direction: record.direction }),
+        ...(record.name ? { name: record.name } : {}),
+        run: state?.run ?? { _tag: /** @type {const} */ ("Idle") },
         files: await store.files(take), images: record.images ?? [], log: state?.log ?? [],
       }]
     }))
@@ -340,6 +364,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
       entry.log[userIndex] = { ...user, ...(kept.length ? { images: kept.map(image => image.file) } : {}) }
       const record = await store.record(take)
       if (record === null) throw new Error(`Take ${take} does not exist.`)
+      if (isIdea(record)) throw new Error(`Take ${take} is an idea. Ideas start from their workspace.`)
       signal.throwIfAborted()
       const renderTake = renderFor(take, record)
       /** @type {RenderTake} */
@@ -462,7 +487,7 @@ export function createTakeAgents({ store, engine, renderFor, onChange, skills = 
     })
   })
 
-  return { start, fork, create, startMarkup, discardPrepared, whileIdle, editByHand, noteHandEdit, follow, stop, close, accept, discard, views, alternate, assertIdle, integration, apply }
+  return { start, fork, create, startMarkup, discardPrepared, whileIdle, editByHand, noteHandEdit, follow, stop, close, accept, discard, views, ideas, alternate, assertIdle, integration, apply }
 }
 
 /**

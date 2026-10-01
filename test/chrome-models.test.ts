@@ -75,7 +75,7 @@ describe("the model chooser's controller", () => {
     const { chrome, release, models } = app([listed])
     chrome.actions.onModels()
     await release()
-    chrome.receiveTakes({ agent: { _tag: "Ready", model: "c", baseUrl: "http://x/v1", reasoning: "low", api: "chat-completions", baseUrlFrom: "f", keyFrom: "K" }, skills: { skills: [], problems: [] }, accepted: [], takes: [] })
+    chrome.receiveTakes({ agent: { _tag: "Ready", model: "c", baseUrl: "http://x/v1", reasoning: "low", api: "chat-completions", baseUrlFrom: "f", keyFrom: "K" }, skills: { skills: [], problems: [] }, accepted: [], takes: [], workspaces: [] })
     await settle()
     expect(models()).toMatchObject({ current: "c" })
   })

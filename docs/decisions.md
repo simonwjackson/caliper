@@ -982,3 +982,21 @@ Costs:
   input routing, because an idea agent cannot run commands.
 - Every size threshold of `planBoard` is a guess until someone measures it in
   the real chrome.
+
+**Built.** Choices made while building, on 2026-10-01:
+
+- The workspace file does not list its ideas. An idea's take record holds
+  `subject: { _tag: "Idea", workspace }`, and the board's columns are the takes
+  that name the workspace. The plan had an `ideas` list in the workspace too.
+  Two lists can disagree after a crash; one cannot.
+- A take of a part keeps the record shape it had, with `part`, `state` and
+  `device` at the top. Old records therefore load with no change.
+- A question records who asked it as `{ _tag: "User" }` or `{ _tag: "Idea",
+  take, created, title }`, so the idea's title stays after a discard. A
+  workspace can carry a `name`, which the planner gives it.
+- The store is `src/takes/workspaces.js`, in the plugin, behind the host
+  target `workspaces`. The app's agent answers `workspaces/*`, as it answers
+  `takes/*` and `marks/*`, and the takes snapshot carries every workspace with
+  its ideas. Protocol 4.
+- `takes/<n>/*` refuses an idea with 409. The take store refuses to accept an
+  idea, an alternate cannot start from one, and marks cannot go on one.

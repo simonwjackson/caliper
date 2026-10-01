@@ -15,8 +15,9 @@ import { join } from "node:path"
  * `hello` or the host calls. There is no support for older numbers.
  * 2: `hello` returns the server's pid, and the registry moved to the runtime folder.
  * 3: `project.json` carries the project's `devices`; the chrome has no built-in list.
+ * 4: the host calls add `workspaces`, and take records can name an idea's workspace (decision 45).
  */
-export const PROTOCOL = 3
+export const PROTOCOL = 4
 
 /**
  * @typedef {{

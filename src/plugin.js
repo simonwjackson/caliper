@@ -23,6 +23,7 @@ import { json } from "./http.js"
 import { createHostApi } from "./host/api.js"
 import { createMarkStore } from "./takes/marks.js"
 import { createIntegrationReview } from "./takes/integration.js"
+import { createWorkspaceStore } from "./takes/workspaces.js"
 import { newToken, projectId, PROTOCOL, registryDir, tokenMatches, writeEntry } from "./central/registry.js"
 import { takeOf, takeOverlay, withTake } from "./takes/overlay.js"
 import { createTakeStore, isTakeId, TAKES_DIR } from "./takes/store.js"
@@ -296,7 +297,7 @@ function createSession(server, root, options, env, overlay) {
   // agent, the code pane, a knob and the user's own editor.
   const stopLateChanges = reportLateChanges(server.watcher)
   const code = createCodeApi({ store, project: async () => (await load()).project, resolve })
-  const host = createHostApi({ store, marks: createMarkStore(root), integration: createIntegrationReview(store), root, home: homedir() })
+  const host = createHostApi({ store, marks: createMarkStore(root), integration: createIntegrationReview(store), workspaces: createWorkspaceStore(root), root, home: homedir() })
 
   /**
    * A knob's write into a take is an edit by hand. The Caliper app's agent

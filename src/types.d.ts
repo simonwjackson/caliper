@@ -329,13 +329,39 @@ export type TakeView = {
   readonly log: readonly TakeLogEntry[]
 }
 
+/** One idea of a workspace, as the board shows it (decision 45). It is a take with no part. */
+export type IdeaView = {
+  readonly take: string
+  readonly created: number
+  /** Where the idea's agent renders by default. */
+  readonly device: string
+  readonly name?: string
+  /** The planner's direction, or the one you wrote for a new idea. */
+  readonly direction?: Direction
+  readonly run: TakeRun
+  /** The files the idea changes, root-relative. */
+  readonly files: readonly string[]
+  readonly images: readonly TakeImage[]
+  readonly log: readonly TakeLogEntry[]
+}
+
+export type Workspace = import("./takes/workspaces.js").Workspace
+
+/** A workspace and its ideas, oldest first; or a workspace file Caliper cannot read, and why. */
+export type WorkspaceView =
+  | (Workspace & { readonly _tag: "Ready"; readonly ideas: readonly IdeaView[] })
+  | { readonly _tag: "Damaged"; readonly id: string; readonly reason: string }
+
 /** What the event stream sends as `takes`. */
 export type TakesSnapshot = {
   readonly agent: AgentStatus
   readonly skills: SkillsStatus
+  /** The takes of parts. Ideas are only in `workspaces`. */
   readonly takes: readonly TakeView[]
   /** The accept log, oldest first (`.caliper/accepted.json`). */
   readonly accepted: readonly import("./takes/store.js").AcceptRecord[]
+  /** Every workspace, lowest number first. */
+  readonly workspaces: readonly WorkspaceView[]
 }
 
 /** One file the code pane lists for a part. */

@@ -24,7 +24,7 @@
 /**
  * @param {{
  *   take: string,
- *   record: Omit<TakeRecord, "created"> & { parent?: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] },
+ *   record: import("../takes/store.js").NewStateTakeRecord & { parent?: TakeIdentity, history: import("../takes/store.js").TakeHistory, marks: Mark[] },
  *   pictures: readonly Picture[],
  *   sources: ReadonlyArray<{ path: string, content: string }>,
  *   references?: readonly Reference[],

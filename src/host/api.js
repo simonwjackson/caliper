@@ -14,12 +14,13 @@ import { decode, encode, HOST_METHODS } from "./wire.js"
  * @typedef {import("../takes/store.js").TakeStore} TakeStore
  * @typedef {import("../takes/marks.js").MarkStore} MarkStore
  * @typedef {ReturnType<typeof import("../takes/integration.js").createIntegrationReview>} IntegrationReview
+ * @typedef {import("../takes/workspaces.js").WorkspaceStore} WorkspaceStore
  */
 
 /**
- * @param {{ store: TakeStore, marks: MarkStore, integration: IntegrationReview, root: string, home: string }} input
+ * @param {{ store: TakeStore, marks: MarkStore, integration: IntegrationReview, workspaces: WorkspaceStore, root: string, home: string }} input
  */
-export function createHostApi({ store, marks, integration, root, home }) {
+export function createHostApi({ store, marks, integration, workspaces, root, home }) {
   const skillCatalog = () => discoverProjectSkills({ root, home })
   /** @param {string} name */
   const skill = name => {
@@ -40,6 +41,7 @@ export function createHostApi({ store, marks, integration, root, home }) {
     },
     marks: /** @type {any} */ (marks),
     integration: /** @type {any} */ (integration),
+    workspaces: /** @type {any} */ (workspaces),
     parts: {
       /** @param {Array<[string, string]>} [overrides] take copies of part files */
       discover: overrides => discoverParts(root, new Map(overrides ?? [])),

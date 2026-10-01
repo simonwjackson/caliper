@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, sep } from "node:path"
 import { Value } from "typebox/value"
-import { fenceProjectPath, isTakeId, TAKES_DIR } from "./store.js"
+import { fenceProjectPath, isIdea, isTakeId, TAKES_DIR } from "./store.js"
 import { integrationProposalSchema } from "./integration-contract.js"
 // Preserve the existing public schema import while moving validation out of Node-only code.
 export { integrationProposalSchema } from "./integration-contract.js"
@@ -167,6 +167,7 @@ export function createIntegrationReview(store) {
   const begin = sourceTake => {
     const source = record(sourceTake)
     if (source.integration) throw new Error("Prepare an alternate from an experiment, not another integration proposal.")
+    if (isIdea(source)) throw new Error("Prepare an alternate from a take of a part. An idea of a workspace has no part to keep.")
     const edited = copies(sourceTake)
     /** @type {Record<string, string>} */
     const originals = Object.create(null)

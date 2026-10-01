@@ -38,8 +38,20 @@ import { AcceptRecordSchema, MAX_ACCEPTED } from "./accepted-contract.js"
  *   pass is its `marks`. A take keeps its own copy, so no discard or accept can break it.
  * @typedef {{ source: TakeIdentity, marks: Mark[] }} MarkReference
  *   Marks on another take, or on the original (take "0"), that this take's notes pointed to at Send.
- * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, created: number, name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[], prompt?: string, parent?: TakeIdentity, chain?: TakeIdentity, history?: TakeHistory, marks?: Mark[], references?: MarkReference[] }} TakeRecord
- *   `part` and `state` identify the editing subject. Optional `context` identifies a declared
+ * @typedef {{ _tag: "Idea", workspace: string }} IdeaSubject
+ *   A take that answers a workspace's question (decision 45). It belongs to no part.
+ * @typedef {{ part: string, state: string, device: string, context?: import("../types").StateRef, subject?: undefined }} StateFields
+ *   A take of one part and state. Every record from before workspaces has this shape.
+ * @typedef {{ subject: IdeaSubject, device: string, part?: undefined, state?: undefined, context?: undefined }} IdeaFields
+ *   `device` is where the idea's agent renders by default.
+ * @typedef {{ name?: string, direction?: Direction, others?: string[], integration?: import('./integration.js').Integration, images?: TakeImage[], prompt?: string, parent?: TakeIdentity, chain?: TakeIdentity, history?: TakeHistory, marks?: Mark[], references?: MarkReference[] }} RecordFields
+ * @typedef {(StateFields | IdeaFields) & RecordFields} NewTakeRecord
+ *   What a new take is asked to do; the store adds `created`.
+ * @typedef {NewTakeRecord & { created: number }} TakeRecord
+ * @typedef {StateFields & RecordFields} NewStateTakeRecord
+ * @typedef {NewStateTakeRecord & { created: number }} StateTakeRecord
+ *   A take of a part. Marks, chains, accept and alternates work only on these.
+ *   A state take's `part` and `state` identify the editing subject. Optional `context` identifies a declared
  *   composed preview. It does not restrict edits beyond the existing take-folder fence.
  *   Names, planner directions, and integration review metadata remain independent of that context.
  *   `prompt` is the first prompt. A take made from marks has `parent`, `chain` (the chain's first
@@ -49,6 +61,17 @@ import { AcceptRecordSchema, MAX_ACCEPTED } from "./accepted-contract.js"
  * @typedef {import("typebox").Static<typeof AcceptRecordSchema>} AcceptRecord
  *   One accept: the take, its subject, the real files it wrote, and when.
  */
+
+/**
+ * Whether a take is an idea of a workspace, not a take of a part.
+ *
+ * @template {NewTakeRecord} T
+ * @param {T} record
+ * @returns {record is T & IdeaFields}
+ */
+export function isIdea(record) {
+  return record.subject?._tag === "Idea"
+}
 
 export const CALIPER_DIR = ".caliper"
 export const TAKES_DIR = `${CALIPER_DIR}/takes`
@@ -163,7 +186,7 @@ export function createTakeStore(root) {
   /**
    * Start a new, empty take.
    *
-   * @param {Omit<TakeRecord, "created">} ask
+   * @param {NewTakeRecord} ask
    * @returns {string} the take number
    */
   const create = ask => {
@@ -174,7 +197,7 @@ export function createTakeStore(root) {
     const take = String(Math.max(0, ...used) + 1)
     mkdirSync(folder(take), { recursive: true })
     // A new take starts with no images, even when it copies another take's record.
-    const { images: _images, ...rest } = /** @type {Omit<TakeRecord, "created">} */ (ask)
+    const { images: _images, ...rest } = /** @type {NewTakeRecord} */ (ask)
     /** @type {TakeRecord} */
     const record = { ...rest, created: Date.now() }
     writeFileSync(recordFile(take), `${JSON.stringify(record, null, 2)}\n`)
@@ -309,6 +332,8 @@ export function createTakeStore(root) {
    */
   const accept = take => {
     const accepting = record(take)
+    // Decision 45: a workspace compares ideas. Promote, a later slice, goes through its own gates.
+    if (accepting !== null && isIdea(accepting)) throw new Error(`Take ${take} is an idea of workspace ${accepting.subject.workspace}. Ideas cannot be accepted.`)
     const changed = files(take)
     for (const file of changed) {
       const inside = fence(file)
@@ -347,7 +372,7 @@ export function createTakeStore(root) {
    * half-copied take remains.
    *
    * @param {string} source
-   * @param {Omit<TakeRecord, "created">} ask the new take's record
+   * @param {NewTakeRecord} ask the new take's record
    * @returns {string} the new take number
    */
   const fork = (source, ask) => {
