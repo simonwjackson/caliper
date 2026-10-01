@@ -14,6 +14,7 @@ import { createSourceRevision } from "./checks/source-revision.js"
 import { checkSource } from "./authored/source.js"
 import { authoredCheckDelivery } from "./authored/delivery.js"
 import { listeningOrigin } from "./server-origin.js"
+import { hmrSocketConfig } from "./hmr-socket.js"
 import { reportLateChanges } from "./late-changes.js"
 import { framePage } from "./pages.js"
 import { json } from "./http.js"
@@ -38,8 +39,6 @@ import { takeParts } from "./takes/parts.js"
 export const CALIPER_PATH = "/__caliper"
 
 const CLIENT_DIR = fileURLToPath(new URL("./client/", import.meta.url))
-/** The Vite settings that would move the HMR socket off the path the central app routes. */
-const HMR_SETTINGS = ["path", "port", "clientPort", "server", "host"]
 // Only the product-frame bootstrap goes through the consumer's Vite.
 const CLIENT_FILES = new Map([
   ["frame.js", "text/javascript"],
@@ -84,13 +83,11 @@ export function caliper(options = {}) {
     name: "caliper",
     apply: "serve",
 
+    /** @this {{ meta?: { viteVersion?: string } } | void} */
     config(userConfig) {
       root = resolvePath(userConfig.root ?? process.cwd())
-      const hmr = userConfig.server?.hmr
-      const own = hmr !== null && typeof hmr === "object" ? HMR_SETTINGS.filter(key => /** @type {Record<string, unknown>} */ (hmr)[key] !== undefined) : []
-      if (own.length > 0) {
-        throw new Error(`Caliper routes Vite's HMR socket through the Caliper app, so it cannot use server.hmr.${own.join(", server.hmr.")} from vite.config. Remove ${own.length === 1 ? "that setting" : "those settings"} while Caliper is in the plugins.`)
-      }
+      // The socket path names the project, so the Caliper app can route it (decision 37).
+      const socket = hmrSocketConfig(/** @type {Record<string, unknown> | undefined} */ (userConfig.server), this?.meta?.viteVersion, `__caliper/hmr/${projectId(root)}`)
       const parts = discoverParts(root).map(part => part.file)
       const require = createRequire(join(root, "package.json"))
       const react = REACT_PACKAGES.filter(name => canResolve(require, name))
@@ -102,8 +99,7 @@ export function caliper(options = {}) {
         // A knob maps a rule the browser holds to its source file through
         // the served CSS's sourcemap (decision 23). Served CSS gets larger.
         css: { devSourcemap: true },
-        // The socket path names the project, so the Caliper app can route it (decision 37).
-        ...(hmr === false ? {} : { server: { hmr: { path: `__caliper/hmr/${projectId(root)}` } } }),
+        ...socket,
       }, checkDelivery.config())
     },
 

@@ -7,7 +7,7 @@ export default defineConfig({
   root,
   publicDir: false,
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
-  esbuild: { jsx: "automatic" },
+  oxc: { jsx: { runtime: "automatic" } },
   build: {
     outDir: "dist/chrome",
     emptyOutDir: true,
@@ -17,15 +17,23 @@ export default defineConfig({
     // and chromeDelivery serves only manifest files: the chrome would load bare.
     cssCodeSplit: true,
     lib: { entry: `${root}src/client/app/entry.tsx`, formats: ["es"], fileName: () => "chrome.js" },
-    rollupOptions: {
+    rolldownOptions: {
+      // The editor group leaves its dependencies in the entry, so the entry may
+      // export more than the library entry declares. Nothing imports those names.
+      preserveEntrySignatures: "allow-extension",
       output: {
         chunkFileNames: "[name]-[hash].js",
-        onlyExplicitManualChunks: true,
-        // These modules are reached only when an editor is opened. Keep the
-        // UI-owned appearance in the same dependency graph as CodeMirror.
-        manualChunks(id) {
-          if (/node_modules\/(?:@codemirror|@lezer|style-mod|w3c-keyname|crelt)\//.test(id)
-            || /\/client\/(?:code-editor\.js|ui\/editor-appearance\.ts)$/.test(id)) return "editor"
+        codeSplitting: {
+          groups: [{
+            // These modules are reached only when an editor is opened. Keep the
+            // UI-owned appearance in the same dependency graph as CodeMirror.
+            name: "editor",
+            test: id => /node_modules[\\/](?:@codemirror|@lezer|style-mod|w3c-keyname|crelt)[\\/]/.test(id)
+              || /[\\/]client[\\/](?:code-editor\.js|ui[\\/]editor-appearance\.ts)$/.test(id),
+            // Only the modules named above. Their shared dependencies (React and
+            // the chrome's own modules) stay where the entry can load them eagerly.
+            includeDependenciesRecursively: false,
+          }],
         },
       },
     },

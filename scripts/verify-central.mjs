@@ -97,7 +97,7 @@ const modelPort = /** @type {import("node:net").AddressInfo} */ (model.address()
 
 /** @param {string} root */
 const startVite = async root => {
-  const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite-central"), logLevel: "silent", esbuild: { jsx: "automatic" }, plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
+  const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite-central"), logLevel: "silent", oxc: { jsx: { runtime: "automatic" } }, plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
   await server.listen()
   return server
 }

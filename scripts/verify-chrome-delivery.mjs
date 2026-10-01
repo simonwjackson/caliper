@@ -18,7 +18,9 @@ const evidence = mkdtempSync(join(tmpdir(), "caliper-chrome-delivery-"))
 const consumers = []
 const results = []
 const packageName = "@simonwjackson/caliper"
-const fixtureDependencies = { react: "18.3.1", "react-dom": "18.3.1", vite: "6.4.2" }
+const fixtureDependencies = { react: "18.3.1", "react-dom": "18.3.1" }
+// One consumer per Vite major in the peer range, so the range claims only what this gate runs.
+const consumerVites = ["6.4.2", "7.3.6", "8.3.1"]
 const part = "src/Counter.part.tsx"
 const source = `import { useState } from "react"
 export default function Counter() {
@@ -58,7 +60,7 @@ async function start(root, label, subject = false) {
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 const require = createRequire(${JSON.stringify(join(viteRoot, "package.json"))});
-const { createServer } = await import(pathToFileURL(require.resolve("vite")).href);
+const { createServer, version: vite } = await import(pathToFileURL(require.resolve("vite")).href);
 const graph = ${JSON.stringify(join(evidence, `${label}-graph.ndjson`))};
 const pluginPath = ${subject ? JSON.stringify(join(toolDirectory, "src/plugin.js")) : 'require.resolve("@simonwjackson/caliper")'};
 const { caliper } = await import(pathToFileURL(pluginPath).href);
@@ -69,7 +71,7 @@ let closing = false;
 async function close() { if (closing) return; closing = true; server.httpServer?.closeAllConnections(); await server.close(); process.exit(0); }
 process.on("SIGTERM", close); process.on("SIGINT", close);
 await server.listen();
-console.log("READY " + JSON.stringify({url: server.resolvedUrls.local[0], plugin: pluginPath, root: server.config.root, react: ${subject ? '"subject"' : 'require("react/package.json").version'}}));
+console.log("READY " + JSON.stringify({url: server.resolvedUrls.local[0], plugin: pluginPath, root: server.config.root, vite, react: ${subject ? '"subject"' : 'require("react/package.json").version'}}));
 `)
   const child = spawn(process.execPath, [serverFile], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
   activeServer = child
@@ -79,7 +81,7 @@ console.log("READY " + JSON.stringify({url: server.resolvedUrls.local[0], plugin
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer
   try {
-    return await new Promise(/** @param {(value: {url: string, plugin: string, root: string, react: string}) => void} resolve */ (resolve, reject) => {
+    return await new Promise(/** @param {(value: {url: string, plugin: string, root: string, vite: string, react: string}) => void} resolve */ (resolve, reject) => {
       timer = setTimeout(() => reject(new Error(`Server startup timed out: ${errors}`)), 30_000)
       child.on("error", reject)
       child.on("close", code => reject(new Error(`Server exited ${code}: ${errors}`)))
@@ -126,14 +128,15 @@ try {
   // The Caliper app serves the chrome (decision 37); each dev server registers with it.
   app = await startApp()
 
-  for (const mode of ["linked", "packed"]) {
+  for (const vite of consumerVites) for (const install of ["linked", "packed"]) {
+    const mode = `${install}-vite${vite.split(".")[0]}`
     const root = mkdtempSync(join(tmpdir(), `caliper-chrome-${mode}-`))
     consumers.push(root)
-    const dependencies = mode === "packed" ? { ...fixtureDependencies, [packageName]: tarball } : fixtureDependencies
+    const dependencies = install === "packed" ? { ...fixtureDependencies, vite, [packageName]: tarball } : { ...fixtureDependencies, vite }
     write(join(root, "package.json"), JSON.stringify({ name: `${mode}-react18-subject`, private: true, type: "module", exports: { ".": "./src/index.ts" }, dependencies }, null, 2))
     run("bun", ["install", "--linker", "isolated"], root, `${mode}-install`)
     const installed = join(root, "node_modules", packageName)
-    if (mode === "linked") { mkdirSync(dirname(installed), { recursive: true }); symlinkSync(packageRoot, installed, "dir") }
+    if (install === "linked") { mkdirSync(dirname(installed), { recursive: true }); symlinkSync(packageRoot, installed, "dir") }
     copyFileSync(join(root, "bun.lock"), join(evidence, `${mode}-bun.lock`))
     assert(!existsSync(join(root, "node_modules/@codemirror/state")), "Consumer must not install CodeMirror directly")
     write(join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }))
@@ -142,6 +145,7 @@ try {
     const ready = await start(root, mode)
     assert.equal(realpathSync(ready.plugin), join(realpathSync(installed), "src/plugin.js"))
     assert.equal(ready.react, "18.3.1")
+    assert.equal(ready.vite, vite, "The consumer must run its own Vite")
     /** @type {import('playwright-core').BrowserContext} */
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } })
     // Observe actual React renderer internals in each same-origin document. The
@@ -205,7 +209,7 @@ try {
     assert.deepEqual(errors, [], `${mode} chrome and interactive React18 product have no browser errors`)
     await page.screenshot({ path: join(evidence, `${mode}.png`) })
     write(join(evidence, `${mode}-requests.json`), JSON.stringify({ requests, topRequests }, null, 2))
-    results.push({ mode, installation: ready, internals, editorFile, hmr: "Passed" })
+    results.push({ mode, vite, installation: ready, internals, editorFile, hmr: "Passed" })
     await context.close()
     activePage = undefined
     await stop()
@@ -275,7 +279,7 @@ try {
   activePage = undefined
   await stop()
   results.push({ mode: "self-host", revision: TOOL_REVISION, directory: pinned, subject: packageRoot, part: chromePart.file, states: stateEvidence, toolWriteRefused: true, coverage: "Temporary core-owned reference only; no Darkroom or UI-owned region scenario coverage" })
-  write(join(evidence, "summary.json"), JSON.stringify({ status: "Passed", tarballSha256, fixtureDependencies, results }, null, 2))
+  write(join(evidence, "summary.json"), JSON.stringify({ status: "Passed", tarballSha256, fixtureDependencies, consumerVites, results }, null, 2))
   console.log(`PASS self-host: pinned tool ${TOOL_REVISION}; actual subject source; tool outside write fence`)
   console.log(`PASS chrome delivery. Evidence: ${evidence}`)
 } catch (error) {

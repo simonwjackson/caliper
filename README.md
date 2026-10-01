@@ -75,7 +75,7 @@ answers for, and shows a project whose server does not answer as `Silent`
 |---|---|
 | `/__caliper/` | The list of running projects. |
 | `/__caliper/p/<id>/<path>` | `<path>` on the project's dev server. The chrome is `<base>__caliper/` under it. `<id>` is the first 12 hex digits of the SHA-256 of the project root. |
-| `<base>__caliper/hmr/<id>` | The project's Vite HMR socket. The plugin sets `server.hmr.path` to this. |
+| `<base>__caliper/hmr/<id>` | The project's Vite HMR socket. The plugin sets `server.ws.path` to this (`server.hmr.path` before Vite 8.1). |
 | `/__caliper/sw.js` | The routing service worker. |
 
 The service worker sends each frame's requests, such as `/@vite/client` or
@@ -83,8 +83,8 @@ The service worker sends each frame's requests, such as `/@vite/client` or
 caches nothing. A hard reload bypasses it; the chrome then reloads once,
 normally. Frames share the chrome's origin, so all products share
 `localStorage`, IndexedDB and cookies. A product's own WebSocket is not
-routed, and a project that sets its own `server.hmr` path, port, client port,
-host or server is refused with a message. Two dev servers of one root are
+routed, and a project that sets its own `server.ws` or `server.hmr` path, port,
+client port, host or server is refused with a message. Two dev servers of one root are
 shown as a problem and not routed. Only Chromium is tested.
 
 Writes need a token. Each dev server makes one at start and keeps it only in
@@ -1007,7 +1007,8 @@ report, not that all behavior is safe.
 - The device list is built in: RG353M and ODIN 2 PORTAL. Their CSS viewports
   are inferred from each panel's resolution and Sway's default scale of 1. They
   are not yet measured on the devices.
-- Only Vite projects can use Caliper.
+- Only Vite projects can use Caliper: Vite 6, 7 or 8. The delivery gate runs
+  Vite 6.4.2, 7.3.6 and 8.3.1 consumers; Caliper itself builds with 8.3.1.
 - A take cannot show a change that goes through a conditional CSS `@import`
   (`layer`, `media`, `supports`), Sass, Less or Tailwind's source scan. Not
   yet tested.

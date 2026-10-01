@@ -6,6 +6,7 @@ import { createServer } from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { caliper } from "../src/plugin.js"
+import { socketOptionsKey } from "../src/hmr-socket.js"
 import { newToken, projectId, PROTOCOL, readRegistry, registryDir, tokenMatches, writeEntry } from "../src/central/registry.js"
 import { projectViews, socketHost, startCentral } from "../src/central/server.js"
 import { decode, encode } from "../src/host/wire.js"
@@ -192,8 +193,20 @@ describe("the plugin", () => {
     expect(() => caliper(/** @type {any} */ ({ agent: { model: "m" } }))).toThrow("~/.config/caliper/config.json")
     const plugin = /** @type {any} */ (caliper())
     expect(() => plugin.config({ root: mkdtempSync(join(tmpdir(), "caliper-hmr-")), server: { hmr: { port: 1234 } } })).toThrow("server.hmr.port")
-    const config = plugin.config({ root: mkdtempSync(join(tmpdir(), "caliper-hmr-")) })
-    expect(config.server.hmr.path).toMatch(/^__caliper\/hmr\/[0-9a-f]{12}$/)
+    expect(() => plugin.config({ root: mkdtempSync(join(tmpdir(), "caliper-hmr-")), server: { ws: { path: "x", clientPort: 1 } } })).toThrow("server.ws.path, server.ws.clientPort")
+    // Vite 6 and 7 say no version and take server.hmr; Vite 8.1 and later take server.ws.
+    const old = plugin.config({ root: mkdtempSync(join(tmpdir(), "caliper-hmr-")) })
+    expect(old.server.hmr.path).toMatch(/^__caliper\/hmr\/[0-9a-f]{12}$/)
+    expect(old.server.ws).toBeUndefined()
+    const current = plugin.config.call({ meta: { viteVersion: "8.3.1" } }, { root: mkdtempSync(join(tmpdir(), "caliper-hmr-")) })
+    expect(current.server.ws.path).toMatch(/^__caliper\/hmr\/[0-9a-f]{12}$/)
+    expect(current.server.hmr).toBeUndefined()
+    expect(plugin.config.call({ meta: { viteVersion: "8.3.1" } }, { root: mkdtempSync(join(tmpdir(), "caliper-hmr-")), server: { ws: false } }).server).toBeUndefined()
+  })
+
+  test("socket settings go under server.ws from Vite 8.1, under server.hmr before", () => {
+    expect([undefined, "6.4.2", "7.3.6", "8.0.16"].map(socketOptionsKey)).toEqual(["hmr", "hmr", "hmr", "hmr"])
+    expect(["8.1.0", "8.3.1", "9.0.0"].map(socketOptionsKey)).toEqual(["ws", "ws", "ws"])
   })
 
   test("takes writes only with its token, and says hello with its protocol", async () => {

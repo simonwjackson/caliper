@@ -715,3 +715,32 @@ newer than the pin gets the generic definition until the pin moves, and on
 `anthropic` that means budget thinking, which a recent model may refuse (inferred, not tested); set
 `reasoning` to `off` or move the pin. The `anthropic` and `google` APIs pass the
 unit tests in `test/model.test.js`; no take has run on either endpoint.
+
+## 41. Caliper builds with Vite 8 and serves Vite 6, 7 and 8
+
+Decided 2026-10-01. The user asked to move Caliper, Pico and Amaze to the
+latest Vite, 8.3.1. Vite 8 replaces Rollup and esbuild with Rolldown and Oxc,
+and Vite 8.1 renamed `server.hmr.path` and the other socket settings to
+`server.ws.*`.
+
+- **The peer range is `^6 || ^7 || ^8`, and the gate runs each major.**
+  `scripts/verify-chrome-delivery.mjs` starts linked and packed consumers on
+  Vite 6.4.2, 7.3.6 and 8.3.1. The range claims only what the gate runs.
+- **The socket path goes where the running Vite reads it.** On Vite 8.1 and
+  later (`this.meta.viteVersion`), the plugin sets `server.ws.path`; before
+  that, `server.hmr.path`. Vite 6 says no version, so it gets `server.hmr`.
+  The plugin refuses socket settings under either name (decision 37).
+  `src/hmr-socket.js` holds the rule.
+- **The chrome's editor chunk uses Rolldown's `codeSplitting`.** One group
+  holds CodeMirror and the editor appearance, with
+  `includeDependenciesRecursively: false` so React and the chrome's modules
+  stay in the entry. That needs `preserveEntrySignatures: "allow-extension"`.
+  `code-editor.js` is a dynamic entry, so it is its own small chunk.
+
+Costs: Vite 8 compiles JSX to the automatic runtime when no tsconfig says
+otherwise, so a part file with JSX needs React to resolve even when it does
+not import React. Vite 8 also did not resolve a package that appeared after
+the server started; two test fixtures that linked React after startup now link
+it first. The late-change fix (decision 24) still depends on chokidar 3's
+`raw` event; `scripts/verify-fast-saves.mjs` passed 10 of 10 on Vite 8.3.1.
+Vite 7 is tested only by the delivery gate, not by the unit tests.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { mkdirSync, symlinkSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { chromium } from "playwright-core"
 import { cal, deferLayout, reveal, waitFrames } from "../scripts/verify-helpers.mjs"
@@ -26,11 +27,13 @@ deferLayout([
   "44 × 44 disclosure hit areas; drawer/overflow one-tap policy",
   "Zero page/list overflow at the five size-ladder shapes",
 ])
+// Only React and React DOM, present before Vite starts: Vite 8 does not resolve
+// a package that appears after startup from Caliper's virtual React module.
+const reactOnly = mkdtempSync(join(tmpdir(), "caliper-navigation-modules-"))
+for (const dependency of ["react", "react-dom"]) symlinkSync(resolve(modules, dependency), join(reactOnly, dependency), "dir")
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
 try {
-  await withProject({ files, options: { wrap: false, css: [] } }, async ({ root, url, write }) => {
-    mkdirSync(join(root, "node_modules"), { recursive: true })
-    for (const dependency of ["react", "react-dom"]) symlinkSync(resolve(modules, dependency), join(root, "node_modules", dependency), "dir")
+  await withProject({ files, modules: reactOnly, options: { wrap: false, css: [] } }, async ({ url, write }) => {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
     page.setDefaultTimeout(15_000)
     await page.addInitScript(() => localStorage.setItem("caliper:px-per-mm", "4"))
@@ -123,4 +126,4 @@ try {
     await page.close()
     console.log("PASS: layer order, independent disclosure, keyboard/focus, named/all states, search, deep links, source reclassification and five behavioral size samples; layout deferred")
   })
-} finally { await browser.close() }
+} finally { await browser.close(); rmSync(reactOnly, { recursive: true, force: true }) }

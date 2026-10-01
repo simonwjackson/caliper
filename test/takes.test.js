@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { createTakeStore, fenceProjectPath } from "../src/takes/store.js"
 import { manifest, withProject } from "./project-server.js"
 
@@ -194,8 +194,10 @@ describe("a take frame", () => {
     })
   })
 
+  // These read transformed TSX. Vite 8 compiles JSX to the automatic runtime,
+  // so the fixture needs React to resolve `react/jsx-dev-runtime`.
   test("serves the take's copy of each project module the part imports", async () => {
-    await withProject({ files: project }, async ({ get }) => {
+    await withProject({ files: project, modules: resolve("node_modules") }, async ({ get }) => {
       await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")
       const part = await (await get("/src/Chip.part.tsx?take=1")).text()
       expect(part).toMatch(/\/src\/Chip\.tsx\?take=1/)
@@ -217,7 +219,7 @@ describe("a take frame", () => {
       "src/Chip.tsx": 'import "./chip.css"\nexport const Chip = () => <span className="chip">real</span>',
       ".caliper/takes/1/src/Chip.tsx": 'import "./chip.css"\nexport const Chip = () => <span className="chip">take</span>',
     }
-    await withProject({ files }, async ({ get }) => {
+    await withProject({ files, modules: resolve("node_modules") }, async ({ get }) => {
       const frame = frameConfig(await (await get("/__caliper/frame?part=src/Chip.part.tsx&take=1")).text())
       expect(frame.css).toEqual(["/src/app.css?take=1"])
       const chip = await (await get("/src/Chip.tsx?take=1")).text()
