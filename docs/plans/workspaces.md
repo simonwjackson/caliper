@@ -1,6 +1,6 @@
 # Workspaces: a plan
 
-Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. Slices 2 to 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
+Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. [Slice 2](#slice-2-scratch-rows-that-check) is planned and drawn, not approved. Slices 3 and 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
 
 ## Problem
 
@@ -22,6 +22,7 @@ Verified in the code:
 | 2026-10-01 | The workspace owns shared rows. An idea can add its own rows. | Shared rows only: an idea cannot show what only it makes. Idea rows only: there is no grid, so there is no clean comparison. |
 | 2026-10-01 | Slice 1 as written: state rows only, judged by looking. | Scratch rows and checks in slice 1: a bigger first slice that needs the workspace agent or rows written by hand. |
 | 2026-10-01 | The mockup in `docs/design/mockups/workspaces/` and its six choices, approved with "no notes". | |
+| 2026-10-01 | A row agent writes the shared scratch rows (slice 2). You say what the row must show and check. The agent writes only that row's file, renders it in Today and runs its checks there. | The planner writes rows with the plan: one model call that cannot render or run a check, so a broken row reaches every idea. Only you write rows: no new agent, but the slowest path, and the code pane cannot write into `.caliper/`. |
 
 ## Terms
 
@@ -33,6 +34,7 @@ Verified in the code:
 | State row | A row that points to a declared product state. |
 | Scratch row | A row file that lives in the workspace folder. Discovery never lists it as a part. |
 | Shared row | A row that the workspace owns. Every column renders it. |
+| Row agent | The agent that writes one scratch row, from slice 2. |
 | Idea row | A row that one idea owns. Only the column of that idea renders it. Every idea row is a scratch row. |
 | Board | The grid of rows against columns. The first column is Today: the real files with no take. |
 | Cell | One row in one column, on one device. |
@@ -41,11 +43,11 @@ Verified in the code:
 ## The workflow
 
 1. **Open.** You write a question in a new workspace. Caliper records it with the status Open.
-2. **Frame.** You pin shared rows. In slice 1, a shared row is a declared state, for example Pico Home. From slice 2, the workspace agent can also write scratch rows.
+2. **Frame.** You pin shared rows. In slice 1, a shared row is a declared state, for example Pico Home. From slice 2, a row agent can also write a scratch row from what you ask, with checks that press keys.
 3. **Fill.** The planner turns the question into one direction for each idea. Each idea agent works in its own take. It can edit real files and add new files. From slice 3, it can also add idea rows.
 4. **Compare.** The board renders every shared row in Today and in each idea column. An idea row renders only in the column of its idea.
 5. **Ask.** You and the agents add open questions. You answer each one with a reason. The answers stay with the workspace.
-6. **Close.** Discard deletes the ideas and the scratch rows. It keeps the questions and the answers. Promote sends a chosen idea through an existing gate. You can promote more than one idea.
+6. **Close.** Discard deletes the ideas. It keeps the rows, the questions and the answers. (Changed in slice 2: the scratch rows stay, because they are the checks the answer relied on.) Promote sends a chosen idea through an existing gate. You can promote more than one idea.
 
 ## Model
 
@@ -126,7 +128,7 @@ This section is how the plan holds to [decision 18](../decisions.md#18-product-o
 |---|---|---|
 | Planner | The question, the sources and Today renders of the shared rows, and the names of all parts | Directions only |
 | Idea agent | Its direction, the titles of the other directions, and the shared rows | Its take. From slice 3, also its own idea rows |
-| Workspace agent, from slice 2 | The question and the names of all parts | Shared scratch rows only |
+| Row agent, from slice 2 | The question, the real files, the names of all parts and the other rows | Its own scratch row file only |
 
 The planner keeps decision 33. With three or more ideas, one direction is the strange direction.
 
@@ -160,7 +162,7 @@ Each slice works end to end.
 | Slice | Delivers | Proves |
 |---|---|---|
 | 1. Answer only | The workspace record, the question, state rows, the planner and ideas, the board on one device, questions and answers, and discard | The path from a question to an answer, with no new row format and no new fence |
-| 2. Scratch rows and checks | Shared scratch rows, the workspace agent, and authored-check results in cells | A row can carry input, for example the Pico rule-6 path |
+| 2. Scratch rows and checks | Shared scratch rows, the row agent, and authored-check results in cells | A row can carry input, for example the Pico rule-6 path |
 | 3. Idea rows | Idea rows and the narrow idea fence | An idea can show what only it makes |
 | 4. Promote | Promote for each idea through Replace or the alternate gate, and a flag when an earlier promote touched the same files | The path to production |
 
@@ -172,7 +174,7 @@ Question: "A person can open Settings using only the d-pad, A and B. Does Find a
 
 In slice 1, you pin Home and the hint bar states as shared rows. The planner makes three ideas, for example a Settings entry in the hint bar, a Settings item in the mode cycle, and a strange direction. You record the answer "Find gets an entry" with the reason "rule 6".
 
-In slice 2, a shared scratch row renders Home with a check. The check presses the keys that the Pico surface maps to the d-pad, A and B. It passes when Settings opens and B returns to Home. Each idea column shows a pass or a fail.
+In slice 2, a shared scratch row renders Home with a check. The check presses the keys that the Pico surface maps to the d-pad, A and B. It passes when Settings opens and B returns to Home. Each idea column shows a pass or a fail. The spike under [Slice 2](#slice-2-scratch-rows-that-check) ran this check for real.
 
 Limits for this example:
 
@@ -191,10 +193,95 @@ Limits for this example:
 
 ## Open questions
 
-1. Who writes shared scratch rows: a workspace agent, the planner, or only you? This plan assumes a workspace agent.
+1. Answered on 2026-10-01: a row agent writes shared scratch rows. See [Settled](#settled).
 2. How do answers leave the machine: a "Copy as Markdown" action, or a file that the workspace writes into the repo when it closes?
 3. Does the board need two devices at once, or is one device with a chooser enough?
 
+## Slice 2: scratch rows that check
+
+Status: draft, not approved. The mockup is in [`docs/design/mockups/workspaces-rows/`](../design/mockups/workspaces-rows/README.md).
+
+### What you do
+
+1. On the board, press **New row** under the last row. The bar asks what the row must show and check.
+2. Write it, for example: "Home on the portal's own input. Check that the d-pad and A open Settings, and that B returns to Home." Press **Write row**.
+3. The row agent writes one row file. It renders the row in Today and runs the row's checks there. While it works, the new row waits at the bottom of the board.
+4. Every column renders the row. Under each cell, one line says how the row's checks went in that column: "2 of 2 checks pass", "0 of 2 checks pass", "Checking", "Out of date" or "Not checked".
+5. Press the row's name, or the line under a cell, to open the row's record in the side panel. It holds what you asked, the file, each check in each column with its failure text, the image at the end of a check, and the agent's log. While the row is focused, the bar sends your prompt to the row agent, and has Stop and Delete row. The record has **Check again**.
+
+### Model
+
+- `Row` gains `{ _tag: "Scratch", file, brief }`. `file` is `rows/<n>.part.tsx` in the workspace folder. Caliper names the file when the row agent starts, so the record names the row before the file exists. `brief` is what you asked.
+- A scratch row is one state: its default export. Its checks are under `default`. The board shows no other export of the file.
+- The workspace record keeps the order of all rows. A scratch row whose file is gone says so in its cells, as a missing state does.
+- The row agent's conversation and log live in the app's memory, as a take's do. The file and the brief are on disk.
+
+### The row agent
+
+| Reads | Writes | Runs |
+|---|---|---|
+| The question, the real files, the names of all parts, the other rows | Its own row file only | The row in Today, with its checks |
+
+- It cannot read an idea's files. It cannot write a product file, another row or an idea. It stops after 40 turns, as a take does.
+- Its prompt says that a check that fails in Today can be the finding. It must not weaken a check so that Today passes. It reports what Today does.
+- You can edit a row file in your own editor. Vite reloads its cells, and their results go out of date.
+
+### Checks in cells
+
+- Caliper runs checks one column at a time: every row of that column that declares checks, in one run. Only the authored checks run. There is no second render and no accessibility audit. Each named check runs in a fresh Chromium context, as "Authored checks: browser input" in the decisions says.
+- Runs start by themselves. When a row agent stops, its row runs in every column whose agent is idle. When an idea's agent stops, that idea's column runs. **Check again** runs one row in every column. A project runs one check run at a time.
+- A result keeps the source revision it ran on. When the row file, the idea's files or the project's files change, the cell says "Out of date" until the next run. Results live in the app's memory. After a restart, the cells say "Not checked".
+- A pinned state whose part has a `checks` export gets results in its cells too.
+
+### Ideas and the planner
+
+- The planner gets the source of every row and Today's check results.
+- An idea's first message lists the rows, their sources and Today's results. Its `render` tool with `rows: true, checks: true` runs the rows' checks in the idea. A row added after an idea starts reaches it with its next prompt.
+- An idea still cannot write a row.
+
+### Changes inside Caliper
+
+- The frame route serves `.caliper/workspaces/<id>/rows/<n>.part.tsx`. It accepts only that pattern, and no link in the path.
+- `check-source` and the source revision include workspace rows. An edit to a row during a run makes the run stale.
+- The plugin can write, read and delete one row file, behind the host target `workspaces`. This raises the protocol to 5.
+- `planBoard` counts a line under each cell when any row has checks.
+- Discard keeps the row files. This changes step 6 of the workflow. The rows are the checks the answer relied on, and a closed board still shows them in Today. Cost: the files stay in `.caliper/` until you delete them.
+
+### Spike
+
+Run on 2026-10-01 on a copy of korri in `/tmp`, with Pico's workspace 1 and its ideas, takes 5 to 7. Verified:
+
+- A row file can compose the real `PicoSurface` with the portal's own input: its input bus, keyboard adapter and spatial focus, imported from `clients/portal/src/input`. Vite served those modules from outside Pico's root. The arrow keys move focus as the d-pad does on the device, Enter is A, and Escape is B.
+- The row has two checks that press only those keys: "the d-pad and A open Settings, and B returns to Home", and "the d-pad and A open Find". In Today, both fail: no control named Settings or Find is reachable. In ideas 5, 6 and 7, both pass. One check took 0.6 to 4.4 s.
+- The first version of the Find check matched `\bfind\b`. Ideas 6 and 7 failed it, because their tab's text reads "FINDOPTIONS" to the page. A defect in a check looks like a failure of an idea. You must read a row before you trust its results, so the row's record shows each check's source line and failure text.
+
+### Shipped products
+
+- The [Devin test report](https://mobbin.com/screens/9ecbe8d4-8d1c-49dd-aae2-92f4e32f2744) puts the count first, then each named test with one line of evidence. The row's record does the same.
+- [Mintlify's previews](https://mobbin.com/screens/31bc9279-f1e6-449c-9143-583e558609b4) mark a status with a sign and a word, not colour alone. The line under a cell does the same.
+- [AirOps](https://mobbin.com/screens/b55e31ae-5ef4-48c4-baaf-8f298d3ec3fc) puts Add Column at the end of the axis it extends. New row sits under the last row.
+- [Browserbase](https://mobbin.com/screens/073d8baf-023d-40ef-8d91-98c05d12354a) lists an agent's run as steps beside the result. The row's record reuses the take log for this.
+
+### Costs and limits
+
+- A third kind of agent, and its model calls for each row.
+- Check runs take time. On Pico, two checks in four columns are eight browser contexts, about 20 s for a full pass, one run at a time.
+- Results do not survive a restart.
+- A defect in a check looks like a failure of an idea (see the spike).
+- A row that imports code from outside the Vite root depends on Vite serving a module that an allowed module imports. Inferred from the spike; Vite does not document it.
+- A browser key press is not gamepad input. The Pico row proves the portal's keyboard path and the surface. It does not prove the gamepad adapter, the native input adapter or the host's system input.
+- A scratch row is not a product state. It adds no coverage, and its images never become baselines (decision 18).
+
+### Build order
+
+Test first, in a worktree. Land each step on `main` and deploy it.
+
+1. Storage and fence: scratch rows in the record, the row file's write, read and delete, the frame route, the check source and the source revision.
+2. The row agent: its tools, prompt and log, and its routes.
+3. Checks in cells: the runner, results in the snapshot, the triggers. Ideas and the planner see the rows.
+4. The board: New row, the scratch row's name, the line under a cell, the row's record and the bar. Gallery and size ladder.
+5. The guide, the changelog, decision 45, and a real run on Pico.
+
 ## Next step
 
-Build slice 1 test first, in this order: storage and endpoints, then the planner and idea agents, then the board, then the guide and a real run on Pico.
+The user reviews the slice 2 mockup. After approval, build slice 2 in the order above.
