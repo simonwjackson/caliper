@@ -371,6 +371,7 @@ export type ChromeView = {
 export type ChromeActions = {
   /** Open another project in this tab. Other tabs keep their own project. */
   readonly onProject: (id: string) => void
+  /** A press opens a closed pane, brings a covered one to the front, or closes the one in front. */
   readonly onTool: (tool: Tool) => void
   readonly onNavOpen: (open: boolean) => void
   readonly onFilter: (value: string) => void
@@ -435,6 +436,9 @@ export type ChromeActions = {
   readonly onNextChange: () => void
   /** Live resize uses commit=false; release/reset/keyboard uses commit=true. UI owns axis/coordinates. */
   readonly onCodeShare: (share: number, commit: boolean) => void
+  /** The pane's own Close. Closing brings back the most recent tool that is still open. */
+  readonly onCodeClose: () => void
+  readonly onKnobsClose: () => void
   /** Number/color dragging calls input, then commit once. Cancel restores without a file write. */
   readonly onKnobInput: (id: string, value: string) => void
   readonly onKnobCommit: (id: string, value: string) => void

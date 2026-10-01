@@ -5,13 +5,14 @@
  * server call, and it is not core's app state. A no-op would not show that
  * the chrome's controls reach their actions, so the common ones change the view.
  */
-import type { ChainView, ChromeActions, ChromeView, KnobView, Tool } from "../contract"
+import type { ChainView, ChromeActions, ChromeView, KnobView } from "../contract"
 import { DEFAULT_PX_PER_MM } from "../../device-frame.js"
 import { CHAIN_FAMILIES, frameSource } from "./views"
 import { markupState, nameOf, nextLetter, readMarks, sameSource, sourceOf, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, familyOf, readChoices, takeKey, withChains } from "./chains"
 import type { ChainChoices } from "./chains"
+import { createLocalTools } from "./tools"
 import type { MarkRect } from "../contract"
 
 export type Call = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
@@ -38,16 +39,8 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     void id
     if (view.knobs._tag === "Ready") update({ ...view, knobs: change(view.knobs.literals) })
   }
-  const tool = (active: Tool): ChromeView => {
-    const tools = { ...view.tools, active }
-    if (active === "preview") return { ...view, tools: { ...tools, side: "closed" } }
-    if (active === "knobs") return { ...view, tools: { ...tools, side: "knobs" }, knobs: view.knobs._tag === "Closed" ? { _tag: "Finding", target: "Game Detail, Default" } : view.knobs }
-    if (active === "takes") return { ...view, tools: { ...tools, side: view.record._tag === "Open" ? "record" : "closed" } }
-    if (active === "code") return { ...view, tools: { ...tools, codeOpen: true }, code: view.code._tag === "Closed" ? { _tag: "Loading", message: "Loading the editor" } : view.code }
-    if (active === "calibrate") return { ...view, tools, calibration: { _tag: "Open", pxPerMm: view.pxPerMm, calibrated: view.calibrated } }
-    if (active === "checks") return { ...view, tools, checks: view.checks._tag === "Closed" ? { _tag: "Open", targetLabel: "Game Detail · real files", runSelected: { _tag: "Enabled" }, runAll: { _tag: "Enabled" }, notices: [], run: { _tag: "Idle" } } : view.checks }
-    return { ...view, tools }
-  }
+  // Tool presses and Closes follow the app's tool rule.
+  const tools = createLocalTools(initial)
 
   // Take markup: every change goes through the shared Send policy, and a change to the draft moves its revision.
   const markup = (change: (marks: LocalMark[], state: MarkupState) => { readonly marks?: LocalMark[]; readonly state?: Partial<MarkupState> } | null) => {
@@ -133,7 +126,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       if (ready) markup(marks => ({ state: { editor: null, send: { _tag: "Sending", label: `Sending ${marks.length} ${marks.length === 1 ? "mark" : "marks"}` } } }))
     }),
     onProject: record("onProject"),
-    onTool: record("onTool", active => update(tool(active))),
+    onTool: record("onTool", tool => update(tools.press(view, tool))),
     onNavOpen: record("onNavOpen", navOpen => update({ ...view, tools: { ...view.tools, navOpen } })),
     onFilter: record("onFilter", filter => update({ ...view, navigation: { ...view.navigation, filter } })),
     onPart: record("onPart"),
@@ -172,7 +165,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onFollow: record("onFollow"),
     onPlanCancel: record("onPlanCancel", () => update({ ...view, plan: { _tag: "None" }, composer: { ...view.composer, edit: { _tag: "Enabled" }, attach: { _tag: "Enabled" } } })),
     onAccept: record("onAccept"), onDiscard: record("onDiscard"), onStop: record("onStop"), onPrepareAlternate: record("onPrepareAlternate"),
-    onRecordClose: record("onRecordClose", () => update({ ...view, record: { _tag: "Closed" }, tools: { ...view.tools, side: "closed" } })),
+    onRecordClose: record("onRecordClose", () => update(tools.close(view, "record"))),
     onReview: record("onReview"), onIntegrationCheck: record("onIntegrationCheck"),
     onBehaviorReviewed: record("onBehaviorReviewed", (take, revision, behaviorReviewed) => {
       if (view.record._tag === "Open" && view.record.take.id === take && view.record.integration._tag === "Review" && view.record.integration.review.revision === revision) {
@@ -185,6 +178,8 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onCodeRetry: record("onCodeRetry"), onCodeEdit: record("onCodeEdit"), onCodeSave: record("onCodeSave"),
     onPreviousChange: record("onPreviousChange"), onNextChange: record("onNextChange"),
     onCodeShare: record("onCodeShare", (codeShare, commit) => { if (commit) update({ ...view, tools: { ...view.tools, codeShare } }) }),
+    onCodeClose: record("onCodeClose", () => update(tools.close(view, "code"))),
+    onKnobsClose: record("onKnobsClose", () => update(tools.close(view, "knobs"))),
     onKnobInput: record("onKnobInput", (id, value) => knobs(knob => ({ ...knob, value }), id)),
     onKnobCommit: record("onKnobCommit", (id, value) => knobs(knob => ({ ...knob, value, write: { _tag: "Saved" } }), id)),
     onKnobCancel: record("onKnobCancel"),
@@ -204,7 +199,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       return { ...view.knobs, literals: { ...literals, literals: literals.literals.map(item => item.id === id && item.draft._tag !== "Closed" ? { ...item, draft: { ...item.draft, home } } : item) } }
     })),
     onPromote: record("onPromote"),
-    onChecksClose: record("onChecksClose", () => update({ ...view, checks: { _tag: "Closed" }, tools: { ...view.tools, active: view.tools.active === "checks" ? "takes" : view.tools.active } })),
+    onChecksClose: record("onChecksClose", () => update(tools.close(view, "checks"))),
     onCheckRun: record("onCheckRun"), onCheckStop: record("onCheckStop"),
     onImageLoaded: record("onImageLoaded"), onImageFailed: record("onImageFailed"),
     onImageReviewed: record("onImageReviewed", (run, index, reviewed) => {
@@ -219,7 +214,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     }),
     onPxPerMm: record("onPxPerMm", pxPerMm => update({ ...view, pxPerMm, calibrated: true, calibration: { _tag: "Open", pxPerMm, calibrated: true } })),
     onResetCalibration: record("onResetCalibration", () => update({ ...view, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false, calibration: { _tag: "Open", pxPerMm: DEFAULT_PX_PER_MM, calibrated: false } })),
-    onCalibrationClose: record("onCalibrationClose", () => update({ ...view, calibration: { _tag: "Closed" }, tools: { ...view.tools, active: view.tools.active === "calibrate" ? "takes" : view.tools.active } })),
+    onCalibrationClose: record("onCalibrationClose", () => update(tools.close(view, "calibrate"))),
     onFrameMount: record("onFrameMount"), onFrameGeometry: record("onFrameGeometry"),
     onEditorMount: record("onEditorMount", host => editor?.mount(host, view)),
     onReviewDiffMount: record("onReviewDiffMount"),

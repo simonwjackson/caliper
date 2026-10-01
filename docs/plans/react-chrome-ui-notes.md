@@ -60,6 +60,11 @@ front: open Takes, then Code, then Knobs; close Knobs and Code is in front;
 close Code and Takes is in front. Before this, the Close button only sent
 the pane behind, so on a desk the Knobs panel stayed open.
 
+`src/client/tool-rule.ts` is the rule for presses and Closes (decision 44).
+The app, the gallery and the contract-test scenario all call it. Its tests are
+in `test/tool-rule.test.ts`; `test/chrome-tool-parity.test.ts` checks that the
+gallery and the app end each sequence the same way.
+
 `frontSheet(plan, active, side)` in `layout.ts` is this rule; its tests are in
 `test/ui-layout.test.ts`. A sheet that is not in front stays mounted behind,
 so the editor and knob state survive. On the desk the rail has no Preview,

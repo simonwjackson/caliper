@@ -66,7 +66,7 @@ export function CodePane({ view, actions, place, hidden }: { readonly view: Chro
     <Panel hook={CAL.code} label="Code" className="dr-code__panel" title="Code" sub={sub}
       actions={code._tag === "Ready" && code.mode._tag === "Watching" && code.take
         ? <Button hook={CAL.stop} take={code.take} availability={code.stop} onClick={() => code.take && actions.onStop(code.take)}><Icon name="stop" />Stop</Button> : undefined}
-      onClose={place === "sheet" ? () => actions.onTool("preview") : undefined} closeLabel="Close Code">
+      onClose={place === "sheet" ? actions.onCodeClose : undefined} closeLabel="Close Code">
       {code._tag === "Loading" && <div className="dr-code__quiet" role="status"><p>{code.message}</p><div className="dr-working" aria-hidden="true" /></div>}
       {code._tag === "Empty" && <p className="dr-code__quiet">{code.message}</p>}
       {code._tag === "Failed" && <div className="dr-code__failed" role="alert"><p>{code.reason}</p><Button hook={CAL.codeRetry} availability={code.retry} onClick={actions.onCodeRetry}>Try again</Button></div>}

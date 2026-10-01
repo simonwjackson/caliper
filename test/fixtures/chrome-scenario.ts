@@ -1,6 +1,7 @@
 import type { ChromeActions, ChromeView } from "../../src/client/ui/contract"
 import { planSend, referencesIn } from "../../src/takes/send-plan.js"
 import { chainsView } from "./chrome-view"
+import { createLocalTools } from "../../src/client/ui/fixtures/tools"
 
 export type ObservedCall = { [K in keyof ChromeActions]: { readonly name: K; readonly args: Parameters<ChromeActions[K]> } }[keyof ChromeActions]
 /** Local action implementation for contract tests. Records calls and updates explicit scenario inputs. */
@@ -9,6 +10,8 @@ export function createChromeScenario(initial: ChromeView) {
   const calls: ObservedCall[] = []
   const listeners = new Set<() => void>()
   function update(next: ChromeView) { view = next; for (const listener of listeners) listener() }
+  // Tool presses and Closes follow the app's tool rule, as the gallery's do.
+  const tools = createLocalTools(initial)
   function record<K extends keyof ChromeActions>(name: K) {
     return (...args: Parameters<ChromeActions[K]>) => { calls.push({ name, args } as ObservedCall) }
   }
@@ -21,13 +24,17 @@ export function createChromeScenario(initial: ChromeView) {
     onState: record("onState"), onCompare: record("onCompare"), onTake: record("onTake"), onContext: record("onContext"), onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"), onDevice: record("onDevice"),
     onPrompt: record("onPrompt"), onCount: record("onCount"), onModels: record("onModels"), onModel: record("onModel"), onAttach: record("onAttach"), onRemoveAttachment: record("onRemoveAttachment"), onStart: record("onStart"), onFollow: record("onFollow"), onPlanCancel: record("onPlanCancel"),
     onAccept: record("onAccept"), onDiscard: record("onDiscard"), onStop: record("onStop"), onPrepareAlternate: record("onPrepareAlternate"), onRecordClose: record("onRecordClose"), onReview: record("onReview"), onIntegrationCheck: record("onIntegrationCheck"), onBehaviorReviewed: record("onBehaviorReviewed"), onApplyAlternate: record("onApplyAlternate"),
-    onOpenFile: record("onOpenFile"), onFileFilter: record("onFileFilter"), onCodeRetry: record("onCodeRetry"), onCodeEdit: record("onCodeEdit"), onCodeSave: record("onCodeSave"), onPreviousChange: record("onPreviousChange"), onNextChange: record("onNextChange"), onCodeShare: record("onCodeShare"),
+    onOpenFile: record("onOpenFile"), onFileFilter: record("onFileFilter"), onCodeRetry: record("onCodeRetry"), onCodeEdit: record("onCodeEdit"), onCodeSave: record("onCodeSave"), onPreviousChange: record("onPreviousChange"), onNextChange: record("onNextChange"), onCodeShare: record("onCodeShare"), onCodeClose: record("onCodeClose"), onKnobsClose: record("onKnobsClose"),
     onKnobInput: record("onKnobInput"), onKnobCommit: record("onKnobCommit"), onKnobCancel: record("onKnobCancel"), onLiteralsOpen: record("onLiteralsOpen"), onLiteralDraft: record("onLiteralDraft"), onLiteralName: record("onLiteralName"), onLiteralHome: record("onLiteralHome"), onPromote: record("onPromote"),
     onChecksClose: record("onChecksClose"), onCheckRun: record("onCheckRun"), onCheckStop: record("onCheckStop"), onImageLoaded: record("onImageLoaded"), onImageFailed: record("onImageFailed"), onImageReviewed: record("onImageReviewed"), onApproveImage: record("onApproveImage"),
     onPxPerMm: record("onPxPerMm"), onResetCalibration: record("onResetCalibration"), onCalibrationClose: record("onCalibrationClose"), onFrameMount: record("onFrameMount"), onFrameGeometry: record("onFrameGeometry"), onEditorMount: record("onEditorMount"), onReviewDiffMount: record("onReviewDiffMount"),
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,
+    onTool(tool) { observed.onTool(tool); update(tools.press(view, tool)) },
+    onCodeClose() { observed.onCodeClose(); update(tools.close(view, "code")) },
+    onKnobsClose() { observed.onKnobsClose(); update(tools.close(view, "knobs")) },
+    onRecordClose() { observed.onRecordClose(); update(tools.close(view, "record")) },
     onChainSolo(chain, solo) {
       observed.onChainSolo(chain, solo)
       if (view.canvas._tag !== "Frames") return
@@ -123,9 +130,9 @@ export function createChromeScenario(initial: ChromeView) {
       observed.onBehaviorReviewed(take, revision, behaviorReviewed)
       if (view.record._tag === "Open" && view.record.take.id === take && view.record.integration._tag === "Review" && view.record.integration.review.revision === revision) update({ ...view, record: { ...view.record, integration: { ...view.record.integration, behaviorReviewed, apply: behaviorReviewed ? { _tag: "Enabled" } : { _tag: "Disabled", reason: "Attestation required" } } } })
     },
-    onChecksClose() { observed.onChecksClose(); update({ ...view, checks: { _tag: "Closed" } }) },
+    onChecksClose() { observed.onChecksClose(); update(tools.close(view, "checks")) },
     onPxPerMm(pxPerMm) { observed.onPxPerMm(pxPerMm); update({ ...view, pxPerMm, calibrated: true, calibration: { _tag: "Open", pxPerMm, calibrated: true } }) },
-    onCalibrationClose() { observed.onCalibrationClose(); update({ ...view, calibration: { _tag: "Closed" } }) },
+    onCalibrationClose() { observed.onCalibrationClose(); update(tools.close(view, "calibrate")) },
   }
   return {
     actions, calls, getView: () => view, update,

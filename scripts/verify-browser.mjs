@@ -90,6 +90,27 @@ try {
   await page.setViewportSize({ width:1600,height:1000 })
   console.log(`tool selection and reload checked at ${sizes.length} sizes; layout NOT PROVEN`)
 
+  // The tool rule (src/client/tool-rule.ts): closing Checks or Calibrate brings back the tool that was in front.
+  const pressedTools = () => page.locator(`${cal.tool}[aria-pressed="true"]`).evaluateAll(nodes => nodes.map(node => node.getAttribute("data-tool")))
+  await page.locator(`${cal.tool}[data-tool="code"]`).click()
+  assert.deepEqual(await pressedTools(), ["code"])
+  await page.locator(`${cal.tool}[data-tool="checks"]`).click()
+  await page.locator(cal.checks).waitFor()
+  assert.deepEqual(await pressedTools(), ["checks"])
+  await page.keyboard.press("Escape")
+  await page.locator(cal.checks).waitFor({ state: "detached" })
+  assert.deepEqual(await pressedTools(), ["code"], "closing Checks brings back Code")
+  await page.locator(`${cal.tool}[data-tool="takes"]`).click()
+  await page.locator(`${cal.tool}[data-tool="calibrate"]`).click()
+  await page.locator(cal.calibrationClose).click()
+  await page.locator(cal.calibration).waitFor({ state: "detached" })
+  assert.deepEqual(await pressedTools(), ["takes"], "Done brings back Takes")
+  assert(await page.locator(cal.composer).isVisible(), "the composer comes back with Takes")
+  await page.locator(`${cal.tool}[data-tool="code"]`).click()
+  await page.locator(`${cal.tool}[data-tool="code"]`).click()
+  assert.deepEqual(await pressedTools(), ["takes"], "closing Code brings back Takes")
+  console.log("tool rule: Checks, Calibrate and Code close back to the tool that was in front")
+
   // Every part renders, inside the wrapper, with the global CSS loaded.
   for (const part of project.parts) {
     await page.locator(`${cal.nav} ${cal.part}[data-part="${part.file}"]`).click()

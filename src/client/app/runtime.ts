@@ -16,6 +16,8 @@ import { createChecksController } from "./checks"
 import { createIntegrationController } from "./integration"
 import { createMarkupController } from "./markup"
 import { createModelsController } from "./models"
+import { nextPanes } from "../tool-rule"
+import type { ToolEvent } from "../tool-rule"
 
 export type Request = <T>(path: string, data?: object) => Promise<T>
 export type RuntimeInput = {
@@ -113,6 +115,20 @@ export function createChromeApp(input: RuntimeInput) {
   function notify(reason: unknown) { set({ ...state, notices: [{ kind: "error", text: reason instanceof Error ? reason.message : String(reason) }] }) }
   function immediate(effect: () => Promise<unknown>) { void effect().catch(notify) }
   function remember(key: string, value: string) { input.storage?.setItem(`caliper:${key}`, value) }
+  /** A tool press or a Close, through the tool rule the gallery shares. The saved preferences and the checks run are this app's effects. */
+  function applyTools(event: ToolEvent) {
+    const before = state
+    const { active, codeOpen, side, checksOpen, calibrationOpen, recent } = nextPanes({
+      active: before.tools.active, codeOpen: before.tools.codeOpen, side: before.tools.side,
+      checksOpen: before.checksOpen, calibrationOpen: before.calibrationOpen, recent: before.recentTools,
+    }, event)
+    if (codeOpen !== before.tools.codeOpen) remember("code-open", String(codeOpen))
+    if ((side === "knobs") !== (before.tools.side === "knobs")) { remember("side", "knobs"); remember("knobs-open", String(side === "knobs")) }
+    if (active !== before.tools.active && active !== "checks" && active !== "calibrate") remember("view", active)
+    set({ ...before, tools: { ...before.tools, active, codeOpen, side }, checksOpen, calibrationOpen, recentTools: recent })
+    if (checksOpen && !before.checksOpen) checks.open()
+    if (!checksOpen && before.checksOpen) checks.close()
+  }
   const wireImages = () => state.attachments.map(({ name, mimeType, data }) => ({ name, mimeType, data }))
   function clearImages() { for (const image of state.attachments) input.revokeImage?.(image.url); state = { ...state, attachments: [] } }
   const submission = (): Submission => ({ rawPrompt: state.prompt, attachmentIds: state.attachments.map(image => image.id) })
@@ -257,18 +273,8 @@ export function createChromeApp(input: RuntimeInput) {
       remember("chain-solo", JSON.stringify([...chainSolo].filter(id => alive.has(id))))
       set({ ...state, chainSolo })
     },
-    onTool: tool => {
-      const tools = { ...state.tools, active: tool }
-      // An open pane that another pane covers comes to the front; only a pane already in front closes.
-      const behind = state.tools.active !== tool
-      if (tool === "code" && !(tools.codeOpen && behind)) { tools.codeOpen = !tools.codeOpen; remember("code-open", String(tools.codeOpen)) }
-      if (tool === "knobs" && !(tools.side === "knobs" && behind)) { tools.side = tools.side === "knobs" ? "closed" : "knobs"; remember("side", "knobs"); remember("knobs-open", String(tools.side === "knobs")) }
-      if (tool === "takes") tools.side = currentTake(state) ? "record" : "closed"
-      if (tool === "preview" || tool === "code" && !tools.codeOpen || tool === "knobs" && tools.side !== "knobs") tools.active = "preview"
-      if (tool !== "checks" && tool !== "calibrate") remember("view", tools.active)
-      set({ ...state, tools, checksOpen: tool === "checks" ? true : state.checksOpen, calibrationOpen: tool === "calibrate" ? !state.calibrationOpen : state.calibrationOpen })
-      if (tool === "checks") checks.open()
-    },
+    onTool: tool => applyTools({ _tag: "Press", tool, hasTake: currentTake(state) !== null }),
+    onCodeClose: () => applyTools({ _tag: "Close", pane: "code" }), onKnobsClose: () => applyTools({ _tag: "Close", pane: "knobs" }),
     onProject: id => { if (id !== state.projectId && state.projects.some(project => project.id === id && project.problem === "")) input.project?.open(id) },
     onNavOpen: navOpen => { remember("nav-open", String(navOpen)); set({ ...state, tools: { ...state.tools, navOpen } }) }, onFilter: filter => set({ ...state, filter }),
     onPart: file => { if (state.project?.parts.some(part => part.file === file)) selected({ ...state, part: file, shown: { _tag: "All" }, context: null, contextNote: "", take: null, expanded: new Map(state.expanded).set(file, true) }) },
@@ -283,7 +289,7 @@ export function createChromeApp(input: RuntimeInput) {
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),
     onPlanCancel: () => { if (state.plan._tag !== "Planning") return; generation++; set({ ...state, plan: { _tag: "None" } }) },
     onAccept: id => immediate(() => actOnTake(id, "accept")), onDiscard: id => immediate(() => actOnTake(id, "discard")), onStop: id => immediate(() => actOnTake(id, "stop")), onPrepareAlternate: id => immediate(() => actOnTake(id, "alternate")),
-    onRecordClose: () => set({ ...state, tools: { ...state.tools, side: "closed" } }), onReview: integration.review, onIntegrationCheck: integration.check, onBehaviorReviewed: integration.behaviorReviewed,
+    onRecordClose: () => applyTools({ _tag: "Close", pane: "record" }), onReview: integration.review, onIntegrationCheck: integration.check, onBehaviorReviewed: integration.behaviorReviewed,
     onApplyAlternate: (id, revision) => immediate(async () => {
       const captured = currentTake(state)
       if (!captured || captured.take !== id) return
@@ -296,9 +302,9 @@ export function createChromeApp(input: RuntimeInput) {
     onOpenFile: file => { set({ ...state, tools: { ...state.tools, codeOpen: true } }); remember("code-open", "true"); code.openFile(file) }, onFileFilter: value => code.setFilter(value), onCodeRetry: code.retry, onCodeEdit: code.edit, onCodeSave: code.save, onPreviousChange: code.previousChange, onNextChange: code.nextChange,
     onCodeShare: (value, commit) => { if (!Number.isFinite(value)) return; const share = clampShare(value); set({ ...state, tools: { ...state.tools, codeShare: share } }); if (commit) remember("code-share", String(share)) },
     onKnobInput: knobs.input, onKnobCommit: knobs.commit, onKnobCancel: knobs.cancel, onLiteralsOpen: knobs.literalsOpen, onLiteralDraft: knobs.literalDraft, onLiteralName: knobs.literalName, onLiteralHome: knobs.literalHome, onPromote: knobs.promote,
-    onChecksClose: () => { checks.close(); set({ ...state, checksOpen: false }) }, onCheckRun: checks.run, onCheckStop: checks.stop, onImageLoaded: checks.imageLoaded, onImageFailed: checks.imageFailed, onImageReviewed: checks.imageReviewed, onApproveImage: checks.approve,
+    onChecksClose: () => applyTools({ _tag: "Close", pane: "checks" }), onCheckRun: checks.run, onCheckStop: checks.stop, onImageLoaded: checks.imageLoaded, onImageFailed: checks.imageFailed, onImageReviewed: checks.imageReviewed, onApproveImage: checks.approve,
     onPxPerMm: value => { if (Number.isFinite(value) && value > 0) { set({ ...state, pxPerMm: value, calibrated: true }); remember("px-per-mm", String(value)) } },
-    onResetCalibration: () => { input.storage?.removeItem("caliper:px-per-mm"); set({ ...state, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false }) }, onCalibrationClose: () => set({ ...state, calibrationOpen: false }),
+    onResetCalibration: () => { input.storage?.removeItem("caliper:px-per-mm"); set({ ...state, pxPerMm: DEFAULT_PX_PER_MM, calibrated: false }) }, onCalibrationClose: () => applyTools({ _tag: "Close", pane: "calibrate" }),
     onFrameMount: (key, node) => {
       const before = frames.get(key)
       if (before === node) return

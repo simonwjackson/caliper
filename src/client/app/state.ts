@@ -3,6 +3,7 @@ import type { ChromeView, Tool } from "../ui/contract"
 import { DEFAULT_PX_PER_MM, STANDARD_DEVICES, type Device } from "../device-frame.js"
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
 import type { FrameReport } from "./wire"
+import { restorePanes } from "../tool-rule"
 
 export type Ask = StateRef & { device: string; prompt: string; context?: StateRef; images?: { name: string; mimeType: string; data: string }[]
   /** Ids of marks on the original that go with the prompt (planner choice 14). They leave the draft once takes start. */
@@ -30,6 +31,8 @@ export type AppState = {
   tools: { active: Tool; navOpen: boolean; codeOpen: boolean; side: "closed" | "knobs" | "record"; codeShare: number }
   checksOpen: boolean
   calibrationOpen: boolean
+  /** The order tools came to the front, for the tool rule (`../tool-rule`). Not saved; a reload rebuilds it. */
+  recentTools: readonly Tool[]
   prompt: string
   count: 1 | 2 | 3 | 4
   operation: { _tag: "Idle" } | { _tag: "Working"; name: string }
@@ -64,6 +67,8 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
   const created = saved.has("takeCreated") ? Number(saved.get("takeCreated")) : NaN
   const savedTool = storage.getItem("caliper:view")
   const active: Tool = savedTool === "code" || savedTool === "takes" || savedTool === "knobs" ? savedTool : "preview"
+  const codeOpen = storage.getItem("caliper:code-open") === "true"
+  const side = storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed"
   return {
     connection: { _tag: "Connecting" }, project: null, takes: null,
     part: saved.get("part"), shown: shown === "*" ? { _tag: "All" } : shown?.startsWith("takes:") ? { _tag: "Takes", export: shown.slice(6) || "default" } : { _tag: "One", export: shown || "default" },
@@ -71,8 +76,8 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     contextNote: "", take: saved.get("take"), takeCreated: Number.isFinite(created) && created >= 0 ? created : null, filter: "", expanded: new Map(),
     device: selectedDevice ?? "", pxPerMm: Number.isFinite(px) && px > 0 ? px : DEFAULT_PX_PER_MM, calibrated: Number.isFinite(px) && px > 0,
     // navOpen is the docked parts column, a remembered preference. The UI owns the small-screen drawer.
-    tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen: storage.getItem("caliper:code-open") === "true", side: storage.getItem("caliper:side") === "knobs" && storage.getItem("caliper:knobs-open") === "true" ? "knobs" : "closed", codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
-    checksOpen: false, calibrationOpen: false, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
+    tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen, side, codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
+    checksOpen: false, calibrationOpen: false, recentTools: restorePanes({ active, codeOpen, side, checksOpen: false, calibrationOpen: false }).recent, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
     chainsOpen: new Set(), chainSolo: savedChainSolo(storage), projectId: null, projects: [],
   }
 }

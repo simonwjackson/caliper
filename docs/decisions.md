@@ -856,3 +856,44 @@ The app now writes its own settings file, so a hand edit and a choice at the
 same moment can lose one of them. A running take does not switch models, and
 the record does not say which model a take used. Opening the chooser sends one
 request to the endpoint each time.
+
+## 44. One tool rule for the app, the gallery and the contract tests
+
+Decided 2026-10-01. An architecture review drove the app's runtime and the
+gallery's scenario with the same tool presses and Closes. All four sequences
+it tried ended differently. Each of the three suppliers of the chrome contract
+had its own copy of the rule, and nothing compared them. The gallery is where a
+change to the chrome is judged (decisions 18 and 36), so a reviewer could
+approve behaviour the app did not have. The same probe found that the Knobs
+panel's Close button left the panel open on a desk in the app. The user chose
+the behaviour one question at a time; `docs/plans/react-chrome-ui-notes.md`
+holds it.
+
+- **One pure rule.** `src/client/tool-rule.ts` takes what is open, the tool
+  in front and the order tools came to the front, plus a press or a Close. It
+  returns the next panes. It does no I/O. Closing brings back the most recent
+  tool that is still open, else Preview. Only a pane in front closes on a
+  press; a covered pane comes to the front.
+- **Each supplier keeps its effects.** The app saves its preferences and opens
+  or closes the checks run in `runtime.ts`. The gallery and the contract-test
+  scenario share `src/client/ui/fixtures/tools.ts`, which fills a newly opened
+  region with local content.
+- **Two Close actions.** `onCodeClose` and `onKnobsClose` join `onChecksClose`,
+  `onCalibrationClose` and `onRecordClose`. The panes' Close buttons called
+  `onTool("preview")`, which only sent a pane behind.
+- **The order of recent tools is not in the contract.** React never draws it.
+  The app keeps it in its state and the local scenarios keep it beside their
+  view. A reload or a fixture rebuilds it from the open panes, with the tool
+  in front last.
+- **A parity test guards it.** `test/chrome-tool-parity.test.ts` drives the
+  app and the gallery with the same sequences and compares what a person sees.
+
+Rejected: moving the rule into the React chrome. Decision 36 keeps behaviour
+out of it. Rejected: one rule written down only in prose. Prose cannot stop the
+copies drifting, and this one already had.
+
+Costs: the contract has two more actions for every supplier to answer. The
+order of recent tools does not survive a reload. A gallery fixture that opens
+with Checks or Calibrate has no history, so closing it shows Preview. The parity
+test covers tool presses and Closes only. Other gallery actions, such as the
+prompt's messages, are still written separately and can drift.

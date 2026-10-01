@@ -281,8 +281,7 @@ await gate("layout: the editor fills the code pane, which spans the stage, not t
     for (const fixture of ["code", "codeWatching"]) {
       const { page, close } = await open(size, fixture)
       try {
-        // On a phone the code pane is a sheet behind the Code tool.
-        if (size === phone) await page.locator(`${cal("tool")}[data-tool="code"]`).click()
+        // On a phone the code pane is a sheet; both fixtures have Code in front, so a press would close it.
         await page.locator(`${cal("code-editor")} .cm-content`).waitFor()
         const boxes = await page.evaluate(() => {
           const box = (/** @type {string} */ selector) => { const node = document.querySelector(selector); if (!node) throw new Error(`No ${selector}`); const r = node.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, width: r.width } }
@@ -1056,7 +1055,45 @@ await gate("keyboard: the dock marks one tool; Preview clears the sheet", async 
     assert(await page.locator(cal("take-record")).isVisible(), "Takes puts the record sheet in front")
     await page.locator(`${cal("tool")}[data-tool="preview"]`).click()
     assert.deepEqual(await page.locator('.dr-tools [aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => node.getAttribute("data-tool"))), ["preview"])
-    assert.equal(await page.locator(cal("take-record")).count(), 0)
+    // A sheet that is not in front stays mounted behind (react-chrome-ui-notes.md); Preview hides it.
+    assert.equal(await page.locator(cal("take-record")).isVisible(), false, "The record sheet goes behind")
+    assert(await page.locator(cal("composer")).isVisible(), "Preview shows the canvas and its bar")
+  } finally { await close() }
+})
+// The tool rule (src/client/tool-rule.ts): closing brings back the most recent tool still open, else Preview.
+/** @param {import("playwright-core").Page} page */
+const pressedTools = page => page.locator('.dr-tools [aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => node.getAttribute("data-tool")))
+await gate("tools: closing Checks brings back the tool that was in front", async () => {
+  const { page, close } = await open(desk, "code")
+  try {
+    assert.deepEqual(await pressedTools(page), ["code"])
+    await page.locator(`${cal("tool")}[data-tool="checks"]`).click()
+    await page.locator(cal("checks")).waitFor({ state: "visible" })
+    assert.deepEqual(await pressedTools(page), ["checks"])
+    await page.keyboard.press("Escape")
+    await page.locator(cal("checks")).waitFor({ state: "detached" })
+    assert.deepEqual(await pressedTools(page), ["code"], "Code is pressed again, not Takes and not Checks")
+    assert(await page.locator(cal("code")).isVisible(), "The code pane is still open")
+  } finally { await close() }
+})
+await gate("tools: Close Knobs closes the panel on a desk", async () => {
+  const { page, close } = await open(desk, "knobs")
+  try {
+    await page.locator(cal("knobs")).waitFor({ state: "visible" })
+    await page.getByRole("button", { name: "Close Knobs" }).click()
+    await page.locator(cal("knobs")).waitFor({ state: "detached" })
+    assert.equal((await called(page, "onKnobsClose")).length, 1)
+    assert.equal((await called(page, "onTool")).length, 0, "Close is not a tool press")
+  } finally { await close() }
+})
+await gate("tools: Close Code on a phone brings back Preview when nothing else is open", async () => {
+  const { page, close } = await open(phone, "code")
+  try {
+    assert.deepEqual(await pressedTools(page), ["code"])
+    await page.getByRole("button", { name: "Close Code" }).click()
+    assert.equal((await called(page, "onCodeClose")).length, 1)
+    await page.locator(cal("code")).waitFor({ state: "detached" })
+    assert.deepEqual(await pressedTools(page), ["preview"])
     assert(await page.locator(cal("composer")).isVisible(), "Preview shows the canvas and its bar")
   } finally { await close() }
 })

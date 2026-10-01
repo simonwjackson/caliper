@@ -20,7 +20,7 @@ export function KnobsPanel({ view, actions, sheet }: { readonly view: ChromeView
   const knobs = view.knobs
   if (knobs._tag === "Closed") return null
   const target = knobs._tag === "Ready" || knobs._tag === "Finding" ? knobs.target : undefined
-  return <Panel hook={CAL.knobs} label="Knobs" className="dr-knobs" title="Knobs" sub={target} onClose={() => actions.onTool("preview")} closeLabel="Close Knobs">
+  return <Panel hook={CAL.knobs} label="Knobs" className="dr-knobs" title="Knobs" sub={target} onClose={actions.onKnobsClose} closeLabel="Close Knobs">
     <div className="dr-knobs__body" data-sheet={sheet || undefined}>
       {knobs._tag === "Idle" && <p className="dr-side__quiet">{knobs.message}</p>}
       {knobs._tag === "Finding" && <><p className="dr-side__quiet" role="status">Finding the knobs of {knobs.target}…</p><div className="dr-working" aria-hidden="true" /></>}
