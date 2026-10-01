@@ -201,6 +201,16 @@ export type CanvasView =
 export type PlanView =
   | { readonly _tag: "None" }
   | { readonly _tag: "Planning"; readonly count: number; readonly message: string }
+/**
+ * The agent's model, chosen in the app for every project (decision 43). `Idle` until
+ * the chooser first unfolds. `favorites` are pi's scoped models that the endpoint
+ * serves; `models` are the rest. `choosing` is a model being saved.
+ */
+export type ModelsView =
+  | { readonly _tag: "Idle" }
+  | { readonly _tag: "Loading" }
+  | { readonly _tag: "Ready"; readonly current: string; readonly favorites: readonly string[]; readonly models: readonly string[]; readonly problem: string; readonly choosing: string | null }
+  | { readonly _tag: "Failed"; readonly reason: string }
 export type AttachmentView = { readonly id: string; readonly name: string; readonly url: string; readonly remove: Availability }
 export type ComposerView = {
   readonly prompt: string; readonly placeholder: string; readonly edit: Availability; readonly attach: Availability
@@ -215,6 +225,7 @@ export type ComposerView = {
   readonly marks: { readonly _tag: "None" } | { readonly _tag: "WithPrompt"; readonly names: readonly string[]; readonly label: string }
   readonly notices: readonly Notice[]
   readonly agent: { readonly _tag: "Connecting" } | AgentStatus; readonly skills: SkillsStatus
+  readonly models: ModelsView
 }
 export type LogEntry =
   | { readonly _tag: "User"; readonly text: string; readonly images: readonly { readonly name: string; readonly url: string }[] }
@@ -374,6 +385,10 @@ export type ChromeActions = {
   readonly onDevice: (id: string) => void
   readonly onPrompt: (text: string) => void
   readonly onCount: (count: 1 | 2 | 3 | 4) => void
+  /** Load the models the agent can use. The UI asks when the model chooser unfolds. */
+  readonly onModels: () => void
+  /** Use this model for every take and plan that starts next, in every project. */
+  readonly onModel: (model: string) => void
   readonly onAttach: (files: readonly File[]) => void
   readonly onRemoveAttachment: (id: string) => void
   readonly onStart: () => void

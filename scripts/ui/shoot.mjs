@@ -39,7 +39,8 @@ try {
         await page.waitForSelector('[data-cal="chrome"]')
         await page.evaluate(() => document.fonts.ready)
         await page.waitForTimeout(250)
-        if (shot.act === "menu") await page.getByRole("button", { name: "New take options" }).click()
+        if (shot.act === "menu" || shot.act === "models") await page.getByRole("button", { name: "New take options" }).click()
+        if (shot.act === "models") { await page.locator('[data-cal="agent-status"]').click(); await page.locator('[data-cal="agent-model-filter"]').fill("qwen") }
         if (shot.act === "drawer") await page.locator('[data-cal="parts-toggle"]').click()
         await page.waitForTimeout(120)
         const name = `${shot.fixture}${shot.act ? `-${shot.act}` : ""}-${size.name}-${scheme}`

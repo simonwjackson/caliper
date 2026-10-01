@@ -5,7 +5,7 @@ export const CAL = Object.freeze({
   context: "scenario-context", subject: "scenario-subject", whole: "scenario-whole", unavailable: "unavailable-states", setup: "setup",
   canvas: "canvas", frame: "frame", frameSelect: "frame-select", frameProblem: "frame-problem", caption: "caption", device: "device",
   plan: "plan", planCancel: "plan-cancel",
-  composer: "composer", prompt: "prompt", attach: "attach", attachments: "attachments", attachmentRemove: "attachment-remove", count: "take-count", start: "take-start", follow: "take-follow", agent: "agent-status", skills: "agent-skills",
+  composer: "composer", prompt: "prompt", attach: "attach", attachments: "attachments", attachmentRemove: "attachment-remove", count: "take-count", start: "take-start", follow: "take-follow", agent: "agent-status", models: "agent-models", modelFilter: "agent-model-filter", skills: "agent-skills",
   accept: "take-accept", discard: "take-discard", stop: "take-stop", alternate: "take-alternate", record: "take-record", recordClose: "record-close", log: "take-log",
   integration: "integration", review: "integration-review", integrationCheck: "integration-check", behaviorReviewed: "integration-attestation", applyAlternate: "integration-apply", reviewDiff: "review-diff",
   code: "code", fileMenu: "code-files", fileFilter: "code-file-filter", file: "code-file", codeStatus: "code-status", codeRetry: "code-retry", editor: "code-editor", previousChange: "code-previous-change", nextChange: "code-next-change", codeSave: "code-save", codeShare: "code-share",

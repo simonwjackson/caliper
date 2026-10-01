@@ -2,7 +2,7 @@
 // The Caliper app's settings. The agent's model and endpoint live here, not in
 // any project (decision 37). The key never does: it comes only from the app's
 // environment.
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { CONFIG_FILE } from "../agent/config.js"
@@ -44,4 +44,23 @@ export function readSettings(file) {
     throw new Error(`Remove "apiKey" from ${file}. Caliper reads the key from CALIPER_AGENT_API_KEY, or the variable agent.apiKeyEnv names.`)
   }
   return /** @type {Settings} */ (settings)
+}
+
+/**
+ * Choose the agent's model: the one setting the app writes (decision 43).
+ * Every other setting stays as the file has it. The write replaces the file
+ * in one step, so a reader never sees half of it.
+ *
+ * @param {string} file
+ * @param {string} model
+ * @returns {Settings}
+ */
+export function writeModel(file, model) {
+  const settings = readSettings(file)
+  if (settings.agent === undefined) throw new Error(`${file} has no "agent". Add one with its endpoint before you choose a model.`)
+  const next = { ...settings, agent: { ...settings.agent, model } }
+  const temporary = `${file}.${process.pid}.tmp`
+  writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`)
+  renameSync(temporary, file)
+  return next
 }

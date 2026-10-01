@@ -1,4 +1,4 @@
-import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView } from "../ui/contract"
+import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView, ModelsView } from "../ui/contract"
 import { acceptFlag, acceptNote, flagWords, historyLabel, lineageLabel, planChains } from "../../takes/chains.js"
 import type { AcceptFlag as ChainFlag, AcceptRecord, ChainTake } from "../../takes/chains.js"
 import type { Derivation, StateRef, TakeView } from "../../types"
@@ -17,7 +17,7 @@ export type MarkupRegion = {
 const promptMarks = (names: readonly string[]): ChromeView["composer"]["marks"] => names.length
   ? { _tag: "WithPrompt", names, label: `${names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`} ${names.length === 1 ? "goes" : "go"} with this prompt.` }
   : { _tag: "None" }
-export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
+export type Regions = { code: CodeView; knobs: KnobsView; checks: ChecksView; integration: IntegrationView; models?: ModelsView; badges?: readonly { part: string; state: string; take?: string; badge: Badge }[]; markup?: MarkupRegion }
 const noMarkup: MarkupRegion = { view: { _tag: "Unavailable", reason: "Loading the draft of marks…" }, frame: () => ({ markable: disabled("Loading the draft of marks…"), marks: [] }), withPrompt: [] }
 /** A take as the chain policy reads it: its subject, files, and the chain fields of its record. */
 const chainTake = (take: TakeView): ChainTake => ({
@@ -178,7 +178,7 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
     composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `${state.count} new takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
       marks: promptMarks(state.plan._tag === "None" ? (regions.markup ?? noMarkup).withPrompt : []),
-      notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] } },
+      notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] }, models: regions.models ?? { _tag: "Idle" } },
     markup: (regions.markup ?? noMarkup).view,
     focusedTake: summary,
     record: take && summary && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },

@@ -16,7 +16,7 @@
  * take 1, and a part after an accept, where every chain is flagged.
  */
 import type {
-  Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, NavPart, NavState, TakeSummary,
+  Availability, ChecksView, ChromeView, CodeView, FrameView, KnobView, LogEntry, ModelsView, NavPart, NavState, TakeSummary,
 } from "../contract"
 import { HANDHELD_DEVICES } from "../../device-frame.js"
 import { identityKey } from "../../../takes/chains.js"
@@ -153,6 +153,18 @@ const LOG: LogEntry[] = [
 /** The takes state of the mockup: the real files, then each chain: 6 from 1, 5 from 2, and 3 alone and flagged. Take 6 focused. */
 export function takesView(): ChromeView { return takesWith(MOCKUP, "6") }
 
+/** The endpoint's models, with pi's scoped models as favorites (decision 43). */
+const MODELS: ModelsView = {
+  _tag: "Ready", current: "qwen3-coder", favorites: ["qwen3-coder", "gpt-oss-120b", "llama4-scout"],
+  models: ["deepseek-r2", "gemma4-27b", "glm-5", "granite4-small", "kimi-k3", "llama4-maverick", "mistral-large-3", "phi-5", "qwen3-235b", "qwen3-vl-72b"],
+  problem: "", choosing: null,
+}
+/** The menu with the model chooser's favorites unfolded and one model being saved. */
+export function modelsView(models: ModelsView = MODELS): ChromeView {
+  const view = promptView()
+  return { ...view, composer: { ...view.composer, models } }
+}
+
 /** A Takes canvas of one family's chains, with one take selected and focused. */
 function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<ChainChoices, "selected">> = {}): ChromeView {
   const picked = family.takes.find(item => item.take === selected) ?? null
@@ -204,6 +216,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
         { name: "frontend-design", description: "Visual direction and typography", scope: "user", location: "~/.agents/skills/frontend-design/SKILL.md" },
         { name: "intrinsic-design", description: "Layout as a function of the container", scope: "user", location: "~/.agents/skills/intrinsic-design/SKILL.md" },
       ], problems: [] },
+      models: MODELS,
     },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Closed" },

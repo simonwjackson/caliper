@@ -15,6 +15,7 @@ import { createKnobsController } from "./knobs"
 import { createChecksController } from "./checks"
 import { createIntegrationController } from "./integration"
 import { createMarkupController } from "./markup"
+import { createModelsController } from "./models"
 
 export type Request = <T>(path: string, data?: object) => Promise<T>
 export type RuntimeInput = {
@@ -57,6 +58,7 @@ export function createChromeApp(input: RuntimeInput) {
   }
   const checks = createChecksController({ request: input.request, changed, target: selectedTarget })
   const integration = createIntegrationController({ request: input.request, changed })
+  const models = createModelsController({ request: input.request, changed, notify: reason => notify(reason) })
   const markup = createMarkupController({
     request: input.request, changed, notify: reason => notify(reason),
     inform: text => set({ ...state, notices: [{ kind: "info", text }] }),
@@ -90,7 +92,7 @@ export function createChromeApp(input: RuntimeInput) {
       }
       const current = state
       snapshot = toChromeView(state, {
-        code: code.getView(), knobs: knobs.getView(), checks: checks.getView(), integration: integrationView, badges: [...badges, ...originalBadges].flatMap(row => row.badge ? [{ ...row, badge: row.badge }] : []),
+        code: code.getView(), knobs: knobs.getView(), checks: checks.getView(), integration: integrationView, models: models.view(), badges: [...badges, ...originalBadges].flatMap(row => row.badge ? [{ ...row, badge: row.badge }] : []),
         markup: { view: markup.getView(), frame: (key, frame) => ({ markable: markup.markable(frame, current), marks: markup.pins(key, frame, current) }), withPrompt: markup.withPrompt(current).names },
       })
       for (const listener of subscribers) listener()
@@ -280,7 +282,7 @@ export function createChromeApp(input: RuntimeInput) {
     onSubject: ref => { const preview = previewRef(state); if (preview && subjectsOf(state.project?.parts ?? [], preview).some(child => sameState(child, ref))) selected({ ...state, part: ref.part, shown: { _tag: "One", export: ref.state }, context: preview, contextNote: "", take: null, expanded: new Map(state.expanded).set(ref.part, true) }) },
     onWholeScenario: () => { const preview = state.context; if (preview) selected({ ...state, part: preview.part, shown: { _tag: "One", export: preview.state }, context: null, contextNote: "", take: null }) },
     onDevice: id => { if (devicesOf(state).some(device => device.id === id)) { set({ ...state, device: id }); remember("device", id); save(); markup.schedule() } },
-    onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onAttach: files => immediate(() => attach(files)),
+    onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onModels: models.load, onModel: models.choose, onAttach: files => immediate(() => attach(files)),
     onRemoveAttachment: id => { if (state.plan._tag !== "None") return; const image = state.attachments.find(image => image.id === id); if (image) input.revokeImage?.(image.url); set({ ...state, attachments: state.attachments.filter(image => image.id !== id), notices: [] }) },
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),
     onPlanCancel: () => { if (state.plan._tag !== "Planning") return; generation++; set({ ...state, plan: { _tag: "None" } }) },
@@ -346,6 +348,7 @@ export function createChromeApp(input: RuntimeInput) {
   function receiveTakes(value: unknown) {
     const takes = parseTakes(value), before = state.takes
     state = { ...state, takes }
+    models.receiveCurrent(takes.agent._tag === "Ready" ? takes.agent.model : null)
     state = reconcileSelection(state); save(); publish()
     for (const take of takes.takes) {
       const prior = before?.takes.find(candidate => candidate.take === take.take && candidate.created === take.created)
@@ -395,6 +398,6 @@ export function createChromeApp(input: RuntimeInput) {
       set({ ...state, projects })
     },
     unreachable: (reason = "Vite is not reachable.") => set({ ...state, connection: { _tag: "Unreachable", reason } }),
-    dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); markup.dispose() },
+    dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); models.destroy(); markup.dispose() },
   }
 }

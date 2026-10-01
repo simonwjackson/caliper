@@ -3,12 +3,14 @@ import type { ChromeActions, ComposerView, MarkupSend } from "../contract"
 import { CAL } from "../hooks"
 import { MenuButton } from "../atoms/MenuButton"
 import { Icon } from "../atoms/Icon"
+import { ModelChooser } from "./ModelChooser"
 import "../tokens.css"
 import "./bar.css"
 
 const COUNTS = [1, 2, 3, 4] as const
 const countLabel = (count: 1 | 2 | 3 | 4) => count === 1 ? "1 take" : `${count} takes`
 
+/** The agent line when there is no model to choose. */
 function agentLine(composer: ComposerView): string {
   const agent = composer.agent
   if (agent._tag === "Ready") return `${agent.model} · reasoning ${agent.reasoning}`
@@ -26,8 +28,8 @@ export type SendChoice = { readonly send: MarkupSend; readonly revision: number;
 
 /**
  * New take is a split button. The main half starts; the menu chooses how many
- * takes (2 to 4 start from one plan, all at once), sends the prompt to the focused take, and
- * names the agent and its skills in the dimmest ink.
+ * takes (2 to 4 start from one plan, all at once), sends the prompt to the focused take,
+ * chooses the agent's model, and names its skills in the dimmest ink.
  *
  * While the draft holds marks, the main half is Send, with its count, as
  * decision 35 draws it, and New take moves to the top of the menu. Ctrl+Enter
@@ -37,7 +39,6 @@ export type SendChoice = { readonly send: MarkupSend; readonly revision: number;
  */
 export function NewTakeMenu({ composer, actions, send = null }: { readonly composer: ComposerView; readonly actions: ChromeActions; readonly send?: SendChoice | null }) {
   const agent = composer.agent
-  const title = agent._tag === "Ready" ? `${agent.baseUrl} (${agent.api}) from ${agent.baseUrlFrom}. Key from ${agent.keyFrom}.` : undefined
   const follow = composer.follow
   const start = composer.start
   const [skillsOpen, setSkillsOpen] = useState(false)
@@ -75,7 +76,9 @@ export function NewTakeMenu({ composer, actions, send = null }: { readonly compo
         </button>
       </>}
       <hr className="dr-split__rule" />
-      <p className="dr-split__agent" data-cal={CAL.agent} title={title}>{agentLine(composer)}</p>
+      {agent._tag === "Ready"
+        ? <ModelChooser agent={agent} models={composer.models} onModels={actions.onModels} onModel={actions.onModel} />
+        : <p className="dr-split__agent" data-cal={CAL.agent}>{agentLine(composer)}</p>}
       <div className="dr-split__skills" data-cal={CAL.skills}>
         <button type="button" role="menuitem" className="dr-split__item dr-split__item--quiet" data-keep-open="" aria-expanded={skillsOpen} onClick={() => setSkillsOpen(!skillsOpen)}>
           {composer.skills.skills.length === 0 ? "No skills" : `Skills (${composer.skills.skills.length})`}{composer.skills.problems.length > 0 && ` · ${composer.skills.problems.length} ${composer.skills.problems.length === 1 ? "problem" : "problems"}`}<i className="dr-chev" aria-hidden="true" />

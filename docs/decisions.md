@@ -673,6 +673,9 @@ took, a server that never answers) and `scripts/verify-central.mjs`
 
 ## 40. The agent's settings name the endpoint; Caliper reads no other tool's files
 
+Decision 43 narrows the title: Caliper reads pi's `enabledModels` for the
+model chooser's favorites. The rule for keys and endpoints below stands.
+
 Decided 2026-10-01. Before a public release, the user asked to make the agent
 setup generic. Under decision 15, the app took the base URL and the key from
 `~/.pi/agent/cliproxyapi.json` when the settings named no `baseUrl`. That file
@@ -786,3 +789,49 @@ screen, so it is taller than the page a browser gives with its bars. The
 sizes are from spec sheets, not measured. Every running dev server must
 restart once for protocol 3. Not done: device groups, landscape and portrait
 of one device, and a device pixel ratio for renders (renders stay at 1).
+
+## 43. Choose the model in the app; pi's scoped models are the favorites
+
+Decided 2026-10-01. The user asked to choose the agent's model in the app, for
+every project, and then: "Pi provides the names. Use the scoped models support
+to surface those as favorites." This is new evidence against one line of
+decision 40, which said Caliper reads no other tool's files. The user wants the
+short list they already keep for pi, not a second list to maintain.
+
+- **The model is app-wide.** The New take menu's agent line unfolds into the
+  chooser. `GET <chrome>/models.json` lists the choices and
+  `POST <chrome>/model` saves one. The app answers both itself, under each
+  project's path, because the chrome asks every question there. A choice
+  writes `agent.model` into the settings file, the only setting the app writes,
+  in one rename. The app then sends the new agent to every project's worker,
+  so no restart is needed. The takes snapshot names the model, so other tabs
+  follow.
+- **Takes that start later use it.** A running take and its follow-ups keep
+  the model they started with, until the app restarts. Each take's engine is
+  built once, when its agent starts.
+- **The endpoint names every model.** The OpenAI APIs list theirs at
+  `GET <baseUrl>/models`, with the key. `anthropic` and `google` use pi-ai's
+  catalog. If the list fails, the chooser says why and still offers each plain
+  favorite and a typed id.
+- **pi's `enabledModels` names the favorites.** Caliper reads that one list
+  from `$PI_CODING_AGENT_DIR/settings.json`, else `~/.pi/agent/settings.json`.
+  It never reads pi's keys, endpoints or providers, so decision 40's rule for
+  keys and endpoints stands. Patterns follow pi's `--models` format. Caliper
+  has no pi providers, so it drops the provider and matches the id on the
+  configured endpoint; a favorite the endpoint does not serve does not show.
+  `src/central/models.js` holds the matching.
+
+Rejected: a Caliper setting for favorites. It would be a second list that
+drifts from pi's. Rejected: pi's own `resolveModelScope`. It lives in
+`pi-coding-agent`, which decision 15 kept out because it brings pi's terminal
+UI.
+
+Costs: Caliper again depends on a pi file, though only for names, and a change
+to pi's settings format breaks the favorites silently; they disappear and
+nothing else fails. pi's partial match (`opus` for `claude-opus-5-5`) is not
+copied: a plain pattern must name the whole id. A favorite whose provider in pi
+is not the configured endpoint can still match a model with the same id there.
+The app now writes its own settings file, so a hand edit and a choice at the
+same moment can lose one of them. A running take does not switch models, and
+the record does not say which model a take used. Opening the chooser sends one
+request to the endpoint each time.

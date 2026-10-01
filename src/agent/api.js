@@ -59,13 +59,16 @@ const applySchema = Type.Object({ revision: Type.String({ minLength: 1 }), behav
  *   `skills` finds the skills each new agent, the planner and the chrome see.
  *   `onMarks` hears every new draft of marks. `host` replaces the reads of
  *   the project's disk, for the Caliper app, whose agent reaches the project
- *   only through its plugin.
+ *   only through its plugin. `setAgent` replaces the agent for every take and
+ *   plan that starts after it; a running take keeps the model it started with.
  */
-export function createTakesApi({ store, status, connection, project, serverUrl, chromium, onChange, onMarks = () => {}, skills = () => ({ skills: [], problems: [] }), host = {} }) {
+export function createTakesApi({ store, status: initialStatus, connection: initialConnection, project, serverUrl, chromium, onChange, onMarks = () => {}, skills = () => ({ skills: [], problems: [] }), host = {} }) {
   const discover = host.parts ?? (overrides => discoverParts(store.root, overrides))
   const readProjectFile = host.readFile ?? (file => readFileSync(join(store.root, file), "utf8"))
   const baselines = host.baselines ?? join(store.root, ".caliper", "baselines")
   const renderDir = mkdtempSync(join(tmpdir(), "caliper-takes-"))
+  let status = initialStatus
+  let connection = initialConnection
   const shutdown = new AbortController()
   /** @type {Set<Promise<unknown>>} */
   const rendering = new Set()
@@ -384,7 +387,14 @@ export function createTakesApi({ store, status, connection, project, serverUrl, 
     agents.assertIdle(take)
   }
 
-  return { handle, snapshot, marks: markup.draft, close, editByHand, assertEditable, noteHandEdit: agents.noteHandEdit }
+  /** @param {AgentStatus} nextStatus @param {Connection | null} nextConnection */
+  const setAgent = (nextStatus, nextConnection) => {
+    status = nextStatus
+    connection = nextConnection
+    onChange()
+  }
+
+  return { handle, snapshot, marks: markup.draft, close, editByHand, assertEditable, noteHandEdit: agents.noteHandEdit, setAgent }
 }
 
 /**

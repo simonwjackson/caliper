@@ -19,7 +19,9 @@ import { fileURLToPath } from "node:url"
 import { chromeDelivery } from "../build/chrome.js"
 import { chromePage } from "../pages.js"
 import { createAgentHosts } from "./agents.js"
-import { readSettings, settingsFile } from "./config.js"
+import { resolveAgent } from "../agent/config.js"
+import { readSettings, settingsFile, writeModel } from "./config.js"
+import { modelChoices, piFavorites } from "./models.js"
 import { homePage } from "./home.js"
 import { PROTOCOL, registryDir } from "./registry.js"
 import { createServerCheck, pluginUrl } from "./servers.js"
@@ -94,7 +96,10 @@ export async function startCentral(options = {}) {
   const settings = options.settings ?? settingsFile(env)
   // Fail at start on a broken settings file, rather than ignore it.
   const initial = readSettings(settings)
-  const agentOption = () => "agent" in options ? options.agent : readSettings(settings).agent ?? initial.agent
+  // Tests and scripts give the agent directly; choosing a model then changes only this copy.
+  const overridden = "agent" in options
+  let override = options.agent
+  const agentOption = () => overridden ? override : readSettings(settings).agent ?? initial.agent
   /** Requests with no project: a service worker that did not route them. */
   /** @type {string[]} */
   const misses = []
@@ -197,6 +202,9 @@ export async function startCentral(options = {}) {
     if (inner.startsWith(`${caliper}/`)) {
       const below = inner.slice(caliper.length)
       if (AGENT_PATHS.test(below)) return toAgent(request, response, entry, below)
+      // The model is app-wide; the chrome asks under its project's path, as for everything else.
+      if (below === "/models.json" && request.method === "GET") return sendModels(response)
+      if (below === "/model" && request.method === "POST") return chooseModel(request, response)
       if (below === "/events") return events(request, response, entry)
       if (KNOB_WRITES.has(below) && request.method === "POST") return knobWrite(request, response, entry, `${inner}${url.search}`)
     }
@@ -216,6 +224,41 @@ export async function startCentral(options = {}) {
     const answer = await hosts.get(entry.id, entry.root).request({ path: below, method: request.method ?? "GET", headers, body })
     response.writeHead(answer.status, answer.headers)
     response.end(answer.body)
+  }
+
+  /**
+   * The picker's choices: the endpoint's models, with pi's scoped models as
+   * favorites (decision 43).
+   *
+   * @param {import("node:http").ServerResponse} response
+   */
+  const sendModels = async response => {
+    const { status, connection } = resolveAgent({ option: agentOption(), env })
+    if (connection === null) return sendJson(response, 409, { error: status._tag === "Failed" ? `${status.reason} ${status.hint}` : status._tag === "Off" ? status.hint : "The agent has no connection." })
+    return sendJson(response, 200, await modelChoices({ current: connection.model, connection, patterns: piFavorites(env, homedir()) }))
+  }
+
+  /**
+   * Choose the agent's model for every project. Takes and plans that start
+   * after it use the new model; a running take keeps its own.
+   *
+   * @param {import("node:http").IncomingMessage} request
+   * @param {import("node:http").ServerResponse} response
+   */
+  const chooseModel = async (request, response) => {
+    /** @type {unknown} */
+    let model
+    try { model = JSON.parse((await readBody(request)).toString("utf8"))?.model } catch { /* refused below */ }
+    if (typeof model !== "string" || !/^\S{1,200}$/.test(model)) return sendJson(response, 400, { error: "Send { \"model\": \"<model id>\" }, an id with no spaces." })
+    if (overridden) {
+      if (override === undefined) return sendJson(response, 409, { error: "The agent is off, so it has no model to change." })
+      override = { ...override, model }
+    } else {
+      try { writeModel(settings, model) }
+      catch (error) { return sendJson(response, 409, { error: error instanceof Error ? error.message : String(error) }) }
+    }
+    hosts.reconfigure()
+    return sendModels(response)
   }
 
   /**

@@ -156,6 +156,12 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
       update(next.markup._tag === "Ready" ? withMarkup(next, readMarks(next), markupState(next)) : next)
     }),
     onCount: record("onCount", count => update({ ...view, composer: { ...view.composer, count, startLabel: count === 1 ? "New take" : `${count} new takes` } })),
+    // The fixture's list is already loaded; a choice moves the check and names the model, as the snapshot would.
+    onModels: record("onModels"),
+    onModel: record("onModel", model => {
+      const { agent, models } = view.composer
+      update({ ...view, composer: { ...view.composer, agent: agent._tag === "Ready" ? { ...agent, model } : agent, models: models._tag === "Ready" ? { ...models, current: model } : models } })
+    }),
     onAttach: record("onAttach", files => update({ ...view, composer: { ...view.composer, attachments: [...view.composer.attachments, ...files.map((file, index) => ({ id: `local-${Date.now()}-${index}`, name: file.name, url: frameSource(), remove: { _tag: "Enabled" } as const }))] } })),
     onRemoveAttachment: record("onRemoveAttachment", id => update({ ...view, composer: { ...view.composer, attachments: view.composer.attachments.filter(image => image.id !== id) } })),
     // New take takes the marks that go with the prompt; they leave the draft (planner choice 14). Starting the take is core's.

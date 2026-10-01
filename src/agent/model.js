@@ -41,6 +41,17 @@ const WIRES = {
 }
 
 /**
+ * The model ids pi-ai's catalog knows for an API. Empty for the OpenAI APIs,
+ * whose models depend on the server.
+ *
+ * @param {AgentApi} api
+ * @returns {string[]}
+ */
+export function catalogModels(api) {
+  return Object.keys(WIRES[api].catalog)
+}
+
+/**
  * The engine for one endpoint. The key stays inside the provider's auth;
  * nothing else sees it.
  *

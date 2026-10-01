@@ -47,6 +47,7 @@ export function readyView(): ChromeView {
       follow: { take: "6", label: "Send to take 6", availability: enabled }, marks: { _tag: "WithPrompt", names: ["0A"], label: "0A goes with this prompt." }, notices: [{ kind: "info", text: "Editing the subject, not the scenario" }],
       agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "~/.config/caliper/config.json", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [{ name: "design", description: "Describe a change", scope: "project", location: ".agents/skills/design/SKILL.md" }], problems: [] },
+      models: { _tag: "Ready", current: "configured-model", favorites: ["configured-model"], models: ["other-model"], problem: "", choosing: null },
     },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Open", take, emptyLogMessage: "No conversation since Vite started", integration: { _tag: "None" },

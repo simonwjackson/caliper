@@ -72,6 +72,7 @@ export const TakesSchema = Type.Object({
   })),
   accepted: Type.Array(AcceptRecordSchema),
 })
+export const ModelsSchema = Type.Object({ current: text, favorites: strings, models: strings, problem: Type.Optional(text) })
 export const CodeChangeSchema = Type.Object({ file: text, take: Type.Union([text, Type.Null()]) })
 export const FrameReportSchema = Type.Object({
   source: tag("caliper-frame"), part: text, partState: text, take: Type.Union([text, Type.Null()]),
@@ -99,6 +100,7 @@ export function validateResponse(path: string, value: unknown, writing: boolean)
   const schema = route === "project.json" ? ProjectSchema : route === "takes.json" ? TakesSchema : route === "code/files" ? CodeFilesSchema : route === "code/file" && !writing ? CodeDocumentSchema
     : route === "checks" || route?.startsWith("checks/") ? ChecksViewSchema : route === "takes/plan" ? PlanSchema
     : route?.match(/^takes\/[^/]+\/(review|check)$/) ? ReviewSchema
+    : route === "models.json" || route === "model" ? ModelsSchema
     : route === "knobs/locate" ? LocateSchema : route === "knobs/write" || route === "knobs/promote" ? KnobResultSchema : null
   if (schema) parseWire(schema, value)
 }

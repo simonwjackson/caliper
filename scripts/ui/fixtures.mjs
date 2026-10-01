@@ -4,7 +4,7 @@
  * mockup drew one), and the UI-owned disclosure to open before the shot. A
  * fixture the mockup did not draw has `mockup: null`; its render is the design.
  *
- * @typedef {{ fixture: string, mockup: string | null, act?: "menu" | "drawer" | "files" | "skills", note?: string }} Shot
+ * @typedef {{ fixture: string, mockup: string | null, act?: "menu" | "models" | "drawer" | "files" | "skills", note?: string }} Shot
  */
 
 /** @type {readonly Shot[]} */
@@ -13,6 +13,7 @@ export const SHOTS = [
   { fixture: "empty", mockup: "empty" },
   { fixture: "none", mockup: null, note: "Nothing selected yet." },
   { fixture: "prompt", mockup: "menu", act: "menu" },
+  { fixture: "prompt", mockup: null, act: "models", note: "Decision 43: the agent line unfolded into pi's favorite models and a filter over the rest." },
   { fixture: "planning", mockup: null, note: "The planner is working; blank slots hold the takes' places." },
   { fixture: "log", mockup: "log" },
   { fixture: "running", mockup: null, note: "Undrawn: a running take with Stop." },

@@ -102,5 +102,11 @@
 .dr-split__skills b { color: var(--dr-ink-2); font-weight: 600; }
 .dr-split__where { display: block; }
 .dr-split__problem { color: var(--dr-warn); }
+/* The model chooser (decision 43): the agent line unfolds into favorites and a filter, in the menu's own ink. */
+.dr-split__model { overflow-wrap: anywhere; min-width: 0; text-align: left; }
+.dr-split__models > [role="group"] { display: grid; padding-bottom: .2rem; }
+.dr-split__filter { margin: .3rem .6rem; border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: 6px; padding: .35rem .55rem; color: var(--dr-ink); font-size: var(--dr-fs-1); min-width: 0; }
+.dr-split__filter::placeholder { color: var(--dr-ink-3); }
+.dr-split__filter:focus-visible { outline: 1px solid var(--dr-ink-2); outline-offset: 0; }
 /* While New take cannot start, its menu half is not lit either; the menu still opens. */
 .dr-split:has(> .dr-split__main:disabled) .dr-split__more.dr-btn { background: transparent; color: var(--dr-ink-2); border-color: var(--dr-edge); }

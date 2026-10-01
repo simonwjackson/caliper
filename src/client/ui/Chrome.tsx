@@ -159,6 +159,13 @@ function Composer({ view, actions }: ChromeProps) {
         {composer.agent._tag === "Ready" ? <p title={`${composer.agent.baseUrl} (${composer.agent.api}) from ${composer.agent.baseUrlFrom}. Key from ${composer.agent.keyFrom}.`}>{composer.agent.model} · reasoning {composer.agent.reasoning}</p>
           : composer.agent._tag === "Connecting" ? <p>Connecting…</p> : composer.agent._tag === "Off" ? <p>{composer.agent.hint}</p> : null}
       </div>
+      {composer.agent._tag === "Ready" && <details data-cal={CAL.models} onToggle={event => { if (event.currentTarget.open) actions.onModels() }}><summary>Model</summary>
+        {composer.models._tag === "Failed" ? <p>{composer.models.reason}</p> : composer.models._tag !== "Ready" ? <p>Loading…</p> : <>
+          {[...composer.models.favorites, ...composer.models.models].map(model => <label key={model}><input type="radio" name="caliper-model" value={model} checked={model === (composer.models._tag === "Ready" ? composer.models.choosing ?? composer.models.current : "")} onChange={() => actions.onModel(model)} />{model}</label>)}
+          <input data-cal={CAL.modelFilter} aria-label="Type a model id" onKeyDown={event => { if (event.key === "Enter" && event.currentTarget.value.trim()) actions.onModel(event.currentTarget.value.trim()) }} />
+          {composer.models.problem && <p>{composer.models.problem}</p>}
+        </>}
+      </details>}
       <details data-cal={CAL.skills}><summary>{composer.skills.skills.length} skills</summary><Notices notices={composer.skills.problems.map(text => ({ kind: "warning", text }))} />
         {composer.skills.skills.map(skill => <p key={skill.name} title={skill.description}>{skill.name} · {skill.scope} · {skill.location}</p>)}
       </details>

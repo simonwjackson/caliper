@@ -1,6 +1,8 @@
 // @ts-check
 import { describe, expect, test } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { createServer } from "node:http"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { manifest, withProject } from "./project-server.js"
 import { createTakeStore } from "../src/takes/store.js"
@@ -63,6 +65,40 @@ describe("the takes API", () => {
       expect(snapshot.skills.skills).toContainEqual({ name: "spacing", description: "Spacing rules.", scope: "project", location: ".agents/skills/spacing/SKILL.md" })
       expect(snapshot.skills.problems).toContain("Skill folder missing does not exist.")
     })
+  })
+
+  test("lists the endpoint's models with pi's favorites, and a choice reaches the agent of every take after it", async () => {
+    const pi = mkdtempSync(join(tmpdir(), "caliper-pi-"))
+    writeFileSync(join(pi, "settings.json"), JSON.stringify({ enabledModels: ["proxy/fast-*", "proxy/gone"] }))
+    const endpoint = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" })
+      response.end(JSON.stringify({ data: [{ id: "m" }, { id: "fast-1" }, { id: "big-2" }] }))
+    })
+    await new Promise(resolve => endpoint.listen(0, "127.0.0.1", () => resolve(undefined)))
+    const port = /** @type {import("node:net").AddressInfo} */ (endpoint.address()).port
+    const previous = process.env.PI_CODING_AGENT_DIR
+    process.env.PI_CODING_AGENT_DIR = pi
+    try {
+      const options = { agent: { model: "m", baseUrl: `http://127.0.0.1:${port}/v1`, apiKeyEnv: "PATH", skills: /** @type {false} */ (false) } }
+      await withProject({ files, options }, async ({ url, get }) => {
+        expect(await (await get("/__caliper/models.json")).json()).toEqual({ current: "m", favorites: ["fast-1"], models: ["big-2", "m"] })
+        expect((await post(url, "/__caliper/model", { model: "has space" })).status).toBe(400)
+        expect((await post(url, "/__caliper/model", { model: "big-2" }, { origin: "https://evil.example" })).status).toBe(403)
+        const chosen = await post(url, "/__caliper/model", { model: "big-2" })
+        expect(await chosen.json()).toMatchObject({ current: "big-2" })
+        let model = ""
+        for (let attempt = 0; attempt < 50 && model !== "big-2"; attempt += 1) {
+          model = (await (await get("/__caliper/takes.json")).json()).agent.model
+          if (model !== "big-2") await new Promise(resolve => setTimeout(resolve, 20))
+        }
+        expect(model).toBe("big-2")
+      })
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR
+      else process.env.PI_CODING_AGENT_DIR = previous
+      await new Promise(resolve => endpoint.close(() => resolve(undefined)))
+      rmSync(pi, { recursive: true, force: true })
+    }
   })
 
   test("refuses writes that are not JSON, or that come from another site", async () => {

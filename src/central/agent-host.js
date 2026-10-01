@@ -39,7 +39,9 @@ const entry = () => {
 }
 
 const host = remoteHost({ call, root: data.root })
-const agent = resolveAgent({ option: data.agent, env: data.env })
+/** The app sends a new agent when you choose a model (decision 43). */
+let option = data.agent
+const agent = resolveAgent({ option, env: data.env })
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let takesTimer
@@ -63,7 +65,7 @@ const api = createTakesApi({
   chromium: chromiumExecutable(data.env),
   onChange: takesChanged,
   onMarks: draft => main.postMessage({ type: "marks", data: draft }),
-  skills: () => discoverSkills({ root: data.root, home: data.home, option: data.agent?.skills, project: host.projectSkills() }),
+  skills: () => discoverSkills({ root: data.root, home: data.home, option: option?.skills, project: host.projectSkills() }),
   host: {
     parts: host.parts,
     readFile: host.readFile,
@@ -114,6 +116,10 @@ main.on("message", async message => {
     // A broken marks.json must not close the stream; the chrome reads the reason from marks.json.
     try { marks = api.marks() } catch { /* reported by marks.json */ }
     main.postMessage({ type: "snapshot", seq: message.seq, takes, marks, problem })
+  } else if (message.type === "agent") {
+    option = message.agent
+    const next = resolveAgent({ option, env: data.env })
+    api.setAgent(next.status, next.connection)
   } else if (message.type === "edit") {
     api.noteHandEdit(message.take, message.file)
   } else if (message.type === "editable") {

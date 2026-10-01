@@ -282,7 +282,27 @@ tokens. For a model that pi-ai's catalog knows on `anthropic` or `google`,
 Caliper takes the limits and thinking rules from the catalog. Any other model
 gets a 200,000-token context window and 32,000 tokens per answer. The app
 reads the file when it starts a project's agent, so restart the app after you
-change it.
+change it by hand.
+
+**Choose the model in the app.** In the New take menu, the agent line names
+the model and its reasoning. Select it to see your favorite models first, and
+a filter over every model the endpoint serves; the filter also takes a model id
+that the endpoint does not list. A choice applies at once to every project and
+tab, with no restart, and the app saves it as `agent.model` in the settings
+file. Takes and plans that start after the choice use the new model; a take
+that is running, and its follow-ups, keep the model it started with until the
+app restarts. For the OpenAI APIs, the list comes from `GET <baseUrl>/models`;
+for `anthropic` and `google`, from pi-ai's catalog.
+
+The favorites are pi's scoped models: the `enabledModels` patterns in
+`~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.json`), the list
+pi cycles with Ctrl+P. Caliper reads only that list from pi, never a key or an
+endpoint. A pattern names a model as pi's `--models` flag does: `provider/id`
+or `id`, an optional `:thinking` suffix, and `*`, `?` and `[...]` globs. Caliper
+ignores the provider, so `cliproxyapi/claude-opus-5-5` names `claude-opus-5-5`
+on whatever endpoint the settings name, and shows only favorites that the
+endpoint serves. Unlike pi, a pattern without a glob must name the whole id.
+Without pi, the chooser has no favorites and lists every model.
 
 The API key never goes in the file; the app refuses a file that holds one. Set
 `CALIPER_AGENT_API_KEY` in the environment of the app, whichever `api` you

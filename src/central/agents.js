@@ -14,6 +14,7 @@ import { serveSyncCalls } from "./sync-call.js"
  *   editable: (take: string) => Promise<string | null>,
  *   edit: (take: string, file: string) => void,
  *   subscribe: (listener: (event: Broadcast) => void) => () => void,
+ *   reconfigure: (agent: import("../types").AgentOptions | undefined) => void,
  *   close: () => Promise<void>,
  * }} AgentHost
  */
@@ -89,6 +90,7 @@ export function createAgentHosts({ stateDir, agent, env, hostCall }) {
       },
       edit: (take, file) => { if (failure === null) worker.postMessage({ type: "edit", take, file }) },
       subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
+      reconfigure: next => { if (failure === null) worker.postMessage({ type: "agent", agent: next }) },
       close: async () => {
         if (failure !== null) return
         const exited = new Promise(resolve => worker.once("exit", resolve))
@@ -108,6 +110,11 @@ export function createAgentHosts({ stateDir, agent, env, hostCall }) {
       const made = start(id, root)
       hosts.set(id, made)
       return made
+    },
+    /** Give every running project the agent settings as they are now. */
+    reconfigure: () => {
+      const option = agent()
+      for (const host of hosts.values()) host.reconfigure(option)
     },
     close: async () => {
       const all = [...hosts.values()]
