@@ -2,52 +2,46 @@
 // The Caliper app's first page: the running projects, each a link to its
 // chrome. It uses the chrome's own stylesheet for the Darkroom tokens and
 // font (decision 34), and follows the registry live.
+//
+// The page shows its state, it does not describe it. A row-shaped slot with a
+// moving light is the list looking for a dev server. The recipe under it is the
+// file and the commands, with only the part to add lit. A lost app dims the
+// rows, and a line fills for exactly the time until the page tries again.
 import { chromeDelivery } from "../build/chrome.js"
+
+/** How long the page waits before it connects again, in ms. The retry line fills in this time. */
+export const RETRY_MS = 3000
 
 /**
  * What the page knows. `Connecting` is before the first project list.
- * `Lost` keeps the last list, which may be out of date, while the page
- * tries again.
+ * `Lost` keeps the last list, which may be out of date, until the page
+ * connects again.
  *
  * @typedef {import("./server.js").ProjectView} ProjectView
  * @typedef {{ _tag: "Connecting" } | { _tag: "Live", projects: ProjectView[] } | { _tag: "Lost", projects: ProjectView[] }} HomeState
- * @typedef {{ tone: "running" | "good" | "warn" | "bad", status: string, slot: { title: string, note: string } | null, steps: boolean, stale: boolean }} HomeView
+ * @typedef {{ slot: "Looking" | "Still" | "None", recipe: boolean, retry: boolean, stale: boolean, said: string }} HomeView
  */
 
 /**
- * The one decision about what the page shows. The page script runs this same
- * function, so the server's first paint and every later state agree.
- * It must stay self-contained: the page gets its source text.
+ * The one decision about what the page draws. `said` is for screen readers
+ * only. The page script runs this same function, so the server's first paint
+ * and every later state agree. It must stay self-contained: the page gets its
+ * source text.
  *
  * @param {HomeState} state
  * @returns {HomeView}
  */
 export function homeView(state) {
-  const projects = state._tag === "Connecting" ? [] : state.projects
-  const count = (/** @type {number} */ n) => n === 1 ? "1 project" : `${n} projects`
-  if (state._tag === "Connecting") {
-    return { tone: "running", status: "Connecting to the Caliper app", slot: { title: "Loading projects", note: "The list shows when the app answers." }, steps: false, stale: false }
-  }
+  if (state._tag === "Connecting") return { slot: "Looking", recipe: false, retry: false, stale: false, said: "Connecting to the Caliper app." }
+  const { projects } = state
+  const count = projects.length === 1 ? "1 project" : `${projects.length} projects`
   if (state._tag === "Lost") {
-    return {
-      tone: "bad", status: "Lost the Caliper app. Trying again.",
-      slot: projects.length === 0 ? { title: "No project list", note: "The list comes back when the app answers." } : null,
-      steps: false, stale: projects.length > 0,
-    }
+    return { slot: projects.length === 0 ? "Still" : "None", recipe: false, retry: true, stale: projects.length > 0, said: "Lost the Caliper app. Reconnecting." }
   }
-  if (projects.length === 0) {
-    return { tone: "running", status: "Watching for dev servers", slot: { title: "No project is running", note: "A dev server with the Caliper plugin shows here by itself." }, steps: true, stale: false }
-  }
+  if (projects.length === 0) return { slot: "Looking", recipe: true, retry: false, stale: false, said: "No project is running. Waiting for a dev server." }
   const blocked = projects.filter(project => project.status !== "Ready").length
-  return {
-    tone: blocked > 0 ? "warn" : "good",
-    status: blocked > 0 ? `${count(projects.length)} running, ${blocked} cannot open` : `${count(projects.length)} running`,
-    slot: null, steps: false, stale: false,
-  }
+  return { slot: "None", recipe: false, retry: false, stale: false, said: blocked > 0 ? `${count}, ${blocked} cannot open.` : `${count}.` }
 }
-
-/** @param {string} text */
-const escape = text => text.replace(/[&<>"]/g, char => `&#${char.charCodeAt(0)};`)
 
 /**
  * @param {{ themeColor: string }} input
@@ -74,26 +68,25 @@ export function homePage({ themeColor }) {
     <style>${STYLE}</style>
   </head>
   <body>
-    <main data-cal="home" data-state="Connecting">
-      <header class="cal-home__head">
-        <div>
-          <h1>Caliper</h1>
-          <p class="cal-home__lead">Projects whose dev server runs with the Caliper plugin.</p>
-        </div>
-        <p class="cal-home__live" role="status"><span class="cal-home__dot" data-tone="${first.tone}"></span><span data-cal="home-status">${escape(first.status)}</span></p>
-      </header>
+    <main data-cal="home" data-state="Connecting" data-slot="${first.slot}" style="--cal-retry: ${RETRY_MS}ms">
+      <h1>Caliper</h1>
+      <p class="cal-home__said" role="status" data-cal="home-said">${first.said}</p>
+      <div class="cal-home__retry" data-cal="home-retry" aria-hidden="true" hidden><span>Reconnecting</span></div>
       <ul class="cal-home__list" data-cal="projects"></ul>
-      <div class="cal-home__slot" data-cal="home-slot"${first.slot ? "" : " hidden"}><b>${escape(first.slot?.title ?? "")}</b><span>${escape(first.slot?.note ?? "")}</span></div>
-      <section class="cal-home__steps" data-cal="home-steps" aria-labelledby="cal-home-steps"${first.steps ? "" : " hidden"}>
-        <h2 id="cal-home-steps">Add a project</h2>
-        <ol>
-          <li><p>In the project, install the plugin:</p><pre><code>npm install --save-dev @simonwjackson/caliper</code></pre></li>
-          <li><p>Add it to <code>vite.config</code>:</p><pre><code>import { caliper } from "@simonwjackson/caliper"
+      <div class="cal-home__slot" aria-hidden="true"><i></i><i></i></div>
+      <div class="cal-home__recipe" data-cal="home-recipe" hidden>
+        <figure class="cal-home__file">
+          <figcaption>vite.config.ts</figcaption>
+          <pre><code><mark>import { caliper } from "@simonwjackson/caliper"</mark>
+import { defineConfig } from "vite"
 
-export default defineConfig({ plugins: [caliper()] })</code></pre></li>
-          <li><p>Start the dev server:</p><pre><code>npx vite</code></pre></li>
-        </ol>
-      </section>
+export default defineConfig({
+  plugins: [<mark>caliper()</mark>],
+})</code></pre>
+        </figure>
+        <pre class="cal-home__term"><code><span aria-hidden="true">$ </span>npm i -D @simonwjackson/caliper
+<span aria-hidden="true">$ </span>npx vite</code></pre>
+      </div>
     </main>
     <script type="module">${SCRIPT}</script>
   </body>
@@ -103,68 +96,80 @@ export default defineConfig({ plugins: [caliper()] })</code></pre></li>
 
 const STYLE = `
 html.cal-home, .cal-home body { margin: 0; min-height: 100%; background: var(--dr-room, #121316); color: var(--dr-ink, #ECECEE); font-family: var(--dr-sans, system-ui, sans-serif); font-size: var(--dr-fs-2, 13px); }
-.cal-home main { box-sizing: border-box; max-width: 44rem; margin: 0 auto; padding: max(var(--dr-gutter, 1rem), env(safe-area-inset-top)) max(var(--dr-gutter, 1rem), env(safe-area-inset-right)) max(var(--dr-gutter, 1rem), env(safe-area-inset-bottom)) max(var(--dr-gutter, 1rem), env(safe-area-inset-left)); }
-.cal-home__head { display: grid; gap: .5rem; margin: 1.5rem 0 1.25rem; }
-.cal-home h1 { font-size: var(--dr-fs-3, 15px); font-weight: 600; margin: 0 0 .25rem; }
-.cal-home__lead { color: var(--dr-ink-2, #A3A6AE); margin: 0; }
-.cal-home__live { display: inline-flex; align-items: center; gap: .5rem; margin: 0; color: var(--dr-ink-2, #A3A6AE); font-size: var(--dr-fs-1, 12px); }
-.cal-home__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--dr-ink-2, #A3A6AE); }
-.cal-home__dot[data-tone="running"] { animation: cal-home-pulse 1.2s ease-in-out infinite; }
-.cal-home__dot[data-tone="good"] { background: var(--dr-good, #7FD39A); }
-.cal-home__dot[data-tone="warn"] { background: var(--dr-warn, #E9B565); }
-.cal-home__dot[data-tone="bad"] { background: var(--dr-bad, #FF7B72); }
-@keyframes cal-home-pulse { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .cal-home__dot[data-tone="running"] { animation: none; } }
+.cal-home main { box-sizing: border-box; max-width: 44rem; margin: 0 auto; display: grid; gap: .5rem; padding: max(var(--dr-gutter, 1rem), env(safe-area-inset-top)) max(var(--dr-gutter, 1rem), env(safe-area-inset-right)) max(var(--dr-gutter, 1rem), env(safe-area-inset-bottom)) max(var(--dr-gutter, 1rem), env(safe-area-inset-left)); }
+.cal-home h1 { font-size: var(--dr-fs-3, 15px); font-weight: 600; margin: 1.5rem 0 .75rem; }
+.cal-home__said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+.cal-home [hidden] { display: none !important; }
+
+/* Rows. */
 .cal-home__list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; transition: opacity .2s; }
 .cal-home__list:empty { display: none; }
-.cal-home main[data-stale] .cal-home__list { opacity: .45; }
 .cal-home__row { background: var(--dr-card, #1C1D21); box-shadow: var(--dr-lift); border-radius: var(--dr-radius, 8px); }
-.cal-home__row a, .cal-home__row > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .75rem; padding: .75rem .875rem; min-height: var(--dr-control-h, 2.25rem); color: inherit; text-decoration: none; border-radius: inherit; }
+.cal-home__row a, .cal-home__row > div { display: grid; gap: .25rem; padding: .75rem .875rem; color: inherit; text-decoration: none; border-radius: inherit; }
 .cal-home__row a:hover { background: var(--dr-card-2, #24262B); }
 .cal-home__row a:focus-visible { outline: 2px solid var(--dr-ink, #ECECEE); outline-offset: 2px; }
 .cal-home__name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-.cal-home__where { grid-column: 1 / -1; color: var(--dr-ink-3, #6E717A); font-size: var(--dr-fs-1, 12px); overflow-wrap: anywhere; }
-.cal-home__status { color: var(--dr-ink-2, #A3A6AE); font-size: var(--dr-fs-1, 12px); justify-self: end; }
-/* A problem is a sentence, not a word: it takes its own line, so it never squeezes the name. */
-.cal-home__row:not([data-status="Ready"]) .cal-home__status { grid-column: 1 / -1; justify-self: start; }
-.cal-home__row[data-status="Protocol"] .cal-home__status, .cal-home__row[data-status="Duplicate"] .cal-home__status, .cal-home__row[data-status="Silent"] .cal-home__status { color: var(--dr-warn, #E9B565); }
-.cal-home__row[data-status="Protocol"], .cal-home__row[data-status="Duplicate"], .cal-home__row[data-status="Silent"] { background: transparent; box-shadow: 0 0 0 1px var(--dr-edge, #303237); }
-/* The empty slot: drawn where the first project row will be, the same size, with no card. */
-.cal-home__slot { display: grid; gap: .125rem; padding: .75rem .875rem; border: 1px dashed var(--dr-edge-2, #3E4148); border-radius: var(--dr-radius, 8px); }
-.cal-home__slot[hidden] { display: none; }
-.cal-home__slot b { font-weight: 600; color: var(--dr-ink-2, #A3A6AE); }
-.cal-home__slot span { color: var(--dr-ink-3, #6E717A); font-size: var(--dr-fs-1, 12px); }
-.cal-home__steps { margin-top: 2rem; }
-.cal-home__steps h2 { font-size: var(--dr-fs-2, 13px); font-weight: 600; margin: 0 0 .75rem; }
-.cal-home__steps ol { margin: 0; padding: 0 0 0 1.25rem; display: grid; gap: 1rem; }
-.cal-home__steps li { min-width: 0; color: var(--dr-ink-2, #A3A6AE); padding-left: .25rem; }
-.cal-home__steps li::marker { color: var(--dr-ink-3, #6E717A); font-variant-numeric: tabular-nums; }
-.cal-home__steps p { margin: 0 0 .4rem; }
-.cal-home__steps pre { margin: 0; padding: .625rem .75rem; background: var(--dr-card, #1C1D21); border-radius: 6px; color: var(--dr-ink, #ECECEE); font-size: var(--dr-fs-1, 12px); line-height: 1.5; overflow-x: auto; }
-.cal-home code { font-family: var(--dr-mono, monospace); font-size: .95em; }
-.cal-home pre code { font-size: inherit; }
+.cal-home__where { display: flex; flex-wrap: wrap; gap: 0 1rem; color: var(--dr-ink-3, #6E717A); font-size: var(--dr-fs-1, 12px); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.cal-home__problem { color: var(--dr-warn, #E9B565); font-size: var(--dr-fs-1, 12px); }
+.cal-home__row:not([data-status="Ready"]) { background: transparent; box-shadow: 0 0 0 1px var(--dr-edge, #303237); }
+.cal-home main[data-stale] .cal-home__list { opacity: .4; }
+
+/* The slot: the shape of the row that will land, with a light moving across it while the list looks. */
+.cal-home__slot { position: relative; overflow: hidden; display: grid; gap: .5rem; padding: .875rem; border: 1px dashed var(--dr-edge-2, #3E4148); border-radius: var(--dr-radius, 8px); }
+.cal-home__slot i { display: block; height: .5rem; border-radius: 2px; background: var(--dr-edge, #303237); }
+.cal-home__slot i:first-child { width: min(9rem, 40%); height: .625rem; }
+.cal-home__slot i:last-child { width: min(17rem, 75%); }
+.cal-home__slot::after { content: ""; position: absolute; inset: 0; width: 40%; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--dr-ink, #ECECEE) 7%, transparent), transparent); transform: translateX(-100%); }
+.cal-home main[data-slot="Looking"] .cal-home__slot::after { animation: cal-home-look 2.4s cubic-bezier(.4, 0, .2, 1) infinite; }
+.cal-home main[data-slot="Still"] .cal-home__slot { opacity: .5; }
+.cal-home main[data-slot="None"] .cal-home__slot { display: none; }
+/* With the recipe, the slot comes last: the row lands under the command that starts it. */
+.cal-home main:has(.cal-home__recipe:not([hidden])) .cal-home__slot { order: 1; }
+@keyframes cal-home-look { to { transform: translateX(250%); } }
+
+/* Lost: a line that fills for exactly the wait before the next try. */
+.cal-home__retry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; color: var(--dr-bad, #FF7B72); font-size: var(--dr-fs-1, 12px); }
+.cal-home__retry::before { content: ""; height: 2px; border-radius: 1px; background: linear-gradient(var(--dr-bad, #FF7B72), var(--dr-bad, #FF7B72)) no-repeat 0 0 / 0% 100%, var(--dr-edge, #303237); animation: cal-home-retry var(--cal-retry) linear forwards; }
+@keyframes cal-home-retry { to { background-size: 100% 100%, auto; } }
+
+/* The recipe: the file and the commands. Only what you add is lit. */
+.cal-home__recipe { display: grid; gap: .5rem; }
+.cal-home__file { margin: 0; background: var(--dr-card, #1C1D21); border-radius: var(--dr-radius, 8px); overflow: hidden; }
+.cal-home__file figcaption { padding: .5rem .875rem; color: var(--dr-ink-3, #6E717A); font-size: var(--dr-fs-1, 12px); border-bottom: 1px solid var(--dr-edge, #303237); }
+.cal-home pre { margin: 0; padding: .75rem .875rem; font-family: var(--dr-mono, monospace); font-size: var(--dr-fs-1, 12px); line-height: 1.6; color: var(--dr-ink-3, #6E717A); overflow-x: auto; }
+.cal-home mark { color: var(--dr-ink, #ECECEE); background: color-mix(in srgb, var(--dr-ink, #ECECEE) 9%, transparent); border-radius: 3px; padding: .1em .2em; margin: 0 -.2em; }
+.cal-home__term { background: var(--dr-card, #1C1D21); border-radius: var(--dr-radius, 8px); }
+.cal-home__term code { color: var(--dr-ink, #ECECEE); }
+.cal-home__term span { color: var(--dr-ink-3, #6E717A); user-select: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-home main[data-slot="Looking"] .cal-home__slot::after { animation: none; }
+  .cal-home__list { transition: none; }
+}
 `
 
 const SCRIPT = `
 ${homeView}
+const RETRY_MS = ${RETRY_MS}
 const main = document.querySelector("main")
 const list = document.querySelector(".cal-home__list")
-const dot = document.querySelector(".cal-home__dot")
-const status = document.querySelector('[data-cal="home-status"]')
-const slot = document.querySelector(".cal-home__slot")
-const steps = document.querySelector(".cal-home__steps")
-const where = project => project.root.replace(/^\\/home\\/[^/]+/, "~") + " · " + new URL(project.url).host
+const said = document.querySelector(".cal-home__said")
+const retry = document.querySelector(".cal-home__retry")
+const recipe = document.querySelector(".cal-home__recipe")
+const span = (className, textContent) => Object.assign(document.createElement("span"), { className, textContent })
 const row = project => {
   const item = document.createElement("li")
   item.className = "cal-home__row"
   item.dataset.status = project.status
   item.dataset.project = project.id
-  const body = document.createElement(project.status === "Ready" ? "a" : "div")
-  if (project.status === "Ready") body.href = project.chrome
-  const name = Object.assign(document.createElement("span"), { className: "cal-home__name", textContent: project.name })
-  const state = Object.assign(document.createElement("span"), { className: "cal-home__status", textContent: project.status === "Ready" ? "Open" : "Cannot open: " + project.problem })
-  const place = Object.assign(document.createElement("span"), { className: "cal-home__where", textContent: where(project) })
-  body.append(name, state, place)
+  const ready = project.status === "Ready"
+  const body = document.createElement(ready ? "a" : "div")
+  if (ready) body.href = project.chrome
+  const where = Object.assign(document.createElement("span"), { className: "cal-home__where" })
+  where.append(span("", project.root.replace(/^\\/home\\/[^/]+/, "~")), span("", new URL(project.url).host))
+  body.append(span("cal-home__name", project.name))
+  if (!ready) body.append(span("cal-home__problem", "Cannot open: " + project.problem))
+  body.append(where)
   item.append(body)
   return item
 }
@@ -173,23 +178,25 @@ const show = next => {
   state = next
   const view = homeView(state)
   main.dataset.state = state._tag
+  main.dataset.slot = view.slot
   main.toggleAttribute("data-stale", view.stale)
-  dot.dataset.tone = view.tone
-  status.textContent = view.status
+  if (said.textContent !== view.said) said.textContent = view.said
   if (state._tag !== "Connecting") list.replaceChildren(...state.projects.map(row))
   // A stale row's link goes to an app that does not answer.
   list.inert = view.stale
-  slot.hidden = view.slot === null
-  if (view.slot) slot.replaceChildren(Object.assign(document.createElement("b"), { textContent: view.slot.title }), Object.assign(document.createElement("span"), { textContent: view.slot.note }))
-  steps.hidden = !view.steps
+  recipe.hidden = !view.recipe
+  // Each try starts the line again from empty.
+  retry.hidden = true
+  if (view.retry) { void retry.offsetWidth; retry.hidden = false }
 }
+// The page owns the retry, so the line shows the real wait.
 const connect = () => {
   const source = new EventSource("/__caliper/api/projects/events")
   source.addEventListener("projects", event => show({ _tag: "Live", projects: JSON.parse(event.data).projects }))
   source.addEventListener("error", () => {
+    source.close()
     show({ _tag: "Lost", projects: state._tag === "Connecting" ? [] : state.projects })
-    // EventSource retries a dropped stream by itself, but not an HTTP error, such as a proxy's 502.
-    if (source.readyState === EventSource.CLOSED) setTimeout(connect, 3000)
+    setTimeout(connect, RETRY_MS)
   })
 }
 connect()

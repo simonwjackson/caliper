@@ -1,5 +1,5 @@
 // @ts-check
-// The project list page: one view per state of its connection to the app.
+// The project list page: what it draws for each state of its connection to the app.
 import { describe, expect, test } from "bun:test"
 import { homePage, homeView } from "../src/central/home.js"
 
@@ -10,37 +10,28 @@ const project = (name, status = "Ready") => ({
 })
 
 describe("homeView", () => {
-  test("before the first list, it says it is connecting and shows no steps", () => {
-    expect(homeView({ _tag: "Connecting" })).toMatchObject({ tone: "running", status: "Connecting to the Caliper app", steps: false, stale: false })
+  test("before the first list, the slot looks and the recipe waits", () => {
+    expect(homeView({ _tag: "Connecting" })).toMatchObject({ slot: "Looking", recipe: false, retry: false, stale: false })
   })
 
-  test("with no project, it watches, keeps the empty slot and shows the steps", () => {
-    const view = homeView({ _tag: "Live", projects: [] })
-    expect(view).toMatchObject({ tone: "running", status: "Watching for dev servers", steps: true, stale: false })
-    expect(view.slot?.title).toBe("No project is running")
+  test("with no project, the slot looks and the recipe shows", () => {
+    expect(homeView({ _tag: "Live", projects: [] })).toMatchObject({ slot: "Looking", recipe: true, retry: false })
   })
 
-  test("with projects, it counts them and drops the slot", () => {
-    expect(homeView({ _tag: "Live", projects: [project("a")] })).toMatchObject({ tone: "good", status: "1 project running", slot: null, steps: false })
-    expect(homeView({ _tag: "Live", projects: [project("a"), project("b")] }).status).toBe("2 projects running")
+  test("with projects, only the rows show; a screen reader hears the count", () => {
+    expect(homeView({ _tag: "Live", projects: [project("a")] })).toMatchObject({ slot: "None", recipe: false, said: "1 project." })
+    expect(homeView({ _tag: "Live", projects: [project("a"), project("b", "Silent")] }).said).toBe("2 projects, 1 cannot open.")
   })
 
-  test("a project that cannot open turns the status to a warning and names the count", () => {
-    expect(homeView({ _tag: "Live", projects: [project("a"), project("b", "Silent")] })).toMatchObject({ tone: "warn", status: "2 projects running, 1 cannot open" })
-  })
-
-  test("a lost connection keeps the last list, marked stale", () => {
-    expect(homeView({ _tag: "Lost", projects: [project("a")] })).toMatchObject({ tone: "bad", slot: null, steps: false, stale: true })
-    const empty = homeView({ _tag: "Lost", projects: [] })
-    expect(empty).toMatchObject({ tone: "bad", steps: false, stale: false })
-    expect(empty.slot?.title).toBe("No project list")
+  test("a lost app keeps the last rows, stale, with the retry line", () => {
+    expect(homeView({ _tag: "Lost", projects: [project("a")] })).toMatchObject({ slot: "None", retry: true, stale: true, recipe: false })
+    expect(homeView({ _tag: "Lost", projects: [] })).toMatchObject({ slot: "Still", retry: true, stale: false })
   })
 })
 
 test("the page paints the connecting state first and ships the same view function", () => {
   const html = homePage({ themeColor: "#121316" })
-  expect(html).toContain('data-state="Connecting"')
-  expect(html).toContain("Connecting to the Caliper app")
-  expect(html).toMatch(/data-cal="home-steps"[^>]* hidden>/)
+  expect(html).toContain('data-state="Connecting" data-slot="Looking"')
+  expect(html).toMatch(/data-cal="home-recipe" hidden>/)
   expect(html).toContain("function homeView(state)")
 })
