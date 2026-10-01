@@ -45,7 +45,8 @@ const control = {
   applicable() {
     const root = document.querySelector<HTMLElement>("[data-cal=chrome]")
     const canvas = document.querySelector<HTMLElement>("[data-cal=canvas]")
-    return applicableHooks(scenario.getView(), { bar: root?.dataset.bar === "on", code: root?.dataset.code ?? "closed", pairs: canvas?.dataset.pairs })
+    const board = document.querySelector<HTMLElement>("[data-cal=board]")
+    return applicableHooks(scenario.getView(), { bar: root?.dataset.bar === "on", code: root?.dataset.code ?? "closed", pairs: canvas?.dataset.pairs, ...(board?.dataset.columns ? { boardColumns: board.dataset.columns } : {}) })
   },
   unmount() { root.unmount() },
 }

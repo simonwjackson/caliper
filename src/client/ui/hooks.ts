@@ -15,6 +15,10 @@ export const CAL = Object.freeze({
   markup: "markup", markMode: "mark-mode", markSurface: "mark-surface", markPoint: "mark-point", markRegion: "mark-region", markPin: "mark-pin", markEdit: "mark-edit", markNote: "mark-note", markRemove: "mark-remove", markReplace: "mark-replace", markEditorClose: "mark-editor-close", draftOpen: "draft-open", draft: "mark-draft", send: "marks-send", draftOutcome: "draft-outcome", markReference: "mark-reference", promptMarks: "prompt-marks",
   chain: "chain", chainHistory: "chain-history", chainStep: "chain-step", chainFlag: "chain-flag", chainSolo: "chain-solo",
   calibration: "calibration", calibrationScale: "calibration-scale", calibrationReset: "calibration-reset", calibrationClose: "calibration-close",
+  workspaces: "workspaces", workspace: "workspace", workspaceNew: "workspace-new", pin: "state-pin",
+  board: "board", boardIdea: "board-idea", boardCell: "board-cell", questionsOpen: "questions-open", questions: "questions",
+  questionAsk: "question-ask", questionAnswer: "question-answer", workspaceDiscard: "workspace-discard",
+  workspaceStart: "workspace-start", ideaFollow: "idea-follow", ideaDiscard: "idea-discard",
 } as const)
 export type CalHook = typeof CAL[keyof typeof CAL]
 export function calSelector(hook: CalHook): string { return `[data-cal="${hook}"]` }

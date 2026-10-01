@@ -51,6 +51,13 @@ export const SHOTS = [
   { fixture: "typeahead", mockup: "mark", note: "Phase 6: the note at 6B offers the marks on the real files as you type 0." },
   { fixture: "original", mockup: null, note: "Phase 6: marks on the real files, 0A and 0B, in mark mode." },
   { fixture: "withPrompt", mockup: null, note: "Phase 6: 0A and 0B go with the typed prompt; New take stays the main button." },
+  // Decision 45: a workspace's board. Its mockup is docs/design/mockups/workspaces/ (`shoot.mjs` there), not this folder's.
+  { fixture: "workspaceNew", mockup: "workspaces/new" },
+  { fixture: "workspaceFrame", mockup: "workspaces/frame" },
+  { fixture: "workspacePlanning", mockup: "workspaces/planning" },
+  { fixture: "workspaceRunning", mockup: "workspaces/running" },
+  { fixture: "workspaceBoard", mockup: "workspaces/board" },
+  { fixture: "workspaceClosed", mockup: null, note: "Decision 45: the ideas are discarded; the question and its answers stay." },
 ]
 
 export const FIXTURE_NAMES = [...new Set(SHOTS.map(shot => shot.fixture))]

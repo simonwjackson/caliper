@@ -3,7 +3,7 @@ import type { StateRef, TakeView, CodeChange } from "../../types"
 import { Check } from "typebox/value"
 import { Type } from "typebox"
 import { ChecksViewSchema, CodeChangeSchema, FrameReportSchema, PlanSchema, parseProject, parseTakes, parseWire } from "./wire"
-import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable, deviceOf, devicesOf } from "./state"
+import { createAppState, clampShare, currentPart, currentTake, subjectRef, previewRef, reconcileSelection, locationHash, takeName, refLabel, askAvailable, deviceOf, devicesOf, currentWorkspace, openWorkspace } from "./state"
 import type { AppState, Ask, Plan, Preferences, Submission } from "./state"
 import { toChromeView, takeSummary, disabled, acceptConfirmNote, chainHasParent } from "./view"
 import { identityKey } from "../../takes/chains.js"
@@ -98,10 +98,144 @@ export function createChromeApp(input: RuntimeInput) {
   }
   function set(next: AppState) { state = next; publish() }
   function save() { input.saveLocation?.(locationHash(state)) }
+  /** Showing a part or a take leaves the workspace's board. */
   function selected(next: AppState, plan: Plan = { _tag: "None" }) {
     generation++
-    set(reconcileSelection({ ...next, takeCreated: next.take ? next.takeCreated : null, plan, tools: { ...next.tools, side: !next.take && next.tools.side === "record" ? "closed" : next.tools.side } }))
+    set(reconcileSelection({ ...next, workspace: null, idea: null, takeCreated: next.take ? next.takeCreated : null, plan, tools: { ...next.tools, side: !next.take && next.tools.side === "record" ? "closed" : next.tools.side } }))
     save(); knobs.refresh()
+  }
+  /** Show a workspace's board. Ask starts from the question already written. */
+  function showWorkspace(id: string | null) {
+    const workspace = id === null ? null : state.takes?.workspaces.find(item => item.id === id)
+    if (id !== null && !workspace) return
+    const prompt = workspace?._tag === "Ready" && workspace.ideas.length === 0 ? workspace.question : ""
+    generation++
+    set(reconcileSelection({ ...state, workspace: id, idea: null, same: new Set(), plan: { _tag: "None" }, prompt: id === state.workspace ? state.prompt : prompt }))
+    save()
+  }
+  /** A write to the open workspace, then the takes again, which carry it. */
+  async function workspaceWrite(name: string, path: string, body: object = {}) {
+    const workspace = openWorkspace(state)
+    if (!workspace) return
+    await takeRequest(name, async () => {
+      await input.request(`workspaces/${workspace.id}/${path}`, body)
+      await refreshTakes()
+    })
+  }
+  const ideaResponse = Type.Object({ take: Type.String({ pattern: "^[1-9][0-9]*$" }) })
+  /**
+   * The bar's main button on a board (decision 45). Ask saves the question,
+   * then plans the ideas and starts one per direction, as takes do: a plan
+   * has no review step, and Cancel starts nothing. More starts one idea from
+   * the prompt.
+   */
+  async function startWorkspace() {
+    const workspace = openWorkspace(state)
+    const board = snapshot.workspace
+    if (!workspace || board._tag !== "Open" || board.bar.go.availability._tag !== "Enabled" || state.plan._tag !== "None" || state.operation._tag !== "Idle") return
+    const id = workspace.id, device = deviceOf(state).id, images = wireImages(), submitted = submission(), prompt = state.prompt.trim()
+    const withImages = images.length ? { images } : {}
+    if (board.bar.mode === "More") {
+      await takeRequest("Starting an idea", async () => {
+        const { take } = parseWire(ideaResponse, await input.request<unknown>(`workspaces/${id}/ideas`, { device, prompt, ...withImages }))
+        consumeSubmission(submitted)
+        await refreshTakes()
+        set({ ...state, idea: take })
+      })
+      return
+    }
+    if (board.bar.mode !== "Ask") return
+    if (prompt !== workspace.question) await takeRequest("Saving the question", () => input.request(`workspaces/${id}/question`, { question: prompt }))
+    if (state.count === 1) {
+      await takeRequest("Starting an idea", async () => {
+        await input.request<unknown>(`workspaces/${id}/ideas`, { device, ...withImages })
+        consumeSubmission(submitted)
+        await refreshTakes()
+      })
+      return
+    }
+    const planId = ++generation, count = state.count
+    set({ ...state, plan: { _tag: "Ideas", workspace: id, device, submitted, count, id: planId }, notices: [] })
+    try {
+      const plan = parseWire(PlanSchema, await input.request<unknown>(`workspaces/${id}/plan`, { count, device, ...withImages }))
+      if (!isPlanning(planId)) return
+      const directions = plan.directions.filter(direction => direction.title.trim() && direction.brief.trim())
+      if (!directions.length) { set({ ...state, plan: { _tag: "None" }, notices: [{ kind: "error", text: plan.note || "The planner found no way to answer this question." }] }); return }
+      const titles = directions.map(direction => direction.title.trim())
+      const results = await Promise.allSettled(directions.map(async direction => parseWire(ideaResponse, await input.request<unknown>(`workspaces/${id}/ideas`, { device, direction, others: titles.filter(title => title !== direction.title.trim()), ...withImages }))))
+      const started = results.flatMap(result => result.status === "fulfilled" ? [result.value.take] : [])
+      const failures = results.flatMap(result => result.status === "rejected" ? [String(result.reason)] : [])
+      if (isPlanning(planId)) {
+        if (started.length) consumeSubmission(submitted)
+        const notes = directions.length < count && plan.note ? [plan.note] : []
+        set({ ...state, plan: { _tag: "None" }, notices: [...notes.map(text => ({ kind: "info" as const, text })), ...failures.map(text => ({ kind: "error" as const, text }))] })
+      }
+      await refreshTakes()
+    } catch (error) {
+      if (isPlanning(planId)) { set({ ...state, plan: { _tag: "None" } }); notify(error) }
+    }
+  }
+  async function followIdea(take: string) {
+    const board = snapshot.workspace
+    const workspace = openWorkspace(state)
+    if (!workspace || board._tag !== "Open" || board.bar.mode !== "Idea" || board.bar.idea?.take !== take || board.bar.go.availability._tag !== "Enabled") return
+    const submitted = submission(), images = wireImages()
+    await takeRequest("Sending to the idea", async () => {
+      await input.request(`workspaces/${workspace.id}/ideas/${take}/prompt`, { prompt: state.prompt.trim(), ...(images.length ? { images } : {}) })
+      consumeSubmission(submitted)
+      await refreshTakes()
+    })
+  }
+  async function discardIdea(take: string) {
+    const workspace = openWorkspace(state)
+    const idea = workspace?.ideas.find(item => item.take === take)
+    if (!workspace || !idea) return
+    if (idea.files.length && !input.confirm?.(`Throw away idea ${take} and its changes to ${idea.files.length} files? The questions and answers stay.`)) return
+    await workspaceWrite("Discarding the idea", `ideas/${take}/discard`)
+    if (state.idea === take) set({ ...state, idea: null })
+  }
+  /** The board cells whose page shows exactly what Today's page of the same row shows. */
+  let compareTimer: ReturnType<typeof setTimeout> | undefined
+  function compareSoon() {
+    clearTimeout(compareTimer)
+    compareTimer = setTimeout(compareCells, 150)
+  }
+  function compareCells() {
+    const board = snapshot.workspace
+    const same = new Set<string>()
+    if (board._tag === "Open") {
+      for (const row of board.rows) {
+        const cells = board.cells.filter(cell => cell.row === row.key && cell.frame)
+        const today = cells.find(cell => cell.column === "today")?.frame
+        const base = today ? pageSignature(today.key) : null
+        if (base === null) continue
+        for (const cell of cells) if (cell.column !== "today" && cell.frame && pageSignature(cell.frame.key) === base) same.add(cell.frame.key)
+      }
+    }
+    if (same.size !== state.same.size || [...same].some(key => !state.same.has(key))) set({ ...state, same })
+  }
+  /**
+   * What a rendered page shows: the host's markup and every CSS rule, in
+   * order, without the take tag in URLs. Two pages with one signature draw
+   * the same pixels in one browser at one size. A page that differs only in
+   * a canvas or a script's timing can show the same pixels and still differ
+   * here; then its cell is not dimmed.
+   */
+  function pageSignature(key: string): string | null {
+    if (state.reports.get(key)?.state !== "Rendered") return null
+    try {
+      const doc = frames.get(key)?.contentDocument
+      if (!doc) return null
+      const host = doc.getElementById("caliper-host") ?? doc.body
+      const rules = [...doc.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules].map(rule => rule.cssText) } catch { return [] } })
+      return `${host.outerHTML}\n${rules.join("\n")}`.replace(/([?&])take=\d+&?/g, "$1").replace(/[?&](?=["')\s])/g, "")
+    } catch { return null }
+  }
+  /** Every frame the view draws: the canvas's, or the board's cells. */
+  function viewFrames(): readonly FrameView[] {
+    const board = snapshot.workspace
+    if (board._tag === "Open") return board.cells.flatMap(cell => cell.frame ? [cell.frame] : [])
+    return snapshot.canvas._tag === "Frames" ? snapshot.canvas.frames : []
   }
   function selectState(ref: StateRef) {
     if (!stateExists(state.project?.parts ?? [], ref)) return
@@ -204,7 +338,7 @@ export function createChromeApp(input: RuntimeInput) {
       if (isPlanning(id)) { set({ ...state, plan: { _tag: "None" } }); notify(error) }
     }
   }
-  function isPlanning(id: number) { return state.plan._tag === "Planning" && state.plan.id === id }
+  function isPlanning(id: number) { return (state.plan._tag === "Planning" || state.plan._tag === "Ideas") && state.plan.id === id }
   /** A numeric id is reusable. Re-read after flushing and bind every write to its creation identity. */
   async function preflight(take: TakeView): Promise<TakeView | null> {
     if (!await code.flush()) return null
@@ -215,6 +349,8 @@ export function createChromeApp(input: RuntimeInput) {
   }
   async function actOnTake(id: string, operation: "accept" | "discard" | "stop" | "alternate") {
     const captured = state.takes?.takes.find(take => take.take === id)
+    // An idea's Stop goes through its workspace; takes routes refuse ideas.
+    if (!captured && operation === "stop" && openWorkspace(state)?.ideas.some(idea => idea.take === id)) return workspaceWrite("Stopping the idea", `ideas/${id}/stop`)
     if (!captured) return
     let take = captured
     if (operation === "accept" || operation === "alternate") {
@@ -287,7 +423,7 @@ export function createChromeApp(input: RuntimeInput) {
     onPrompt: prompt => { if (enabled(snapshot.composer.edit)) set({ ...state, prompt }) }, onCount: count => { if (state.plan._tag === "None") set({ ...state, count }) }, onModels: models.load, onModel: models.choose, onAttach: files => immediate(() => attach(files)),
     onRemoveAttachment: id => { if (state.plan._tag !== "None") return; const image = state.attachments.find(image => image.id === id); if (image) input.revokeImage?.(image.url); set({ ...state, attachments: state.attachments.filter(image => image.id !== id), notices: [] }) },
     onStart: () => immediate(start), onFollow: id => immediate(() => follow(id)),
-    onPlanCancel: () => { if (state.plan._tag !== "Planning") return; generation++; set({ ...state, plan: { _tag: "None" } }) },
+    onPlanCancel: () => { if (state.plan._tag === "None") return; generation++; set({ ...state, plan: { _tag: "None" } }) },
     onAccept: id => immediate(() => actOnTake(id, "accept")), onDiscard: id => immediate(() => actOnTake(id, "discard")), onStop: id => immediate(() => actOnTake(id, "stop")), onPrepareAlternate: id => immediate(() => actOnTake(id, "alternate")),
     onRecordClose: () => applyTools({ _tag: "Close", pane: "record" }), onReview: integration.review, onIntegrationCheck: integration.check, onBehaviorReviewed: integration.behaviorReviewed,
     onApplyAlternate: (id, revision) => immediate(async () => {
@@ -328,12 +464,25 @@ export function createChromeApp(input: RuntimeInput) {
       knobs.refresh()
     },
     onFrameGeometry: (key, geometry) => { geometries.set(key, geometry) }, onEditorMount: code.mount, onReviewDiffMount: integration.mountDiff,
+    onWorkspace: showWorkspace,
+    onWorkspaceNew: () => immediate(() => takeRequest("New workspace", async () => {
+      const made = parseWire(Type.Object({ workspace: Type.String({ pattern: "^[1-9][0-9]*$" }) }), await input.request<unknown>("workspaces", { question: "" }))
+      await refreshTakes()
+      showWorkspace(made.workspace)
+    })),
+    onPin: (ref, pinned) => { if (stateExists(state.project?.parts ?? [], ref) || !pinned) immediate(() => workspaceWrite(pinned ? "Pinning" : "Unpinning", "rows", { ...ref, pinned })) },
+    onIdea: take => { if (take === null || openWorkspace(state)?.ideas.some(idea => idea.take === take)) set({ ...state, idea: take }) },
+    onQuestions: open => { if (!currentWorkspace(state)) return; applyTools(open ? { _tag: "Press", tool: "takes", hasTake: true } : { _tag: "Close", pane: "record" }) },
+    onAsk: text => { if (text.trim()) immediate(() => workspaceWrite("Asking", "questions", { text: text.trim() })) },
+    onAnswer: (question, answer, reason) => { if (answer.trim() && reason.trim()) immediate(() => workspaceWrite("Answering", `questions/${question}/answer`, { answer: answer.trim(), reason: reason.trim() })) },
+    onWorkspaceStart: () => immediate(startWorkspace),
+    onIdeaFollow: take => immediate(() => followIdea(take)),
+    onIdeaDiscard: take => immediate(() => discardIdea(take)),
+    onWorkspaceDiscard: id => { if (openWorkspace(state)?.id === id) immediate(async () => { await workspaceWrite("Discarding the ideas", "discard"); set({ ...state, idea: null }) }) },
   }
   function reloadFrames(onlyTake?: string, file?: string) {
-    const canvas = snapshot.canvas
-    if (canvas._tag !== "Frames") return
     const reports = new Map(state.reports)
-    for (const frame of canvas.frames) {
+    for (const frame of viewFrames()) {
       if (onlyTake !== undefined && frame.take !== onlyTake) continue
       if (file?.endsWith(".css")) continue
       reports.delete(frame.key); reportDocuments.delete(frame.key)
@@ -350,10 +499,16 @@ export function createChromeApp(input: RuntimeInput) {
   function receiveTakes(value: unknown) {
     const takes = parseTakes(value), before = state.takes
     state = { ...state, takes }
+    // A board opened from the address starts from the question already written, as one opened from the list does.
+    if (!before && state.workspace !== null && state.prompt === "") {
+      const shown = currentWorkspace(state)
+      if (shown?._tag === "Ready" && shown.ideas.length === 0) state = { ...state, prompt: shown.question }
+    }
     models.receiveCurrent(takes.agent._tag === "Ready" ? takes.agent.model : null)
     state = reconcileSelection(state); save(); publish()
-    for (const take of takes.takes) {
-      const prior = before?.takes.find(candidate => candidate.take === take.take && candidate.created === take.created)
+    const ideas = (snapshot: typeof takes | null) => (snapshot?.workspaces ?? []).flatMap(workspace => workspace._tag === "Ready" ? workspace.ideas : [])
+    for (const take of [...takes.takes, ...ideas(takes)]) {
+      const prior = [...before?.takes ?? [], ...ideas(before)].find(candidate => candidate.take === take.take && candidate.created === take.created)
       if (prior && (prior.files.join(",") !== take.files.join(",") || prior.run._tag === "Running" && take.run._tag !== "Running")) reloadFrames(take.take)
     }
     markup.schedule()
@@ -362,6 +517,8 @@ export function createChromeApp(input: RuntimeInput) {
     const change: CodeChange = parseWire(CodeChangeSchema, value)
     code.receive(change)
     integration.receive(change)
+    // A stylesheet's hot update changes a page without a new report.
+    if (snapshot.workspace._tag === "Open") compareSoon()
     // Vite handles both source and stylesheet HMR. CSS must retain scenario input state.
     knobs.refresh()
   }
@@ -369,7 +526,7 @@ export function createChromeApp(input: RuntimeInput) {
     if (event.origin !== input.origin || !Check(FrameReportSchema, event.data)) return
     const report = event.data
     const key = [...frames].find(([, frame]) => frame.contentWindow === event.source)?.[0]
-    const frame: FrameView | undefined = snapshot.canvas._tag === "Frames" ? snapshot.canvas.frames.find(frame => frame.key === key) : undefined
+    const frame: FrameView | undefined = viewFrames().find(frame => frame.key === key)
     if (!key || !frame || report.part !== frame.preview.part || report.partState !== frame.preview.state || report.take !== frame.take) return
     const node = frames.get(key)
     try {
@@ -382,6 +539,7 @@ export function createChromeApp(input: RuntimeInput) {
     } catch { return }
     reportDocuments.set(key, node?.contentDocument ?? null)
     set({ ...state, reports: new Map(state.reports).set(key, report) }); knobs.refresh(); markup.schedule()
+    if (snapshot.workspace._tag === "Open") compareSoon()
   }
   publish()
   return {
@@ -397,6 +555,6 @@ export function createChromeApp(input: RuntimeInput) {
       set({ ...state, projects })
     },
     unreachable: (reason = "Vite is not reachable.") => set({ ...state, connection: { _tag: "Unreachable", reason } }),
-    dispose: () => { disposed = true; generation++; for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); models.destroy(); markup.dispose() },
+    dispose: () => { disposed = true; generation++; clearTimeout(compareTimer); for (const [key, node] of frames) { const load = loads.get(key); if (load) node.removeEventListener("load", load) } frames.clear(); loads.clear(); geometries.clear(); reportDocuments.clear(); subscribers.clear(); clearImages(); code.destroy(); knobs.destroy(); checks.destroy(); integration.destroy(); models.destroy(); markup.dispose() },
   }
 }

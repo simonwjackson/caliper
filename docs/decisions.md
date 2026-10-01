@@ -1019,3 +1019,21 @@ Costs:
   9 files and never rendered. The idea's prompt now names the budget and asks
   for a first change before half of it is gone. Cost: an idea can spend twice
   a take's model calls.
+- The board is in `src/client/ui/board/`, with `planBoard` beside it. The
+  rule takes the frame's true size as an input, because the device and the
+  calibration decide it; the mockup measured one RG353M frame. A cell is a
+  live frame of the row's state with the idea's `?take=`, as a take's frame
+  is. The board mounts only the cells on screen.
+- "Same as Today" compares the two pages in the browser, not their pixels:
+  the markup of the part's host and every CSS rule, in order, with the take
+  tag taken out of URLs. The frames share the chrome's origin (decision 37),
+  so this needs no render on the server. Equal markup and CSS draw equal
+  pixels in one browser at one size. Cost: a page that differs only in a
+  canvas or in a script's timing is never dimmed, and Today must be on screen
+  for its row's cells to compare. The mockup planned a pixel comparison.
+- The Questions button is always in the board's header, not only once a
+  question exists, because Discard lives in the Questions panel and must
+  stay one press away. On a phone, opening the questions puts their sheet in
+  front, as a take's record does; the mockup drew it behind until you answer.
+- A row whose state no longer exists says so in its cells and offers Unpin,
+  because the parts list has no pin for a state that is gone.

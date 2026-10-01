@@ -32,6 +32,7 @@ export default function Chrome({ view, actions }: ChromeProps) {
       <div role="group" aria-label="Device">{view.devices.map(device =>
         <button key={device.id} data-cal={CAL.device} data-device={device.id} type="button" aria-pressed={device.id === view.device.id} onClick={() => actions.onDevice(device.id)}>{device.name}</button>)}</div>
     </main>
+    <WorkspaceReference view={view} actions={actions} />
     <MarkupReference view={view} actions={actions} />
     <Composer view={view} actions={actions} />
     {view.focusedTake && <TakeActions take={view.focusedTake} actions={actions} />}
@@ -64,6 +65,10 @@ function Navigation({ view, actions }: ChromeProps) {
       {nav.projects.choices.map(choice => <option key={choice.id} value={choice.id} disabled={choice.problem !== ""}>{choice.problem ? `${choice.name}: ${choice.problem}` : choice.name}</option>)}
     </select>}
     <input data-cal={CAL.filter} type="search" aria-label="Filter parts" value={nav.filter} onChange={event => actions.onFilter(event.currentTarget.value)} />
+    <section data-cal={CAL.workspaces} aria-label="Workspaces">
+      <Action hook={CAL.workspaceNew} availability={nav.workspaces.create} action={actions.onWorkspaceNew}>New workspace</Action>
+      {nav.workspaces.items.map(item => <button key={item.id} type="button" data-cal={CAL.workspace} data-workspace={item.id} aria-current={item.selected} title={item.problem} onClick={() => actions.onWorkspace(item.selected ? null : item.id)}>{item.name} · {item.meta}</button>)}
+    </section>
     {nav.scenario._tag === "Selected" && <section aria-label="Scenario context">
       <p>{nav.scenario.editingLabel}</p>
       <select data-cal={CAL.context} aria-label="Preview scenario" value={nav.scenario.chosen} onChange={event => actions.onContext(event.currentTarget.value)}>
@@ -78,6 +83,7 @@ function Navigation({ view, actions }: ChromeProps) {
       <button type="button" data-cal={CAL.part} data-part={part.file} aria-current={part.selected} title={`${part.file}\n${part.note}\n${part.layerSite}`} onClick={() => actions.onPart(part.file)}>{part.name}</button>
       {part.expanded && part.states.map(state => <div key={state.ref.state}>
         <button type="button" data-cal={CAL.state} data-part={state.ref.part} data-state={state.ref.state} aria-current={state.selected} title={state.site} onClick={() => actions.onState(state.ref)}>{state.label} {state.badge?.label}</button>
+        {state.pin._tag === "Pin" && <button type="button" data-cal={CAL.pin} data-part={state.ref.part} data-state={state.ref.state} aria-pressed={state.pin.pinned} disabled={disabled(state.pin.availability)} onClick={() => state.pin._tag === "Pin" && actions.onPin(state.ref, !state.pin.pinned)}>{state.pin.pinned ? "Unpin" : "Pin"}</button>}
         {state.takes.length > 0 && <button type="button" data-cal={CAL.compare} data-part={state.ref.part} data-state={state.ref.state} aria-current={state.comparing} onClick={() => actions.onCompare(state.ref)}>Compare {state.takes.length} takes</button>}
         {state.takes.map(take => <button key={take.id} type="button" data-cal={CAL.navTake} data-take={take.id} aria-current={take.selected} title={take.badge?.detail} onClick={() => actions.onTake(take.id)}>{take.label} {take.badge?.label}</button>)}
       </div>)}
@@ -174,6 +180,54 @@ function Composer({ view, actions }: ChromeProps) {
     {view.plan._tag === "None" && <Action hook={CAL.start} availability={composer.start} action={actions.onStart}>{composer.startLabel}</Action>}
     <Notices notices={composer.notices} />
   </form>
+}
+/**
+ * Decision 45 reference: a workspace's board, its questions and its bar. Every
+ * cell's frame mounts as the canvas's frames do. Not the production layout.
+ */
+function WorkspaceReference({ view, actions }: ChromeProps) {
+  const board = view.workspace
+  if (board._tag === "None") return null
+  if (board._tag === "Damaged") return <section data-cal={CAL.board} role="alert">Workspace {board.id}: {board.reason}</section>
+  const bar = board.bar
+  return <section data-cal={CAL.board} aria-label="Workspace board">
+    <h1>{board.title} · {board.statusLabel}</h1><p>{board.question}</p>
+    <button type="button" data-cal={CAL.questionsOpen} aria-pressed={view.tools.side === "record"} onClick={() => actions.onQuestions(view.tools.side !== "record")}>Questions</button>
+    {board.columns.map(column => column._tag === "Idea"
+      ? <button key={column.key} type="button" data-cal={CAL.boardIdea} data-take={column.take} aria-current={column.focused} title={column.brief} onClick={() => actions.onIdea(column.focused ? null : column.take)}>{column.take} · {column.name} · {column.run._tag}</button>
+      : <span key={column.key}>{column._tag}</span>)}
+    {board.rows.map(row => <section key={row.key} aria-label={`${row.part}, ${row.state}`}>
+      <h2>{row.part} · {row.state}</h2>
+      {row.missing && <button type="button" data-cal={CAL.pin} data-part={row.ref.part} data-state={row.ref.state} onClick={() => actions.onPin(row.ref, false)}>Unpin</button>}
+      {board.cells.filter(cell => cell.row === row.key).map(cell => <figure key={cell.column} data-cal={CAL.boardCell} data-column={cell.column} data-same={cell.same || undefined}>
+        {cell.frame ? <BoardCellFrame frame={cell.frame} view={view} actions={actions} /> : <p>Waiting</p>}{cell.same && <figcaption>Same as Today</figcaption>}
+      </figure>)}
+    </section>)}
+    {view.tools.side === "record" && <section data-cal={CAL.questions} aria-label="Questions">
+      <button type="button" onClick={() => actions.onQuestions(false)}>Close</button>
+      {board.questions.map(question => <div key={question.id}><p>{question.text} · {question.by}</p>
+        {question._tag === "Answered" ? <p>{question.answer} Because {question.reason}</p>
+          : <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); actions.onAnswer(question.id, String(data.get("answer")), String(data.get("reason"))) }}>
+            <input name="answer" aria-label="Answer" /><input name="reason" aria-label="Reason" />
+            <button type="submit" data-cal={CAL.questionAnswer} disabled={disabled(board.answer)}>Save answer</button>
+          </form>}
+      </div>)}
+      <input data-cal={CAL.questionAsk} aria-label="Add a question" disabled={disabled(board.ask)} onKeyDown={event => { if (event.key === "Enter" && event.currentTarget.value.trim()) actions.onAsk(event.currentTarget.value) }} />
+      <Action hook={CAL.workspaceDiscard} availability={board.discard.availability} action={() => actions.onWorkspaceDiscard(board.id)}>Discard {board.discard.ideas} ideas</Action>
+    </section>}
+    <form aria-label="Workspace composer" onSubmit={event => event.preventDefault()}>
+      <textarea aria-label="Prompt" placeholder={bar.placeholder} disabled={disabled(bar.edit)} value={bar.prompt} onChange={event => actions.onPrompt(event.currentTarget.value)} />
+      {bar.idea && <Action hook={CAL.ideaDiscard} take={bar.idea.take} availability={bar.idea.discard} action={() => bar.idea && actions.onIdeaDiscard(bar.idea.take)}>Discard</Action>}
+      {bar.mode === "Idea" && bar.idea
+        ? <Action hook={CAL.ideaFollow} take={bar.idea.take} availability={bar.go.availability} action={() => bar.idea && actions.onIdeaFollow(bar.idea.take)}>{bar.go.label}</Action>
+        : bar.mode !== "Closed" && <Action hook={CAL.workspaceStart} availability={bar.go.availability} action={actions.onWorkspaceStart}>{bar.go.label}</Action>}
+      <Notices notices={bar.notices} />
+    </form>
+  </section>
+}
+function BoardCellFrame({ frame, view, actions }: { frame: FrameView; view: ChromeView; actions: ChromeActions }) {
+  const mount = useCallback((node: HTMLIFrameElement | null) => actions.onFrameMount(frame.key, node), [actions.onFrameMount, frame.key])
+  return <iframe ref={mount} data-cal={CAL.frame} data-frame-key={frame.key} data-part={frame.preview.part} data-state={frame.preview.state} data-take={frame.take ?? undefined} title={frame.title} src={frame.src} width={view.device.cssWidth} height={view.device.cssHeight} />
 }
 const chained = (view: ChromeView, key: string) => view.canvas._tag === "Frames" && view.canvas.chains.some(chain => chain.shown === key || chain.parent === key)
 /** Phase 5 reference: one chain as its heading, history and pair. Not the production layout. */

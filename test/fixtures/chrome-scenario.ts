@@ -28,6 +28,8 @@ export function createChromeScenario(initial: ChromeView) {
     onKnobInput: record("onKnobInput"), onKnobCommit: record("onKnobCommit"), onKnobCancel: record("onKnobCancel"), onLiteralsOpen: record("onLiteralsOpen"), onLiteralDraft: record("onLiteralDraft"), onLiteralName: record("onLiteralName"), onLiteralHome: record("onLiteralHome"), onPromote: record("onPromote"),
     onChecksClose: record("onChecksClose"), onCheckRun: record("onCheckRun"), onCheckStop: record("onCheckStop"), onImageLoaded: record("onImageLoaded"), onImageFailed: record("onImageFailed"), onImageReviewed: record("onImageReviewed"), onApproveImage: record("onApproveImage"),
     onPxPerMm: record("onPxPerMm"), onResetCalibration: record("onResetCalibration"), onCalibrationClose: record("onCalibrationClose"), onFrameMount: record("onFrameMount"), onFrameGeometry: record("onFrameGeometry"), onEditorMount: record("onEditorMount"), onReviewDiffMount: record("onReviewDiffMount"),
+    onWorkspace: record("onWorkspace"), onWorkspaceNew: record("onWorkspaceNew"), onPin: record("onPin"), onIdea: record("onIdea"), onQuestions: record("onQuestions"), onAsk: record("onAsk"), onAnswer: record("onAnswer"),
+    onWorkspaceStart: record("onWorkspaceStart"), onIdeaFollow: record("onIdeaFollow"), onIdeaDiscard: record("onIdeaDiscard"), onWorkspaceDiscard: record("onWorkspaceDiscard"),
   } satisfies ChromeActions
   const actions: ChromeActions = {
     ...observed,

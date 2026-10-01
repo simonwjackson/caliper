@@ -16,6 +16,8 @@ import type { Closable, OpenPanes, ToolEvent } from "../../tool-rule"
 export type LocalTools = {
   readonly press: (view: ChromeView, tool: Tool) => ChromeView
   readonly close: (view: ChromeView, pane: Closable) => ChromeView
+  /** A workspace's questions open in the record's place (decision 45), as the app's Takes press with a take does. */
+  readonly questions: (view: ChromeView) => ChromeView
 }
 type Record = Extract<ChromeView["record"], { _tag: "Open" }>
 
@@ -48,5 +50,6 @@ export function createLocalTools(initial: ChromeView): LocalTools {
   return {
     press: (view, tool) => apply(view, shown => ({ _tag: "Press", tool, hasTake: shown !== null })),
     close: (view, pane) => apply(view, () => ({ _tag: "Close", pane })),
+    questions: view => apply(view, () => ({ _tag: "Press", tool: "takes", hasTake: true })),
   }
 }

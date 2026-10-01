@@ -134,7 +134,7 @@ included. It uses a deterministic local model endpoint for take transport, not
 a paid model. Run `nix develop -c bun run verify:chrome-delivery` for
 linked/packed React-major isolation, source HMR, lazy editor delivery and
 pinned-tool self-hosting. Run `nix develop -c node scripts/ui/verify.mjs` for the
-Darkroom regions: 26 fixtures at three sizes, every hook, keyboard, frame and
+Darkroom regions and the workspace board: 46 fixtures at three sizes, every hook, keyboard, frame and
 editor preservation, and reachability at eight sizes. None of these prove
 real-device input.
 

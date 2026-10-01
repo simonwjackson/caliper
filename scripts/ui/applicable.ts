@@ -14,17 +14,21 @@ import type { ChromeView } from "../../src/client/ui/contract"
 import { CAL } from "../../src/client/ui/hooks"
 import type { CalHook } from "../../src/client/ui/hooks"
 
-export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string; readonly pairs?: string }): CalHook[] {
-  const hooks = new Set<CalHook>([CAL.root, CAL.connection, CAL.tool, CAL.navToggle, CAL.canvas])
+export function applicableHooks(view: ChromeView, layout: { readonly bar: boolean; readonly code: string; readonly pairs?: string; readonly boardColumns?: string }): CalHook[] {
+  // Decision 45: a workspace's board replaces the canvas.
+  const board = view.workspace._tag === "None" ? null : view.workspace
+  const hooks = new Set<CalHook>([CAL.root, CAL.connection, CAL.tool, CAL.navToggle, board ? CAL.board : CAL.canvas])
   const add = (...list: CalHook[]) => { for (const hook of list) hooks.add(hook) }
 
   // Navigation (the drawer is opened before hooks are read on small sizes).
   {
-    add(CAL.nav, CAL.filter, CAL.setup)
+    add(CAL.nav, CAL.filter, CAL.setup, CAL.workspaces, CAL.workspaceNew)
+    if (view.navigation.workspaces.items.length) add(CAL.workspace)
     if (view.navigation.projects._tag === "Choices") add(CAL.project)
     if (view.navigation.parts.length) add(CAL.partExpand, CAL.part)
     for (const part of view.navigation.parts.filter(item => item.expanded)) {
       if (part.states.length) add(CAL.state)
+      if (part.states.some(state => state.pin._tag === "Pin")) add(CAL.pin)
       if (part.states.some(state => state.takes.length)) add(CAL.compare, CAL.navTake)
     }
     const scenario = view.navigation.scenario
@@ -82,13 +86,45 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
     }
   }
 
-  if (view.plan._tag !== "None") add(CAL.plan)
+  if (view.plan._tag !== "None" && !board) add(CAL.plan)
 
-  if (layout.bar) {
+  // The board: its cells, the idea a column names, the questions and the workspace's bar.
+  if (board?._tag === "Open") {
+    add(CAL.questionsOpen, CAL.caption, CAL.device)
+    if (board.rows.length) {
+      add(CAL.boardCell)
+      if (board.cells.some(cell => cell.frame)) add(CAL.frame)
+      // A column picker holds the ideas that do not fit; one column shows an idea's name only when that idea is focused.
+      const ideas = board.columns.filter(column => column._tag === "Idea")
+      if (ideas.length && (layout.boardColumns !== "One" || ideas.some(column => column._tag === "Idea" && column.focused))) add(CAL.boardIdea)
+      if (board.status !== "Closed" && board.rows.some(row => row.missing)) add(CAL.pin)
+    }
+    if (view.tools.side === "record") {
+      add(CAL.questions)
+      if (board.status !== "Closed") add(CAL.questionAsk, CAL.workspaceDiscard)
+    }
+    if (layout.bar) {
+      add(CAL.composer, CAL.prompt)
+      if (view.plan._tag !== "None") add(CAL.planCancel)
+      else if (board.bar.mode !== "Closed") {
+        add(CAL.attach)
+        if (board.bar.mode === "Idea" && board.bar.idea) {
+          add(CAL.ideaFollow, CAL.ideaDiscard)
+          if (board.bar.idea.stop._tag === "Enabled") add(CAL.stop)
+        } else add(CAL.workspaceStart)
+      }
+      if (view.composer.attachments.length) add(CAL.attachments, CAL.attachmentRemove)
+      if (view.composer.agent._tag === "Failed" || view.composer.agent._tag === "Off") add(CAL.agent)
+    }
+  }
+
+  if (layout.bar && !board) {
     const composer = view.composer
     add(CAL.composer, CAL.prompt)
     if (view.plan._tag === "None") {
       add(CAL.start, CAL.count, CAL.agent, CAL.skills, CAL.attach)
+      // Decision 43: with an agent, the menu holds the model chooser.
+      if (composer.agent._tag === "Ready") add(CAL.models)
       // Phase 6 (planner choice 14): marks on the real files that go with the typed prompt are named beside it.
       if (composer.marks._tag === "WithPrompt") add(CAL.promptMarks)
       if (composer.follow) add(CAL.follow)
@@ -105,7 +141,7 @@ export function applicableHooks(view: ChromeView, layout: { readonly bar: boolea
     if (composer.agent._tag === "Failed" || composer.agent._tag === "Off") add(CAL.agent)
   }
 
-  if (view.tools.side === "record" && view.record._tag === "Open") {
+  if (view.tools.side === "record" && view.record._tag === "Open" && !board) {
     const { take, integration } = view.record
     add(CAL.record, CAL.recordClose, CAL.log, CAL.discard)
     if (take.files.length) add(CAL.file)

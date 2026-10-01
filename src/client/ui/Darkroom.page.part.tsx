@@ -41,3 +41,8 @@ export function References() { return <Chrome fixture="references" /> }
 export function TypeAhead() { return <Chrome fixture="typeahead" /> }
 export function RealFilesMarked() { return <Chrome fixture="original" /> }
 export function WithPrompt() { return <Chrome fixture="withPrompt" /> }
+/** Decision 45: a workspace's board, with the questions beside it. */
+export function Workspace() { return <Chrome fixture="workspaceBoard" /> }
+export function WorkspaceQuestion() { return <Chrome fixture="workspaceFrame" /> }
+export function WorkspacePlanning() { return <Chrome fixture="workspacePlanning" /> }
+export function WorkspaceClosed() { return <Chrome fixture="workspaceClosed" /> }

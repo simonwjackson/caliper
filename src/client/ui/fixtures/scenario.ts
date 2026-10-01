@@ -13,6 +13,7 @@ import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, familyOf, readChoices, takeKey, withChains } from "./chains"
 import type { ChainChoices } from "./chains"
 import { createLocalTools } from "./tools"
+import { answerLocally, askLocally, discardLocally, focusLocally, pinLocally, promptLocally } from "./workspace-actions"
 import type { MarkRect } from "../contract"
 
 export type Call = { readonly name: keyof ChromeActions; readonly args: readonly unknown[] }
@@ -141,6 +142,7 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onSubject: record("onSubject"), onWholeScenario: record("onWholeScenario"),
     onDevice: record("onDevice", id => { const device = view.devices.find(item => item.id === id); if (device) update({ ...view, device }) }),
     onPrompt: record("onPrompt", prompt => {
+      if (view.workspace._tag === "Open") { update(promptLocally({ ...view, composer: { ...view.composer, prompt } }, prompt)); return }
       const ready = view.composer.agent._tag === "Ready" && prompt.trim() !== ""
       const availability = ready ? { _tag: "Enabled" } as const : { _tag: "Disabled", reason: prompt.trim() ? "The agent is not ready" : "Describe a change first" } as const
       const follow = view.composer.follow && view.focusedTake?.run._tag !== "Running" ? { ...view.composer.follow, availability } : view.composer.follow
@@ -218,6 +220,15 @@ export function createScenario(initial: ChromeView, editor?: Editor): Scenario {
     onFrameMount: record("onFrameMount"), onFrameGeometry: record("onFrameGeometry"),
     onEditorMount: record("onEditorMount", host => editor?.mount(host, view)),
     onReviewDiffMount: record("onReviewDiffMount"),
+    // Decision 45. Selecting another workspace or making one is core's; the board's own changes are local.
+    onWorkspace: record("onWorkspace"), onWorkspaceNew: record("onWorkspaceNew"),
+    onPin: record("onPin", (ref, pinned) => update(pinLocally(view, ref, pinned))),
+    onIdea: record("onIdea", take => update(focusLocally(view, take))),
+    onQuestions: record("onQuestions", open => update(open ? tools.questions(view) : tools.close(view, "record"))),
+    onAsk: record("onAsk", text => update(askLocally(view, text))),
+    onAnswer: record("onAnswer", (id, answer, reason) => update(answerLocally(view, id, answer, reason))),
+    onWorkspaceStart: record("onWorkspaceStart"), onIdeaFollow: record("onIdeaFollow"), onIdeaDiscard: record("onIdeaDiscard"),
+    onWorkspaceDiscard: record("onWorkspaceDiscard", () => update(discardLocally(view))),
   }
   return {
     actions, calls, getView: () => view, update,

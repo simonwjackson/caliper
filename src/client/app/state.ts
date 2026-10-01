@@ -1,4 +1,4 @@
-import type { Part, Project, StateRef, TakesSnapshot, TakeView } from "../../types"
+import type { Part, Project, StateRef, TakesSnapshot, TakeView, WorkspaceView } from "../../types"
 import type { ChromeView, Tool } from "../ui/contract"
 import { DEFAULT_PX_PER_MM, STANDARD_DEVICES, type Device } from "../device-frame.js"
 import { contextsFor, sameState, stateExists } from "../scenarios.js"
@@ -12,6 +12,8 @@ export type Submission = { rawPrompt: string; attachmentIds: readonly string[] }
 export type Plan =
   | { _tag: "None" }
   | { _tag: "Planning"; ask: Ask; submitted: Submission; count: number; id: number }
+  /** Decision 45: the planner turns a workspace's question into ideas. */
+  | { _tag: "Ideas"; workspace: string; device: string; submitted: Submission; count: number; id: number }
 export type AppState = {
   connection: ChromeView["connection"]
   project: Project | null
@@ -47,6 +49,11 @@ export type AppState = {
   /** This tab's project in the Caliper app, and every project the app lists (decision 37). */
   projectId: string | null
   projects: readonly ProjectListing[]
+  /** Decision 45: the workspace whose board replaces the canvas, and the idea the bar talks to. */
+  workspace: string | null
+  idea: string | null
+  /** Keys of board cells whose frame shows exactly what Today's frame of that row shows. */
+  same: ReadonlySet<string>
 }
 export type ProjectListing = { id: string; name: string; problem: string }
 /** Chain ids are `take@created` of the chain's first take; a damaged preference reads as none. */
@@ -79,7 +86,17 @@ export function createAppState(hash = "", storage: Preferences = { getItem: () =
     tools: { active, navOpen: storage.getItem("caliper:nav-open") !== "false", codeOpen, side, codeShare: clampShare(Number(storage.getItem("caliper:code-share")) || 0.45) },
     checksOpen: false, calibrationOpen: false, recentTools: restorePanes({ active, codeOpen, side, checksOpen: false, calibrationOpen: false }).recent, prompt: "", count: 1, operation: { _tag: "Idle" }, plan: { _tag: "None" }, attachments: [], notices: [], reports: new Map(),
     chainsOpen: new Set(), chainSolo: savedChainSolo(storage), projectId: null, projects: [],
+    workspace: saved.get("workspace"), idea: null, same: new Set(),
   }
+}
+/** The selected workspace as the takes snapshot has it, or null when none is selected or it is gone. */
+export function currentWorkspace(state: AppState): WorkspaceView | null {
+  return state.workspace === null ? null : state.takes?.workspaces.find(workspace => workspace.id === state.workspace) ?? null
+}
+/** The selected workspace when it can be read and is open: pins and new ideas need one. */
+export function openWorkspace(state: AppState): Extract<WorkspaceView, { _tag: "Ready" }> | null {
+  const workspace = currentWorkspace(state)
+  return workspace?._tag === "Ready" && workspace.status._tag === "Open" ? workspace : null
 }
 /** The project's devices; the standard ones until the project arrives. */
 export function devicesOf(state: AppState): readonly Device[] {
@@ -129,12 +146,19 @@ export function locationHash(state: AppState) {
     if (state.takeCreated !== null) params.set("takeCreated", String(state.takeCreated))
   }
   if (state.context) { params.set("contextPart", state.context.part); params.set("contextState", state.context.state) }
+  if (state.workspace) params.set("workspace", state.workspace)
   return `#${params}`
 }
 /** Preserve unavailable take ownership. Only a viewer selection falls back after source removal. */
-export function reconcileSelection(state: AppState): AppState {
-  if (!state.project) return state
-  const parts = state.project.parts
+export function reconcileSelection(input: AppState): AppState {
+  const project = input.project
+  if (!project) return input
+  let state = input
+  // A workspace that is gone, for example deleted by hand, leaves its board.
+  if (state.workspace !== null && state.takes && !currentWorkspace(state)) state = { ...state, workspace: null, idea: null }
+  const shown = currentWorkspace(state)
+  if (state.idea !== null && (shown?._tag !== "Ready" || !shown.ideas.some(idea => idea.take === state.idea))) state = { ...state, idea: null }
+  const parts = project.parts
   // A device the project does not list, for example one removed from vite.config, falls back to its first.
   if (state.device !== deviceOf(state).id) state = { ...state, device: deviceOf(state).id }
   if (state.take && state.takes) {

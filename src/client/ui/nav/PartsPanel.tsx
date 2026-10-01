@@ -5,6 +5,7 @@ import { CAL } from "../hooks"
 import { Panel } from "../atoms/Panel"
 import { PartRow } from "./PartRow"
 import { SetupFooter } from "./SetupFooter"
+import { WorkspaceList } from "./WorkspaceList"
 import "../tokens.css"
 import "./nav.css"
 
@@ -56,6 +57,7 @@ export function PartsPanel({ view, actions, drawer, onClose }: PartsPanelProps) 
           </div>}
         </section>}
         <div className="dr-parts__tree">
+          <WorkspaceList workspaces={nav.workspaces} pinning={view.workspace._tag === "Open" && view.workspace.bar.mode === "Ask"} actions={actions} picked={picked} />
           {nav.parts.length === 0 && <p className="dr-parts__empty">{nav.emptyMessage || "No parts match."}</p>}
           {LAYERS.map(layer => {
             const parts = nav.parts.filter(part => part.layer === layer)

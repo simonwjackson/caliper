@@ -3,6 +3,7 @@ import { acceptFlag, flagWords, historyLabel, lineageLabel, planChains } from ".
 import type { AcceptRecord, ChainTake } from "../../src/takes/chains.js"
 import type { AcceptFlag, Availability, ChainStepView, ChainView, ChromeView, DraftMarkView, FrameView, MarkupOutcome, MarkupView, TakeSummary } from "../../src/client/ui/contract"
 import { STANDARD_DEVICES, DEFAULT_PX_PER_MM } from "../../src/client/device-frame.js"
+import { WORKSPACE_SCENES, workspaceScene } from "../../src/client/ui/fixtures/workspaces"
 
 export const enabled: Availability = { _tag: "Enabled" }
 export const blocked: Availability = { _tag: "Disabled", reason: "Unavailable in this scenario" }
@@ -28,10 +29,10 @@ export function readyView(): ChromeView {
   return structuredClone({
     connection: { _tag: "Ready" }, selection: { _tag: "State", subject, preview, label: "Button · Default in Page · Menu open" },
     navigation: {
-      project: "Caliper", filter: "", countLabel: "2 parts", emptyMessage: "",
+      project: "Caliper", filter: "", countLabel: "2 parts", emptyMessage: "", workspaces: { items: [{ id: "1", name: "Quieter buttons", meta: "Open · no ideas yet", selected: false, problem: "" }], create: enabled },
       projects: { _tag: "Choices", choices: [{ id: "aaaaaaaaaaaa", name: "Caliper", current: true, problem: "" }, { id: "bbbbbbbbbbbb", name: "Pico", current: false, problem: "" }] },
-      parts: [{ file: subject.part, name: "Button", note: "A composed preview", layer: "atom", layerSite: "filename suffix", selected: true, expanded: true,
-        states: [{ ref: subject, label: "Default", site: subject.part, selected: true, comparing: true, badge: { status: "Review", label: "Needs review", detail: "Named coverage only" }, takes: [{ id: "6", label: "Quiet button", selected: true }] }] }],
+      parts: [{ file: subject.part, name: "Button", note: "A composed preview", layer: "atom", layerSite: "filename suffix", selected: true, expanded: true, pinned: 0,
+        states: [{ ref: subject, label: "Default", site: subject.part, selected: true, comparing: true, badge: { status: "Review", label: "Needs review", detail: "Named coverage only" }, takes: [{ id: "6", label: "Quiet button", selected: true }], pin: { _tag: "None" } }] }],
       scenario: { _tag: "Selected", subject, editingLabel: "Editing Button · Default", choices: [{ key: "isolated", label: "Isolated", context: null }, { key: "page", label: "Page · Menu open", context: preview }], chosen: "page", note: "",
         whole: { ref: preview, label: "Page · Menu open" }, children: [{ ref: subject, label: "Button · Default", selected: true }] },
       unavailable: [{ subject: { part: "src/Removed.part.tsx", state: "Gone" }, label: "Removed state", takes: [{ id: "8", label: "Take 8 · review or discard", selected: false }] }],
@@ -64,7 +65,7 @@ export function readyView(): ChromeView {
       ],
       literals: { _tag: "Ready", notice: "Review both edits", refused: [{ name: "border", where: ".button", reason: "No source map" }], literals: [{ id: "padding", property: "padding", value: "8px", selector: ".button", source: { file: "src/Button.css", line: 6 }, homes: [{ id: "root", label: ":root · Button.css:1" }], draft: { _tag: "Editing", name: "--button-padding", home: "root", preview: "Adds the token and replaces the literal", problem: "", create: enabled } }] },
     },
-    checks: { _tag: "Closed" }, calibration: { _tag: "Open", pxPerMm: DEFAULT_PX_PER_MM, calibrated: false },
+    checks: { _tag: "Closed" }, calibration: { _tag: "Open", pxPerMm: DEFAULT_PX_PER_MM, calibrated: false }, workspace: { _tag: "None" },
   } satisfies ChromeView)
 }
 
@@ -165,6 +166,8 @@ export function chainsView(history: "folded" | "open" = "folded"): ChromeView {
   return { ...ready, focusedTake: focused, record: ready.record._tag === "Open" ? { ...ready.record, take: focused } : ready.record, canvas: { _tag: "Frames", mode: "Takes", title: "Button", frames, chains: views } }
 }
 
+/** Every part's states unfolded, so their pins show. */
+const expanded = (view: ChromeView): ChromeView => ({ ...view, navigation: { ...view.navigation, parts: view.navigation.parts.map(part => ({ ...part, expanded: true })) } })
 export function contractViews(): Record<string, ChromeView> {
   const ready = readyView()
   const runningTake: TakeSummary = { ...take, run: { _tag: "Running" }, accept: blocked, stop: enabled, prepareAlternate: blocked }
@@ -183,6 +186,9 @@ export function contractViews(): Record<string, ChromeView> {
     connecting: { ...ready, connection: { _tag: "Connecting" }, canvas: { _tag: "Empty", message: "Connecting to Vite" }, composer: { ...ready.composer, agent: { _tag: "Connecting" }, start: blocked } },
     chainPairs: chainsView("folded"), chainHistory: chainsView("open"),
     references: referencesView(),
+    // Decision 45: a board with its questions open and an idea focused, and one that waits for its question.
+    workspaceBoard: expanded(workspaceScene(ready, WORKSPACE_SCENES.workspaceBoard)),
+    workspaceFrame: workspaceScene(ready, WORKSPACE_SCENES.workspaceFrame),
     failed: { ...ready, connection: { _tag: "Unreachable", reason: "Vite is not reachable" }, canvas: { _tag: "Frames", mode: "One", title: "Button", chains: [], frames: [{ ...frame, verdict: { _tag: "Failed" }, problems: [{ kind: "error", title: "Part threw", detail: "Source stack" }] }] }, code: { _tag: "Failed", reason: "Editor unavailable", retry: enabled }, composer: { ...ready.composer, agent: { _tag: "Failed", reason: "Agent unavailable", hint: "Check the model configuration" }, edit: blocked, start: blocked } },
     empty: { ...ready, selection: { _tag: "None" }, canvas: { _tag: "Empty", message: "Pick a part" }, composer: { ...ready.composer, agent: { _tag: "Off", hint: "Set up an agent" }, edit: blocked, start: blocked }, focusedTake: null, record: { _tag: "Closed" }, code: { _tag: "Empty", message: "Pick a part to see code" }, knobs: { _tag: "Idle", message: "Pick a part to see knobs" }, calibration: { _tag: "Closed" } },
     planning: { ...ready, plan: { _tag: "Planning", count: 3, message: "Planning 3 takes…" }, composer: { ...ready.composer, edit: blocked, attach: blocked } },

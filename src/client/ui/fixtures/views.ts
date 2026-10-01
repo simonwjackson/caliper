@@ -25,10 +25,12 @@ import { PICO_GAME_DETAIL } from "./pico"
 import { sourceOf, withMarkup } from "./markup"
 import type { LocalMark, MarkupState } from "./markup"
 import { chainFacts, takeKey, withChains } from "./chains"
+import { WORKSPACE_SCENES, workspaceScene } from "./workspaces"
 import type { ChainChoices, ChainFamily } from "./chains"
 
 export const enabled: Availability = { _tag: "Enabled" }
 const blocked = (reason: string): Availability => ({ _tag: "Disabled", reason })
+const NO_PIN = { _tag: "None" } as const
 
 const PART = "src/pages/PicoGameDetail.page.part.tsx"
 const ref = (state: string) => ({ part: PART, state })
@@ -122,21 +124,21 @@ function summary(id: string, overrides: Partial<TakeSummary> = {}): TakeSummary 
 function states(count: number, labels: readonly string[] = []): NavState[] {
   return Array.from({ length: count }, (_, index) => {
     const label = labels[index] ?? (index === 0 ? "Default" : `State ${index + 1}`)
-    return { ref: { part: "src/x.part.tsx", state: index === 0 ? "default" : `S${index}` }, label, site: "", selected: false, takes: [], comparing: false }
+    return { ref: { part: "src/x.part.tsx", state: index === 0 ? "default" : `S${index}` }, label, site: "", selected: false, takes: [], comparing: false, pin: NO_PIN }
   })
 }
 function part(name: string, file: string, layer: NavPart["layer"], count: number, overrides: Partial<NavPart> = {}): NavPart {
   const list = states(count).map(state => ({ ...state, ref: { part: file, state: state.ref.state } }))
-  return { file, name, note: "", layer, layerSite: "filename suffix", selected: false, expanded: false, states: list, ...overrides }
+  return { file, name, note: "", layer, layerSite: "filename suffix", selected: false, expanded: false, states: list, pinned: 0, ...overrides }
 }
 
 const gameDetailStates = (takes: readonly string[], selected: string): NavState[] => [
   { ref: DEFAULT, label: "Default", site: `${PART}:12`, selected: true, comparing: true, badge: { status: "Passed", label: "Passed", detail: "Render and image checks passed" },
-    takes: takes.map(id => ({ id, label: `${id} · ${TAKE_NAMES[id]}`, selected: id === selected })) },
-  { ref: ref("NoArtOrHistory"), label: "No art or history", site: `${PART}:30`, selected: false, comparing: false, takes: [] },
-  { ref: ref("MultipleLocations"), label: "Multiple locations", site: `${PART}:34`, selected: false, comparing: false, takes: [] },
-  { ref: ref("ChooseLocation"), label: "Choose location", site: `${PART}:38`, selected: false, comparing: false, takes: [] },
-  { ref: ref("ConfirmRemoval"), label: "Confirm removal", site: `${PART}:41`, selected: false, comparing: false, badge: { status: "Failed", label: "Failed", detail: "Threw while rendering" }, takes: [] },
+    takes: takes.map(id => ({ id, label: `${id} · ${TAKE_NAMES[id]}`, selected: id === selected })), pin: NO_PIN },
+  { ref: ref("NoArtOrHistory"), label: "No art or history", site: `${PART}:30`, selected: false, comparing: false, takes: [], pin: NO_PIN },
+  { ref: ref("MultipleLocations"), label: "Multiple locations", site: `${PART}:34`, selected: false, comparing: false, takes: [], pin: NO_PIN },
+  { ref: ref("ChooseLocation"), label: "Choose location", site: `${PART}:38`, selected: false, comparing: false, takes: [], pin: NO_PIN },
+  { ref: ref("ConfirmRemoval"), label: "Confirm removal", site: `${PART}:41`, selected: false, comparing: false, badge: { status: "Failed", label: "Failed", detail: "Threw while rendering" }, takes: [], pin: NO_PIN },
 ]
 
 const LOG: LogEntry[] = [
@@ -173,7 +175,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
     connection: { _tag: "Ready" },
     selection: { _tag: "State", subject: DEFAULT, preview: DEFAULT, label: "Default" },
     navigation: {
-      project: "@korri/pico", filter: "", countLabel: "52 parts", emptyMessage: "",
+      project: "@korri/pico", filter: "", countLabel: "52 parts", emptyMessage: "", workspaces: { items: [], create: enabled },
       projects: { _tag: "Choices", choices: [
         { id: "2e5778d2b4c4", name: "@korri/pico", current: true, problem: "" },
         { id: "8d404a4ae70c", name: "@simonwjackson/caliper", current: false, problem: "" },
@@ -220,7 +222,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
     },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },
     focusedTake: take, record: { _tag: "Closed" },
-    code: { _tag: "Closed" }, knobs: { _tag: "Closed" }, checks: { _tag: "Closed" }, calibration: { _tag: "Closed" },
+    code: { _tag: "Closed" }, knobs: { _tag: "Closed" }, checks: { _tag: "Closed" }, calibration: { _tag: "Closed" }, workspace: { _tag: "None" },
   }
   const chained = withChains(view, family, { selected: picked, open: choices.open ?? [], solo: choices.solo ?? {} })
   return structuredClone(withMarkup(chained, [], { revision: 1, mode: { _tag: "Off" }, draftOpen: false, editor: null }))
@@ -710,4 +712,11 @@ export const FIXTURES = {
   sending: sendingView, sendFailed: sendFailedView, markRunning: markRunningView,
   chainHistory: chainHistoryView, chainsAccepted: chainsAcceptedView, chainsOdin: chainsOdinView,
   references: referencesView, typeahead: typeaheadView, original: originalView, withPrompt: withPromptView,
+  // Decision 45: a workspace's board, as docs/design/mockups/workspaces/ draws its moments.
+  workspaceNew: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceNew),
+  workspaceFrame: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceFrame),
+  workspacePlanning: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspacePlanning),
+  workspaceRunning: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceRunning),
+  workspaceBoard: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceBoard),
+  workspaceClosed: () => workspaceScene(emptyView(), WORKSPACE_SCENES.workspaceClosed),
 } satisfies Record<string, () => ChromeView>

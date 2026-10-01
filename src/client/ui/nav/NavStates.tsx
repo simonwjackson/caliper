@@ -1,5 +1,6 @@
 import type { Badge, ChromeActions, NavPart } from "../contract"
 import { CAL } from "../hooks"
+import { Icon } from "../atoms/Icon"
 import "../tokens.css"
 import "./nav.css"
 
@@ -19,14 +20,22 @@ export function NavStates({ id, part, actions, picked }: { readonly id: string; 
   return <ul id={id} className="dr-states" aria-label={`${part.name} states`}>
     {part.states.map(state => {
       const tone = badgeTone(state.badge)
-      return <li key={state.ref.state} className="dr-states__group">
-        <button type="button" className="dr-states__item" data-cal={CAL.state} data-part={state.ref.part} data-state={state.ref.state}
-          aria-current={state.selected || undefined} title={[state.site, state.badge?.detail].filter(Boolean).join("\n")}
-          onClick={() => { actions.onState(state.ref); picked() }}>
-          <span>{state.label}</span>
-          {state.badge && <span className="dr-sr">, {state.badge.label}</span>}
-          {tone && <i className={`dr-dot dr-dot--${tone}`} aria-hidden="true" />}
-        </button>
+      const pin = state.pin
+      return <li key={state.ref.state} className="dr-states__group" data-pin={pin._tag === "Pin" || undefined}>
+        <div className="ws-pin-row">
+          <button type="button" className="dr-states__item" data-cal={CAL.state} data-part={state.ref.part} data-state={state.ref.state}
+            aria-current={state.selected || undefined} title={[state.site, state.badge?.detail].filter(Boolean).join("\n")}
+            onClick={() => { actions.onState(state.ref); picked() }}>
+            <span>{state.label}</span>
+            {state.badge && <span className="dr-sr">, {state.badge.label}</span>}
+            {tone && <i className={`dr-dot dr-dot--${tone}`} aria-hidden="true" />}
+          </button>
+          {/* Decision 45: a pinned state is a row on the selected workspace's board. */}
+          {pin._tag === "Pin" && <button type="button" className="ws-pin" data-cal={CAL.pin} data-part={state.ref.part} data-state={state.ref.state}
+            aria-pressed={pin.pinned} aria-label={`${pin.pinned ? "Unpin" : "Pin"} ${part.name}, ${state.label}`} disabled={pin.availability._tag === "Disabled"}
+            title={pin.availability._tag === "Disabled" ? pin.availability.reason : pin.pinned ? "On the board. Press to unpin." : "Pin to the board"}
+            onClick={() => actions.onPin(state.ref, !pin.pinned)}><Icon name="pin" /></button>}
+        </div>
         {state.takes.length > 0 && <div className="dr-states__takes">
           <button type="button" className="dr-states__take dr-states__compare" data-cal={CAL.compare} data-part={state.ref.part} data-state={state.ref.state}
             aria-current={state.comparing || undefined} onClick={() => { actions.onCompare(state.ref); picked() }}>

@@ -28,14 +28,27 @@ export type Selection =
 export type Badge = { readonly status: CheckResult["status"] | "Stale"; readonly label: string; readonly detail: string }
 
 export type NavTake = { readonly id: string; readonly label: string; readonly selected: boolean; readonly badge?: Badge }
+/**
+ * Decision 45. While an open workspace is selected, every state has a pin: a
+ * pinned state is a row on the board. `None` when no open workspace is selected.
+ */
+export type PinView =
+  | { readonly _tag: "None" }
+  | { readonly _tag: "Pin"; readonly pinned: boolean; readonly availability: Availability }
 export type NavState = {
   readonly ref: StateRef; readonly label: string; readonly site: string; readonly selected: boolean
   readonly badge?: Badge; readonly takes: readonly NavTake[]; readonly comparing: boolean
+  readonly pin: PinView
 }
 export type NavPart = {
   readonly file: string; readonly name: string; readonly note: string; readonly layer?: PartLayer
   readonly layerSite: string; readonly selected: boolean; readonly expanded: boolean; readonly states: readonly NavState[]
+  /** How many of its states the selected workspace's board shows. */
+  readonly pinned: number
 }
+/** One workspace in the parts panel (decision 45). `meta` reads "Open · 3 ideas"; `problem` says why a file cannot be read. */
+export type WorkspaceItem = { readonly id: string; readonly name: string; readonly meta: string; readonly selected: boolean; readonly problem: string }
+export type WorkspacesView = { readonly items: readonly WorkspaceItem[]; readonly create: Availability }
 export type ContextChoice = { readonly key: string; readonly label: string; readonly context: StateRef | null }
 export type ScenarioView =
   | { readonly _tag: "None" }
@@ -56,7 +69,8 @@ export type ProjectsView =
   | { readonly _tag: "Hidden" }
   | { readonly _tag: "Choices"; readonly choices: readonly ProjectChoice[] }
 export type NavigationView = {
-  readonly project: string; readonly projects: ProjectsView; readonly filter: string; readonly countLabel: string; readonly emptyMessage: string
+  readonly project: string; readonly projects: ProjectsView; readonly workspaces: WorkspacesView
+  readonly filter: string; readonly countLabel: string; readonly emptyMessage: string
   readonly parts: readonly NavPart[]; readonly scenario: ScenarioView
   readonly unavailable: readonly { readonly subject: StateRef; readonly label: string; readonly takes: readonly NavTake[] }[]
   readonly setup: readonly SetupRow[]; readonly setupProblems: readonly string[]
@@ -258,6 +272,59 @@ export type TakeRecordView =
       readonly emptyLogMessage: string; readonly integration: IntegrationView
     }
 
+/**
+ * The board of a workspace (decision 45): one row for each pinned state, one
+ * column for Today (the real files) and one for each idea. `planBoard` decides
+ * which columns and rows are on screen; every cell stays one picker press away.
+ */
+export type BoardRowView = {
+  readonly key: string; readonly ref: StateRef; readonly part: string; readonly state: string; readonly site: string
+  /** The state no longer exists. Its cells say so; you can unpin it. */
+  readonly missing: boolean
+}
+export type BoardColumnView =
+  | { readonly _tag: "Today"; readonly key: string }
+  /** A place the planner is filling. */
+  | { readonly _tag: "Planned"; readonly key: string }
+  | {
+      readonly _tag: "Idea"; readonly key: string; readonly take: string; readonly name: string; readonly brief: string
+      readonly strange: boolean; readonly run: TakeRun; readonly files: number; readonly focused: boolean
+    }
+/**
+ * One row in one column. `frame` is null while its column is planned or its
+ * idea's agent works. `same`: the frame shows exactly what Today shows.
+ */
+export type BoardCellView = { readonly row: string; readonly column: string; readonly frame: FrameView | null; readonly same: boolean }
+export type QuestionView =
+  | { readonly _tag: "Open"; readonly id: string; readonly text: string; readonly by: string }
+  | { readonly _tag: "Answered"; readonly id: string; readonly text: string; readonly by: string; readonly answer: string; readonly reason: string }
+/**
+ * The bar under the board. Ask: you write the question, and the main button
+ * plans the ideas. More: the prompt describes another idea. Idea: the prompt
+ * goes to the focused idea. Closed: nothing more can start.
+ */
+export type WorkspaceBarView = {
+  readonly mode: "Ask" | "More" | "Idea" | "Closed"
+  readonly prompt: string; readonly placeholder: string; readonly edit: Availability
+  readonly count: 1 | 2 | 3 | 4; readonly go: { readonly label: string; readonly availability: Availability }
+  readonly idea: { readonly take: string; readonly label: string; readonly discard: Availability; readonly stop: Availability } | null
+  readonly notices: readonly Notice[]
+}
+export type BoardView =
+  | { readonly _tag: "None" }
+  | { readonly _tag: "Damaged"; readonly id: string; readonly reason: string }
+  | {
+      readonly _tag: "Open"; readonly id: string; readonly title: string
+      readonly status: "New" | "Open" | "Closed"; readonly statusLabel: string
+      /** The question in full; empty until you write it. `asked` says when, for the Questions panel. */
+      readonly question: string; readonly asked: string
+      readonly rows: readonly BoardRowView[]; readonly columns: readonly BoardColumnView[]; readonly cells: readonly BoardCellView[]
+      readonly questions: readonly QuestionView[]; readonly ask: Availability; readonly answer: Availability
+      /** What Discard deletes and keeps, for its confirmation. */
+      readonly discard: { readonly availability: Availability; readonly ideas: number; readonly files: number; readonly answered: number; readonly open: number }
+      readonly bar: WorkspaceBarView
+    }
+
 export type SaveState =
   | { readonly _tag: "Idle" }
   | { readonly _tag: "Edited" }
@@ -361,6 +428,8 @@ export type ChromeView = {
   readonly canvas: CanvasView; readonly plan: PlanView; readonly composer: ComposerView; readonly markup: MarkupView
   readonly focusedTake: TakeSummary | null; readonly record: TakeRecordView
   readonly code: CodeView; readonly knobs: KnobsView; readonly checks: ChecksView; readonly calibration: CalibrationView
+  /** The selected workspace's board. While one is open it replaces the canvas, and the side slot of a take's record holds its questions. */
+  readonly workspace: BoardView
 }
 
 /**
@@ -463,5 +532,22 @@ export type ChromeActions = {
   readonly onFrameGeometry: (key: string, geometry: FrameGeometry) => void
   readonly onEditorMount: (host: HTMLDivElement | null) => void
   readonly onReviewDiffMount: (take: string, revision: string, file: string, host: HTMLDivElement | null) => void
+  /** Decision 45. Show a workspace's board; null goes back to the parts. */
+  readonly onWorkspace: (id: string | null) => void
+  readonly onWorkspaceNew: () => void
+  /** Make a state a row of the selected workspace's board, or take it off. */
+  readonly onPin: (ref: StateRef, pinned: boolean) => void
+  /** Focus an idea's column, so the bar talks to it; null focuses none. */
+  readonly onIdea: (take: string | null) => void
+  /** Open or close the questions, in the side slot. */
+  readonly onQuestions: (open: boolean) => void
+  readonly onAsk: (text: string) => void
+  readonly onAnswer: (question: string, answer: string, reason: string) => void
+  /** Ask: save the question and plan the ideas, or start one. More: start an idea from the prompt. */
+  readonly onWorkspaceStart: () => void
+  readonly onIdeaFollow: (take: string) => void
+  readonly onIdeaDiscard: (take: string) => void
+  /** Delete every idea; the question and the answers stay, and the workspace closes. */
+  readonly onWorkspaceDiscard: (id: string) => void
 }
 export type ChromeProps = { readonly view: ChromeView; readonly actions: ChromeActions }

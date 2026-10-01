@@ -66,7 +66,7 @@ const cal = hook => `[data-cal="${hook}"]`
  * In the New take menu. While the draft holds marks the menu also holds New take (take-start),
  * and while marks on the real files go with a typed prompt it holds Send (marks-send).
  */
-const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-skills", "take-start", "marks-send"])
+const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-models", "agent-skills", "take-start", "marks-send"])
 /**
  * Read every hook, opening the UI-owned disclosures first. A menu behind a
  * sheet in front, or anything behind the modal Checks window, is one tap
@@ -75,14 +75,30 @@ const MENU_HOOKS = new Set(["take-count", "take-follow", "agent-status", "agent-
  */
 async function collect(page) {
   const found = new Set(await hooksOn(page))
+  /** Hooks one more press inside a disclosure shows: they count for the union, not for the fixture's own set. */
+  const deeper = new Set()
   const modal = await page.locator("dialog[open]").count() > 0
   const trigger = page.locator('[aria-label="New take options"]')
   const menuBlocked = modal || (await trigger.count() > 0 && !(await trigger.isVisible()))
   if (!menuBlocked && await trigger.count()) {
     await page.getByRole("button", { name: "New take options" }).click()
     for (const hook of await hooksOn(page)) found.add(hook)
+    // The model chooser unfolds inside the menu (decision 43).
+    const chooser = page.locator(`${cal("agent-models")} > ${cal("agent-status")}`)
+    if (await chooser.count() && await chooser.isVisible()) {
+      await chooser.click()
+      for (const hook of await hooksOn(page)) deeper.add(hook)
+    }
     await page.keyboard.press("Escape")
   }
+  // Answering a question unfolds its fields and Save answer (decision 45).
+  const answer = page.locator(`${cal("questions")} .ws-q__actions button`).first()
+  if (!modal && await answer.count() && await answer.isVisible() && await answer.isEnabled()) {
+    await answer.click()
+    for (const hook of await hooksOn(page)) deeper.add(hook)
+    await page.keyboard.press("Escape")
+  }
+  for (const hook of deeper) union.add(hook)
   if (!modal && await page.locator(cal("parts")).count() === 0) {
     await page.locator(cal("parts-toggle")).click()
     for (const hook of await hooksOn(page)) found.add(hook)
@@ -124,6 +140,40 @@ await gate("hooks: the union over fixtures is every CAL hook", async () => {
 // ---------------------------------------------------------------- 2. actions
 const desk = { width: 1600, height: 1000 }
 const phone = { width: 416, height: 640 }
+await gate("actions: workspace list, pin, idea, prompt, follow, questions, answer, ask, discard", async () => {
+  const { page, close } = await open(desk, "workspaceBoard")
+  try {
+    await page.locator(`${cal("workspace")}[data-workspace="2"]`).click()
+    assert.deepEqual((await called(page, "onWorkspace")).map(call => call.args[0]), ["2"])
+    await page.locator(cal("workspace-new")).click()
+    assert.equal((await called(page, "onWorkspaceNew")).length, 1)
+    const pin = page.locator(`${cal("state-pin")}[data-part="src/pages/PicoSettings.page.part.tsx"][data-state="S1"]`)
+    await pin.click()
+    assert.deepEqual((await called(page, "onPin")).at(-1)?.args, [JSON.stringify({ part: "src/pages/PicoSettings.page.part.tsx", state: "S1" }), true])
+    assert.equal(await pin.getAttribute("aria-pressed"), "true")
+    await page.locator(`${cal("board-idea")}[data-take="3"]`).click()
+    assert.deepEqual((await called(page, "onIdea")).map(call => call.args[0]), ["3"])
+    await page.locator(cal("prompt")).fill("Count only the games")
+    await page.locator(cal("prompt")).press("Control+Enter")
+    assert.deepEqual((await called(page, "onIdeaFollow")).map(call => call.args[0]), ["3"])
+    await page.locator(`${cal("idea-discard")}[data-take="3"]`).click()
+    assert.deepEqual((await called(page, "onIdeaDiscard")).map(call => call.args[0]), ["3"])
+    await page.locator(`${cal("questions")} .ws-q__actions button`).first().click()
+    await page.getByLabel("Answer", { exact: true }).fill("No")
+    await page.getByLabel("Reason", { exact: true }).fill("The bar has no room")
+    await page.locator(cal("question-answer")).click()
+    assert.deepEqual((await called(page, "onAnswer")).at(-1)?.args, ["2", "No", "The bar has no room"])
+    await page.locator(cal("question-ask")).fill("Does B leave Settings?")
+    await page.locator(cal("question-ask")).press("Enter")
+    assert.deepEqual((await called(page, "onAsk")).map(call => call.args[0]), ["Does B leave Settings?"])
+    await page.locator(cal("workspace-discard")).click()
+    assert.equal(await page.locator("dialog[open]").count(), 1, "Discard asks first")
+    await page.getByRole("button", { name: "Discard 3 ideas" }).click()
+    assert.deepEqual((await called(page, "onWorkspaceDiscard")).map(call => call.args[0]), ["4"])
+    await page.locator(cal("questions-open")).click()
+    assert.deepEqual((await called(page, "onQuestions")).map(call => call.args[0]), [false])
+  } finally { await close() }
+})
 await gate("actions: prompt, start, count, follow, attach, accept, discard, device, frame", async () => {
   const { page, close } = await open(desk, "takes")
   try {
@@ -1209,7 +1259,9 @@ await gate("editor: the host and its editor survive updates, a fold and a hidden
 // ---------------------------------------------------------------- 5. reachability
 for (const size of [...LADDER, ...SIZES]) {
   for (const fixture of ["takes", "log", "knobs", "code", "planning", "running", "agentFailed", "checks", "calibrate", "mark", "draft", "sendFailed", "chainHistory", "chainsAccepted", "chainsOdin",
-    "references", "typeahead", "original", "withPrompt"]) {
+    "references", "typeahead", "original", "withPrompt",
+    // Decision 45: a workspace's board, at the same ladder.
+    "workspaceNew", "workspaceFrame", "workspacePlanning", "workspaceRunning", "workspaceBoard", "workspaceClosed"]) {
     await gate(`reachable ${fixture} ${size.name} ${size.width}x${size.height}`, async () => {
       const { page, close } = await open(size, fixture)
       try {

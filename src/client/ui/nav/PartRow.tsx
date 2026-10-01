@@ -1,6 +1,7 @@
 import type { ChromeActions, NavPart } from "../contract"
 import { CAL } from "../hooks"
 import { NavStates } from "./NavStates"
+import { Icon } from "../atoms/Icon"
 import "../tokens.css"
 import "./nav.css"
 
@@ -19,6 +20,7 @@ export function PartRow({ part, actions, picked }: { readonly part: NavPart; rea
       <button type="button" className="dr-part__name" data-cal={CAL.part} data-part={part.file} aria-current={part.selected || undefined}
         title={[part.file, part.note, part.layerSite].filter(Boolean).join("\n")} onClick={() => { actions.onPart(part.file); picked() }}>
         <span className="dr-part__label">{part.name}</span>
+        {part.pinned > 0 && <span className="ws-pinned" title={`${part.pinned} pinned to the board`}><Icon name="pin" />{part.pinned}<span className="dr-sr"> pinned</span></span>}
         <span className="dr-part__count" aria-label={`, ${part.states.length} ${part.states.length === 1 ? "state" : "states"}`}>{part.states.length}</span>
       </button>
     </div>

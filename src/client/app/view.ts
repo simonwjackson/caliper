@@ -1,11 +1,11 @@
-import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView, ModelsView } from "../ui/contract"
+import type { ChromeView, Availability, CanvasView, FrameView, NavigationView, SetupRow, TakeSummary, Badge, IntegrationView, CodeView, KnobsView, ChecksView, MarkupView, MarkPin, AcceptFlag, ChainView, ModelsView, BoardView, BoardColumnView, BoardCellView, BoardRowView, QuestionView, WorkspaceBarView, PinView } from "../ui/contract"
 import { acceptFlag, acceptNote, flagWords, historyLabel, lineageLabel, planChains } from "../../takes/chains.js"
 import type { AcceptFlag as ChainFlag, AcceptRecord, ChainTake } from "../../takes/chains.js"
-import type { Derivation, StateRef, TakeView } from "../../types"
+import type { Derivation, IdeaView, StateRef, TakeView, WorkspaceView } from "../../types"
 import { contextsFor, subjectsOf, sameState, stateExists } from "../scenarios.js"
 import { MAX_IMAGES } from "../images.js"
 import type { AppState } from "./state"
-import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey, deviceName, deviceOf, devicesOf } from "./state"
+import { currentPart, currentTake, subjectRef, previewRef, partTakes, refLabel, takeAvailable, takeName, frameKey, deviceName, deviceOf, devicesOf, currentWorkspace, openWorkspace } from "./state"
 
 /** Marks as the markup controller sees them. `frame` reads its current locations; it does no I/O. */
 export type MarkupRegion = {
@@ -94,14 +94,20 @@ function navigation(state: AppState, regions: Regions): NavigationView {
   const contexts = subject ? contextsFor(parts, subject) : []
   const contextKey = (ref: StateRef | null) => ref ? JSON.stringify([ref.part, ref.state]) : "isolated"
   const project = state.project
+  // Decision 45: while an open workspace is selected, every state has a pin.
+  const pinning = openWorkspace(state)
+  const pinned = (ref: StateRef) => pinning?.rows.some(row => sameState(row, ref)) ?? false
+  const pin = (ref: StateRef): PinView => pinning ? { _tag: "Pin", pinned: pinned(ref), availability: state.operation._tag === "Working" ? disabled("A request is pending.") : enabled } : { _tag: "None" }
   return {
-    project: project?.name ?? "Caliper", projects: projectsView(state), filter: state.filter,
+    project: project?.name ?? "Caliper", projects: projectsView(state), workspaces: workspacesNav(state), filter: state.filter,
     countLabel: state.connection._tag === "Unreachable" ? "Vite is not reachable" : needle ? `${shown.length} of ${parts.length}` : `${parts.length} parts`,
     emptyMessage: !project ? state.connection._tag === "Connecting" ? "Connecting to Vite…" : "Vite is not reachable." : parts.length === 0 ? "No *.part.tsx files found. A part file default-exports a component that renders with no props." : shown.length === 0 ? `No part matches “${state.filter}”.` : "",
     parts: shown.map(part => ({ file: part.file, name: part.name, note: part.note ?? "", layer: part.layer, layerSite: part.layerSource ? `${part.layer} · ${part.layerSource.file}:${part.layerSource.line}` : part.layer ? `${part.layer} · filename suffix in ${part.file}` : `Unclassified · ${part.file}`,
-      selected: part.file === state.part, expanded: state.expanded.get(part.file) ?? part.file === state.part,
-      states: part.states.map(item => ({ ref: { part: part.file, state: item.export }, label: item.label, site: item.line ? `${part.file}:${item.line}` : `${part.file}: default export`, selected: part.file === state.part && state.shown._tag !== "All" && item.export === state.shown.export,
-        badge: badge(part.file, item.export), takes: partTakes(state, part.file, item.export).map(navTake), comparing: part.file === state.part && state.shown._tag === "Takes" && item.export === state.shown.export })),
+      selected: !state.workspace && part.file === state.part, expanded: state.expanded.get(part.file) ?? part.file === state.part,
+      pinned: part.states.filter(item => pinned({ part: part.file, state: item.export })).length,
+      states: part.states.map(item => ({ ref: { part: part.file, state: item.export }, label: item.label, site: item.line ? `${part.file}:${item.line}` : `${part.file}: default export`, selected: !state.workspace && part.file === state.part && state.shown._tag !== "All" && item.export === state.shown.export,
+        badge: badge(part.file, item.export), takes: partTakes(state, part.file, item.export).map(navTake), comparing: !state.workspace && part.file === state.part && state.shown._tag === "Takes" && item.export === state.shown.export,
+        pin: pin({ part: part.file, state: item.export }) })),
     })),
     scenario: subject && preview ? { _tag: "Selected", subject, editingLabel: `Editing ${refLabel(state, subject)}`, choices: [null, ...contexts].map(ref => ({ key: contextKey(ref), label: ref ? refLabel(state, ref) : `Isolated · ${refLabel(state, subject)}`, context: ref })), chosen: contextKey(state.context),
       note: state.contextNote,
@@ -112,6 +118,105 @@ function navigation(state: AppState, regions: Regions): NavigationView {
     setupProblems: parts.flatMap(part => [...part.compositionProblems ?? [], ...part.expectationProblems ?? [], ...part.authoredCheckProblems ?? []]),
   }
 }
+/** The workspaces in the parts panel, lowest number first (decision 45). */
+function workspacesNav(state: AppState): NavigationView["workspaces"] {
+  const items = (state.takes?.workspaces ?? []).map(workspace => workspace._tag === "Damaged"
+    ? { id: workspace.id, name: `Workspace ${workspace.id}`, meta: "Cannot be read", selected: workspace.id === state.workspace, problem: workspace.reason }
+    : { id: workspace.id, name: workspaceTitle(workspace), meta: workspaceMeta(workspace), selected: workspace.id === state.workspace, problem: "" })
+  const create = state.connection._tag !== "Ready" ? disabled("Vite is not reachable.") : state.operation._tag === "Working" ? disabled("A request is pending.") : !state.takes ? disabled("Loading the takes…") : enabled
+  return { items, create }
+}
+/** The planner's name, or the question's first words, or nothing yet. */
+export function workspaceTitle(workspace: Extract<WorkspaceView, { _tag: "Ready" }>): string {
+  if (workspace.name) return workspace.name
+  const words = workspace.question.split(/\s+/).filter(Boolean)
+  return words.length === 0 ? "New workspace" : words.length <= 7 ? words.join(" ") : `${words.slice(0, 7).join(" ")}…`
+}
+function workspaceMeta(workspace: Extract<WorkspaceView, { _tag: "Ready" }>): string {
+  const answers = workspace.questions.filter(question => question._tag === "Answered").length
+  if (workspace.status._tag === "Closed") return `Closed · ${answers === 1 ? "1 answer" : `${answers} answers`}`
+  const ideas = workspace.ideas.length
+  return ideas === 0 ? "Open · no ideas yet" : `Open · ${ideas === 1 ? "1 idea" : `${ideas} ideas`}`
+}
+const dayLabel = (at: number) => new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+/** A board cell's frame key: the board's own, so a report never matches a canvas frame of the same state. */
+export function cellKey(row: StateRef, idea: Pick<IdeaView, "take" | "created"> | null) { return JSON.stringify(["board", row.part, row.state, idea?.take ?? null, idea?.created ?? null]) }
+const rowKey = (row: StateRef) => `${row.part}#${row.state}`
+
+/** The selected workspace's board (decision 45). No I/O. */
+function board(state: AppState): BoardView {
+  const workspace = currentWorkspace(state)
+  if (!workspace) return { _tag: "None" }
+  if (workspace._tag === "Damaged") return { _tag: "Damaged", id: workspace.id, reason: workspace.reason }
+  const parts = state.project?.parts ?? []
+  const ready = state.connection._tag === "Ready"
+  const busy = state.operation._tag === "Working"
+  const open = workspace.status._tag === "Open"
+  const status = !open ? "Closed" : workspace.question.trim() === "" && workspace.ideas.length === 0 ? "New" : "Open"
+  const planning = state.plan._tag === "Ideas" && state.plan.workspace === workspace.id ? state.plan : null
+  const rows: BoardRowView[] = workspace.rows.map(row => {
+    const part = parts.find(item => item.file === row.part)
+    return { key: rowKey(row), ref: { part: row.part, state: row.state }, part: part?.name ?? row.part, state: part?.states.find(item => item.export === row.state)?.label ?? row.state, site: row.part, missing: !stateExists(parts, row) }
+  })
+  const focused = workspace.ideas.find(idea => idea.take === state.idea) ?? null
+  const columns: BoardColumnView[] = [
+    { _tag: "Today", key: "today" },
+    ...workspace.ideas.map((idea): BoardColumnView => ({
+      _tag: "Idea", key: `idea:${idea.take}@${idea.created}`, take: idea.take, name: idea.name ?? idea.direction?.title ?? `Idea ${idea.take}`,
+      brief: idea.direction?.brief ?? "", strange: idea.direction?.strange === true, run: idea.run, files: idea.files.length, focused: idea === focused,
+    })),
+    ...Array.from({ length: planning?.count ?? 0 }, (_, index): BoardColumnView => ({ _tag: "Planned", key: `planned:${index}` })),
+  ]
+  const cell = (row: BoardRowView, column: BoardColumnView, idea: IdeaView | null): BoardCellView => {
+    if (column._tag === "Planned" || row.missing || idea?.run._tag === "Running") return { row: row.key, column: column.key, frame: null, same: false }
+    const key = cellKey(row.ref, idea)
+    const report = state.reports.get(key)
+    const frame: FrameView = {
+      key, label: idea ? `Idea ${idea.take}` : "Today", title: `${row.part} · ${row.state} · ${idea ? `idea ${idea.take}` : "the real files"}`,
+      src: `frame?${new URLSearchParams({ part: row.ref.part, state: row.ref.state, ...(idea ? { take: idea.take } : {}) })}`,
+      subject: row.ref, preview: row.ref, take: idea?.take ?? null, selected: idea !== null && idea === focused,
+      ...(idea ? { run: idea.run } : {}), verdict: { _tag: report?.state ?? "Loading" }, problems: report?.problems ?? [],
+      markable: disabled("A workspace compares ideas; marks are for takes."), marks: [],
+    }
+    return { row: row.key, column: column.key, frame, same: idea !== null && state.same.has(key) }
+  }
+  const cells = rows.flatMap(row => columns.map(column => cell(row, column, column._tag === "Idea" ? workspace.ideas.find(idea => idea.take === column.take) ?? null : null)))
+  const questions: QuestionView[] = workspace.questions.map(question => {
+    const by = `${question.by._tag === "User" ? "You" : `Idea ${question.by.take}: ${question.by.title}`} · ${dayLabel(question.asked)}`
+    return question._tag === "Open" ? { _tag: "Open", id: question.id, text: question.text, by }
+      : { _tag: "Answered", id: question.id, text: question.text, by, answer: question.answer, reason: question.reason }
+  })
+  const write = !ready ? disabled("Vite is not reachable.") : !open ? disabled("This workspace is closed.") : busy ? disabled("A request is pending.") : enabled
+  const agentReady = state.takes?.agent._tag === "Ready"
+  const files = workspace.ideas.reduce((sum, idea) => sum + idea.files.length, 0)
+  const mode: WorkspaceBarView["mode"] = !open ? "Closed" : focused ? "Idea" : workspace.ideas.length === 0 ? "Ask" : "More"
+  const blocker = write._tag === "Disabled" ? write.reason : planning ? "Ideas are being planned." : !agentReady ? "The agent is not ready." : ""
+  const go = (label: string, why: string): WorkspaceBarView["go"] => ({ label, availability: blocker || why ? disabled(blocker || why) : enabled })
+  const prompt = state.prompt.trim()
+  const bar: WorkspaceBarView = {
+    mode, prompt: state.prompt, notices: state.notices,
+    placeholder: mode === "Ask" ? "Ask the question this workspace answers" : mode === "Idea" && focused ? `Tell idea ${focused.take} what to change` : mode === "Closed" ? "This workspace is closed" : "Describe another idea for this question",
+    edit: agentReady && !planning && open ? enabled : disabled(!open ? "This workspace is closed." : planning ? "Ideas are being planned." : "The agent is not ready."),
+    count: state.count,
+    go: mode === "Ask" ? go(state.count === 1 ? "1 new idea" : `Plan ${state.count} ideas`, workspace.rows.length === 0 || !prompt ? "Pin a state and write the question first." : "")
+      : mode === "Idea" && focused ? go(`Send to idea ${focused.take}`, focused.run._tag === "Running" ? "The idea's agent is working." : !prompt ? "Write what to change first." : "")
+        : mode === "More" ? go("New idea", !prompt ? "Describe the idea first." : "") : { label: "Closed", availability: disabled("This workspace is closed.") },
+    idea: focused ? {
+      take: focused.take, label: `Idea ${focused.take}`,
+      discard: write, stop: focused.run._tag === "Running" && ready ? enabled : disabled("No agent is running."),
+    } : null,
+  }
+  return {
+    _tag: "Open", id: workspace.id, title: workspaceTitle(workspace), status,
+    statusLabel: status === "New" ? "No question yet" : status === "Closed" ? "Closed" : "Open",
+    question: workspace.question, asked: workspace.question ? `Asked on ${dayLabel(workspace.created)}.` : "",
+    rows, columns, cells, questions,
+    ask: write, answer: write,
+    discard: { availability: write, ideas: workspace.ideas.length, files, answered: questions.filter(question => question._tag === "Answered").length, open: questions.filter(question => question._tag === "Open").length },
+    bar,
+  }
+}
+
 /** The state's own label, as the canvas shows it beside the part's name; a composed preview names its scenario. */
 function selectionLabel(state: AppState, subject: StateRef) {
   const own = state.project?.parts.find(part => part.file === subject.part)?.states.find(item => item.export === subject.state)?.label ?? subject.state
@@ -173,17 +278,19 @@ export function toChromeView(state: AppState, regions: Regions): ChromeView {
   const attach = edit._tag === "Enabled" && state.attachments.length < MAX_IMAGES && !busy ? enabled : disabled("The composer cannot attach more images now.")
   const snapshot: ChromeView = {
     connection: state.connection, selection: subject && preview ? { _tag: "State", subject, preview, label: selectionLabel(state, subject) } : state.part ? { _tag: "All", part: state.part } : { _tag: "None" },
-    navigation: navigation(state, regions), devices: devicesOf(state), device: deviceOf(state), pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: canvas(state, regions.markup ?? noMarkup),
-    plan: state.plan._tag === "Planning" ? { _tag: "Planning", count: state.plan.count, message: `Planning ${state.plan.count} takes…` } : { _tag: "None" },
+    navigation: navigation(state, regions), devices: devicesOf(state), device: deviceOf(state), pxPerMm: state.pxPerMm, calibrated: state.calibrated, tools: state.tools, canvas: state.workspace ? { _tag: "Empty", message: "The board of the workspace is on screen." } : canvas(state, regions.markup ?? noMarkup),
+    plan: state.plan._tag === "Planning" ? { _tag: "Planning", count: state.plan.count, message: `Planning ${state.plan.count} takes…` }
+      : state.plan._tag === "Ideas" && state.plan.workspace === state.workspace ? { _tag: "Planning", count: state.plan.count, message: `Planning ${state.plan.count} ideas…` } : { _tag: "None" },
     composer: { prompt: state.prompt, placeholder: currentPart(state) ? `Describe a change to ${currentPart(state)?.name}` : "Describe a change", edit, attach, attachments: state.attachments.map(image => ({ id: image.id, name: image.name, url: image.url, remove: edit })), count: state.count, start: startReason ? disabled(startReason) : enabled, startLabel: state.count === 1 ? "New take" : `${state.count} new takes`,
       follow: take && state.plan._tag === "None" ? { take: take.take, label: `Send to take ${take.take}`, availability: !startReason && take.run._tag !== "Running" && takeAvailable(state, take) ? enabled : disabled(startReason || summary?.unavailableReason || "The agent is working.") } : null,
       marks: promptMarks(state.plan._tag === "None" ? (regions.markup ?? noMarkup).withPrompt : []),
       notices: state.notices, agent: state.takes?.agent ?? { _tag: "Connecting" }, skills: state.takes?.skills ?? { skills: [], problems: [] }, models: regions.models ?? { _tag: "Idle" } },
     markup: (regions.markup ?? noMarkup).view,
-    focusedTake: summary,
-    record: take && summary && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },
+    focusedTake: state.workspace ? null : summary,
+    record: take && summary && !state.workspace && state.tools.side === "record" ? { _tag: "Open", take: summary, log: take.log.filter(entry => entry._tag !== "Assistant" || entry.text !== "").map(entry => entry._tag === "User" ? { _tag: "User", text: entry.text, images: (entry.images ?? []).map(file => ({ name: take.images.find(image => image.file === file)?.name ?? file, url: `takes/${take.take}/images/${encodeURIComponent(file)}` })) } : entry), emptyLogMessage: "This take has no conversation since Vite started. Send a prompt to go on.", integration: regions.integration } : { _tag: "Closed" },
     code: regions.code, knobs: regions.knobs, checks: regions.checks,
     calibration: state.calibrationOpen ? { _tag: "Open", pxPerMm: state.pxPerMm, calibrated: state.calibrated } : { _tag: "Closed" },
+    workspace: board(state),
   }
   return freezeSnapshot(structuredClone(snapshot))
 }

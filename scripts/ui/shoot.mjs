@@ -48,7 +48,10 @@ try {
         await page.screenshot({ path: file })
         written.push(file)
         await context.close()
-        const mockup = shot.mockup ? join("docs", "design", "mockups", "out", `b-${shot.mockup}-${size.name}-${scheme}.png`) : null
+        // "workspaces/<state>" answers the workspaces mockup (decision 45), which keeps its own images.
+        const mockup = !shot.mockup ? null : shot.mockup.startsWith("workspaces/")
+          ? join("docs", "design", "mockups", "workspaces", "out", `${shot.mockup.slice("workspaces/".length)}-${size.name}-${scheme}.png`)
+          : join("docs", "design", "mockups", "out", `b-${shot.mockup}-${size.name}-${scheme}.png`)
         if (mockup && existsSync(mockup)) {
           const sheet = await browser.newContext({ viewport: { width: size.width * 2 + 24, height: size.height + 28 }, deviceScaleFactor: size.scale, colorScheme: scheme })
           const view = await sheet.newPage()
