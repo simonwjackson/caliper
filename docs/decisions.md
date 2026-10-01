@@ -717,8 +717,8 @@ unit tests in `test/model.test.js`; no take has run on either endpoint.
 
 ## 41. Caliper builds with Vite 8 and serves Vite 6, 7 and 8
 
-Decided 2026-10-01. The user asked to move Caliper, Pico and Amaze to the
-latest Vite, 8.3.1. Vite 8 replaces Rollup and esbuild with Rolldown and Oxc,
+Decided 2026-10-01. The user asked to move Caliper, Pico and a private
+consumer project to the latest Vite, 8.3.1. Vite 8 replaces Rollup and esbuild with Rolldown and Oxc,
 and Vite 8.1 renamed `server.hmr.path` and the other socket settings to
 `server.ws.*`.
 
