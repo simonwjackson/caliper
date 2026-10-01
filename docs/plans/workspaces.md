@@ -1,6 +1,6 @@
 # Workspaces: a plan
 
-Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is built; its choices and its real run are under Built in the decision. [Slice 2](#slice-2-scratch-rows-that-check) is approved and being built. Slices 3 and 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
+Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slices 1 and 2 are built; their choices and their real runs are under Built and "Slice 2, built" in the decision. Slices 3 and 4 are not built. The user chose parts of it one at a time. They are listed under [Settled](#settled).
 
 ## Problem
 
@@ -200,7 +200,7 @@ Limits for this example:
 
 ## Slice 2: scratch rows that check
 
-Status: approved on 2026-10-01, with its mockup in [`docs/design/mockups/workspaces-rows/`](../design/mockups/workspaces-rows/README.md). Recorded in decision 45 under "Slice 2".
+Status: built on 2026-10-01, with its mockup in [`docs/design/mockups/workspaces-rows/`](../design/mockups/workspaces-rows/README.md). Recorded in decision 45 under "Slice 2" and "Slice 2, built".
 
 ### What you do
 
@@ -285,4 +285,4 @@ Test first, in a worktree. Land each step on `main` and deploy it.
 
 ## Next step
 
-Build slice 2 in the order above.
+Slice 3, idea rows and the narrow idea fence, when the user asks for it.

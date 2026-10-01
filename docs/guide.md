@@ -531,7 +531,7 @@ there is no Accept. Decision 45 in `docs/decisions.md` records the design.
    finds a problem. An answer needs its reason.
 6. **Close.** **Discard ideas** deletes the ideas and the files they edited.
    The question, the rows and every question and answer stay, and the
-   workspace moves to Closed.
+   workspace moves to Closed. Scratch rows stay too, with their files.
 
 Where it lives: `.caliper/workspaces/<id>/workspace.json` holds the question,
 the rows, the questions and answers, and the status. Each idea is a take in
@@ -545,11 +545,66 @@ renders every row once. Its run stops after 80 turns, a take's after 40; send
 it a prompt to go on. The board fits itself to its box: it shows Today beside
 one idea, then one column, and one row at a time, with a picker for the rest.
 
-Limits of this first slice:
+### Rows that check
 
-- Rows are declared states only. A row file of the workspace's own, and
-  checks that press keys in a row, come later. A board shows renders; it does
-  not prove that the d-pad reaches anything.
+A pinned state shows how a page looks. A **scratch row** can also check what
+a person does on it, for example "the d-pad and A open Settings, and B
+returns to Home". The workspace owns the row, so no idea can change it, and
+every idea is judged by the same checks.
+
+1. Press **New row** under the last row. The bar asks what the row must show
+   and check. Say which product code to compose, and which keys stand for the
+   device's buttons, for example "on the portal's own input in
+   clients/portal/src/input, so the arrow keys are the d-pad".
+2. Press **Write row**. A **row agent** writes one file,
+   `.caliper/workspaces/<id>/rows/<n>.part.tsx`, in the part format: a
+   default export that renders the row, a `name`, and a `checks` export
+   (see [Author browser-input checks](#author-browser-input-checks)). It can
+   read any file of the project's repository, and it writes only that file.
+   It renders the row in Today and runs its checks there. While it works, the
+   new row waits at the bottom of the board.
+3. When the agent stops, Caliper runs the row's checks in Today and in every
+   idea whose agent is idle, one column at a time. Under each cell, a line
+   says "2 of 2 checks pass", "0 of 2 checks pass", Checking, Waiting to
+   check, Out of date, Not checked or Could not check. An idea's column runs
+   again each time its agent stops. A pinned state whose part has its own
+   `checks` gets the same line.
+4. Press the row's name, or a line under a cell, to open the row's record: what
+   you asked, the file, each check in one column at a time with its source
+   line, its failure, and the page at its end, and the agent's log. The bar
+   then talks to the row's agent, with Stop and **Delete row**. **Check
+   again** runs the row in every idle column.
+
+A check that fails in Today is often the finding: the question says Today
+lacks something. The row agent is told never to weaken a check so that
+Today passes. Read the row before you trust it, though. A defect in a check
+looks exactly like a failure of an idea.
+
+An idea's agent sees every row and how its checks went in Today. Its `render`
+tool with `rows: true, checks: true` runs the checks in its own idea. A row
+added after an idea starts reaches it with its next prompt.
+
+You can edit a row file in your own editor. Vite reloads its cells, and their
+results go out of date until the next run. Results live in the Caliper app's
+memory; after a restart, the cells say Not checked until a row or an idea
+runs again, or you press Check again.
+
+Limits:
+
+- A browser key press is not gamepad input. A row that composes the portal's
+  keyboard adapter proves that path and the surface, not the gamepad
+  adapter, the native input, or what the host sends.
+- A row that imports code from outside the Vite root, such as a sibling
+  package, works because Vite serves a module that an allowed module
+  imports. Vite does not document this.
+- A scratch row is not a product state. It adds no coverage, and its images
+  never become baselines (decision 18).
+- A full pass costs one browser context for each check in each column: on
+  Pico, two checks in four columns took about 20 s.
+
+Limits of workspaces today:
+
+- An idea cannot add a row of its own yet.
 - There is no way to promote an idea yet. To keep one, rebuild it as a take
   of a part and accept that take.
 - "Same as Today" compares each page's markup and CSS in the browser, not its

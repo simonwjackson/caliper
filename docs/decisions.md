@@ -1086,3 +1086,43 @@ Costs: a third kind of agent; about 20 s for a full pass of two checks in
 four columns on Pico; results that do not survive a restart; a defect in a
 check that looks like a failure of an idea; and a browser key press that is
 not gamepad input.
+
+**Slice 2, built.** Choices made while building, on 2026-10-01:
+
+- The row agent reads the whole repository of the project, read-only, so a
+  row can compose code from a sibling package, as Pico's input comes from
+  `clients/portal`. Never `node_modules`, `.git`, `.caliper` or an
+  environment file, and never through a link out of the repository. The
+  plan said "the real files"; a take's agent still reads only its project.
+- A row is added only when its agent can start: with no agent, New row
+  refuses and the board does not change.
+- Each cell result names its device. The board shows the results for its
+  device; a row checks on the device the board had when you wrote it or
+  pressed Check again.
+- Board cells run the authored checks only (`runAuthoredJobs`), in the
+  Caliper app, which runs under Node. The row agent's `render_row` and an
+  idea's `render` with `checks: true` run the full check (two renders, axe
+  and the authored checks), as a take's render does.
+- A row's agent stops after 40 turns, as a take's does. Its first message
+  names the repository's root from the project and from the row file.
+- Checked on 2026-10-01 against the deployed app and real Chromium, with no
+  model, on a copy of korri: Check again ran the spike's d-pad row in Today
+  and in ideas 5 to 7 in 22 s. Today failed both checks, the ideas passed
+  both, the image at each check's end loaded, and an edit to the row file
+  put every result out of date.
+- Checked end to end with `scripts/verify-workspace-rows-model.mjs` on Pico
+  itself, through the chrome, in three runs. Run 1: the row agent never found
+  the portal, because it could not list the repository's root, then wrote a
+  page of source text with a check that could not fail and spent its 40
+  turns on it. Run 2: with the root listable, it read 35 files and wrote
+  none, guessing paths. Its prompt now says that a check must be able to
+  fail, that it must stop and say why rather than write another row, and
+  where the repository's root is. Run 3: it found the portal's input in two
+  calls and wrote a 99-line row in 37 turns and about 4 minutes. Pico had
+  changed since the spike: Today now has a MENU key that reaches Settings and
+  Find (korri `8913ce119`). Both checks passed in Today and failed in ideas
+  5, 6 and 7, whose files predate that change. Those failures are real: all
+  three ideas carry their own copies of `src/PicoSurface.tsx` and
+  `src/pages/PicoHome.tsx`, which that commit changed, so in their columns
+  the MENU key does not exist and the check cannot find SETTINGS. A row's
+  checks show when an idea falls behind the product.

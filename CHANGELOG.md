@@ -7,6 +7,15 @@ break things.
 
 ## Unreleased
 
+- Workspace rows that check (decision 45, slice 2): press New row under a
+  workspace's board and say what the row must show and check. A row agent
+  writes one scratch row file in the workspace, renders it in Today and runs
+  its checks there. The board then runs the row's checks in Today and in each
+  idea, and says under every cell how many pass; the row's record shows each
+  check's failure and the page at its end. Ideas can run the rows' checks in
+  their own files but never change a row. Discard keeps the rows. The
+  plugin's protocol is now 5, so restart each project's dev server after you
+  update the Caliper app.
 - Workspaces (decision 45): a scratch area for a question that is not about
   one part. Pin states as rows, write the question, and the planner starts
   several ideas. Each idea is a take with its own agent and files; the board

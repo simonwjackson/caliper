@@ -243,6 +243,15 @@ model tokens on the planner and three idea agents, and writes a workspace and
 three takes into the project's `.caliper/`. Screenshots and a summary go to
 `/tmp/caliper-workspaces-model`.
 
+`scripts/verify-workspace-rows-model.mjs --root <project> --workspace <id>`
+drives a scratch row (decision 45, slice 2) the same way: New row, the brief,
+Write row, the row agent's run, then the row's checks in every column, the
+board and the row's record. It spends model tokens on one row agent, runs
+Chromium for the checks, and writes one row file into the workspace in the
+project's `.caliper/`. `--brief` replaces the Pico d-pad brief it uses by
+default. Screenshots, the row file and a summary go to
+`/tmp/caliper-workspace-rows-model`.
+
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
 every part of a running project and checks calibration actions, a visible error
 and reload on save. It reports final physical sizing, overflow and height-budget
