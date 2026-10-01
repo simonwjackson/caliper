@@ -41,6 +41,15 @@ nix develop -c node scripts/ui/verify.mjs          # hooks, actions, keyboard an
 - **Staged:** the row agent's log and reply, the file name `rows/1.part.tsx`,
   and the words in the bar. Nothing is wired to a server.
 
+The row itself is `spike/row.part.tsx`. I wrote it by hand, as the row agent
+would. It sat in a copy of Pico at `src/workspace-rows/`, because the frame
+route cannot serve a file in `.caliper/` yet; its imports assume that place.
+The other files in `spike/` made the results and images, in this order:
+`overlay-spike.sh` and `hmr-spike.sh` (a row file in `.caliper/` loads through
+the overlay and reaches HMR), `check-spike.sh` (the checks in each column),
+`render-cells.sh` (the cells) and `gen-rows-fixture.mjs` (the fixture data).
+They use `/tmp` and paths on this machine.
+
 ## What the mockup decides
 
 These are the choices to approve.
