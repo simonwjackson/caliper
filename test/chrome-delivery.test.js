@@ -47,6 +47,11 @@ describe("isolated chrome delivery", () => {
       const entry = await app(`/__caliper/assets/${delivery.entry}`)
       expect(entry.status).toBe(200)
       expect(entry.headers.get("content-type")).toContain("text/javascript")
+      // Consume the bundle before shutting down its HTTP server; unread streamed
+      // bodies can keep an active response open in a larger Bun test run.
+      const resource = delivery.read(delivery.entry)
+      if (resource === null) throw new Error("The entry is not in the bundle manifest.")
+      expect(Buffer.from(await entry.arrayBuffer())).toEqual(resource.body)
       for (const path of ["/__caliper/assets/plugin.js", "/__caliper/assets/.vite/manifest.json"]) expect((await app(path)).status).toBe(404)
       for (const path of ["/__caliper/client/chrome.js", "/__caliper/modules/react@19/index.js"]) expect((await get(path)).status).toBe(404)
       expect(delivery.read("../src/plugin.js")).toBeNull()
