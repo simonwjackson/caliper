@@ -8,9 +8,9 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const TOOL_REVISION = "71ecc0f81cd0b11ef6494337c8a26e547397f705"
-const ARCHIVE_SHA256 = "a9d31a17c1af99c24732b85650a324541c764db425495a33e90ab84becb77e47"
-const SOURCES_SHA256 = "7ce7c945d2ce4c796faec9938fee679dff1e0bca6feca2ef41a4e11ee63bf628"
+export const TOOL_REVISION = "1a09171502ce0316cac97be1e132250ed306fc5a"
+const ARCHIVE_SHA256 = "991f446ffc38404c65bd29de7b9bc5ab598e385008a9f2cfa3c4a06438f57128"
+const SOURCES_SHA256 = "68430bc861d1285a38ee5cb3eef5ce92912b8862214085865d26259c22c86f9e"
 const LOCK_SHA256 = "64e1c93b4671a9bc7d49673b3f411e5b24a6aca816db34db848dd145490a533e"
 export const toolDirectory = join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "caliper/tools", TOOL_REVISION)
 const subject = fileURLToPath(new URL("../../", import.meta.url))
