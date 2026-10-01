@@ -11,7 +11,7 @@ Open `index.html` for every image, or serve the live mockup:
 ```sh
 docs/design/mockups/workspaces/shoot.mjs              # render out/*.png and index.html, and check every size
 docs/design/mockups/workspaces/shoot.mjs serve 5313   # live, on every interface: ?state=board
-bun test docs/design/mockups/workspaces/plan-board.test.ts
+bun test test/ui-board.test.ts
 ```
 
 ## States
@@ -74,7 +74,9 @@ Closed workspace.
 
 ## How the board adapts
 
-`plan-board.ts` is one pure function, `planBoard(width, height, count)`. The
+`src/client/ui/board/plan-board.ts` is one pure function, `planBoard(width, height, count, frame)`.
+The mockup and the chrome's board share it; `frame` is one frame at true size and
+defaults to the RG353M on the calibrated desk. The
 mockup runs it at every size, and the board's CSS takes its heights from the
 same constants. The test sweeps every size from 150 × 60 to 2400 × 1400 and
 checks that what is drawn fits.

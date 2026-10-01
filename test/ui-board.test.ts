@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { COLUMN_HEAD, COMPACT_HEAD, FLOOR_SCALE, FRAME_H, FRAME_W, GAP, MIN_SCALE, PICKER_H, ROW_HEAD, ROW_PICK_W, planBoard } from "./plan-board"
-import type { BoardPlan } from "./plan-board"
+import { COLUMN_HEAD, COMPACT_HEAD, FLOOR_SCALE, FRAME_H, FRAME_W, GAP, MIN_SCALE, PICKER_H, ROW_HEAD, ROW_PICK_W, planBoard } from "../src/client/ui/board/plan-board"
+import type { BoardPlan } from "../src/client/ui/board/plan-board"
 
 const BOARD = { columns: 4, rows: 3 }
 /** The width at which `columns` cells fit at `scale`. */
@@ -68,6 +68,17 @@ describe("planBoard", () => {
     expect(plan.columns._tag).toBe("One")
     expect(plan.rows._tag).toBe("Pick")
     expect(plan.scale).toBeGreaterThanOrEqual(FLOOR_SCALE)
+  })
+
+  test("the frame's true size is an input: a larger device needs more width for the same columns", () => {
+    // The ODIN 2 PORTAL is about 4.5 times the RG353M's width at true size on the same desk.
+    const odin = { width: 1248, height: 702 }
+    // Four RG353M frames at true size are 1164 px; two ODIN frames at half size are 1264 px.
+    expect(planBoard(widthFor(4, 1), TALL, BOARD, odin).columns._tag).toBe("One")
+    const wide = 4 * odin.width + 3 * GAP
+    expect(planBoard(wide, TALL, BOARD, odin)).toEqual({ columns: { _tag: "All" }, rows: { _tag: "Stack" }, scale: 1 })
+    // The default is the RG353M frame the mockup measured.
+    expect(planBoard(widthFor(4, 1), TALL, BOARD, { width: FRAME_W, height: FRAME_H })).toEqual(planBoard(widthFor(4, 1), TALL, BOARD))
   })
 
   test("a board of only Today never offers a pair", () => {

@@ -61,8 +61,11 @@ export type BoardPlan = {
  * @param width the board's content width
  * @param height the board's content height, under the title and over the caption
  * @param count how many columns (Today plus each idea) and how many rows the board holds
+ * @param frame one frame at true size: the device's physical size at the calibrated px per mm
  */
-export function planBoard(width: number, height: number, count: { readonly columns: number; readonly rows: number }): BoardPlan {
+export function planBoard(width: number, height: number, count: { readonly columns: number; readonly rows: number }, frame: { readonly width: number; readonly height: number } = { width: FRAME_W, height: FRAME_H }): BoardPlan {
+  const FRAME_W = frame.width
+  const FRAME_H = frame.height
   const choices = [...new Set([count.columns, Math.min(2, count.columns), 1])]
   const shape = (columns: number): BoardColumns => columns === count.columns ? { _tag: "All" } : columns === 2 ? { _tag: "Pair" } : { _tag: "One" }
   const picker = (columns: number) => columns === count.columns ? 0 : PICKER_H

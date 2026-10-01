@@ -34,7 +34,7 @@ import "../../../../src/client/ui/canvas/canvas.css"
 import "../../../../src/client/ui/bar/bar.css"
 import "../../../../src/client/ui/side/side.css"
 import "./workspace.css"
-import { COLUMN_HEAD, COMPACT_HEAD, FRAME_H, FRAME_W, GAP as CELL_GAP, PICKER_H, PICK_ITEM_H, ROW_HEAD, ROW_PICK_W, planBoard } from "./plan-board"
+import { COLUMN_HEAD, COMPACT_HEAD, FRAME_H, FRAME_W, GAP as CELL_GAP, PICKER_H, PICK_ITEM_H, ROW_HEAD, ROW_PICK_W, planBoard } from "../../../../src/client/ui/board/plan-board"
 import { IDEAS, ROWS, SCENES, WORKSPACE, cellOf, sameAsToday } from "./fixture"
 import type { ColumnId, IdeaId, Question, RowId, Scene, SceneName } from "./fixture"
 
