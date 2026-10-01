@@ -1,6 +1,6 @@
 # Workspaces: a plan
 
-Status: draft, not approved. Nothing here is built. The user chose two parts of it on 2026-10-01. They are listed under [Settled](#settled).
+Status: approved on 2026-10-01 and recorded as [decision 45](../decisions.md#45-workspaces-ideas-that-start-from-a-question). Slice 1 is in progress. The user chose parts of it one at a time. They are listed under [Settled](#settled).
 
 ## Problem
 
@@ -20,6 +20,8 @@ Verified in the code:
 |---|---|---|
 | 2026-10-01 | One workspace holds several competing ideas. Each idea is its own take with its own overlay. | One idea per workspace. A comparison of ideas would then need a second feature that compares across workspaces. |
 | 2026-10-01 | The workspace owns shared rows. An idea can add its own rows. | Shared rows only: an idea cannot show what only it makes. Idea rows only: there is no grid, so there is no clean comparison. |
+| 2026-10-01 | Slice 1 as written: state rows only, judged by looking. | Scratch rows and checks in slice 1: a bigger first slice that needs the workspace agent or rows written by hand. |
+| 2026-10-01 | The mockup in `docs/design/mockups/workspaces/` and its six choices, approved with "no notes". | |
 
 ## Terms
 
@@ -135,7 +137,7 @@ I looked at six Mobbin screens. Three of them changed this plan:
 
 A high-fidelity mockup of slice 1 is in [`docs/design/mockups/workspaces/`](../design/mockups/workspaces/README.md). Its `planBoard` replaces the table below with tested thresholds.
 
-The layout is one pure function, `planBoard(width, height, rows, columns)`. It follows the same pattern as `planChecks`. It uses the existing Caliper tokens. Every threshold is a guess until someone measures it in the real container.
+The layout is one pure function, `planBoard(width, height, { columns, rows })`. It follows the same pattern as `planChecks`. It uses the existing Caliper tokens. Every threshold is a guess until someone measures it in the real container.
 
 | Container | Structure | What moves |
 |---|---|---|
@@ -192,4 +194,4 @@ Limits for this example:
 
 ## Next step
 
-After approval, record the plan as a decision in `docs/decisions.md`. Then build slice 1 test first.
+Build slice 1 test first, in this order: storage and endpoints, then the planner and idea agents, then the board, then the guide and a real run on Pico.

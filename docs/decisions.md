@@ -897,3 +897,88 @@ order of recent tools does not survive a reload. A gallery fixture that opens
 with Checks or Calibrate has no history, so closing it shows Preview. The parity
 test covers tool presses and Closes only. Other gallery actions, such as the
 prompt's messages, are still written separately and can drift.
+
+## 45. Workspaces: ideas that start from a question
+
+Decided 2026-10-01. The user wants to try answers to a question before any of
+them goes into the product. The example is Pico: "A person can open Settings
+using only the d-pad, A and B." An answer can reuse parts, change them, add new
+parts, or end as a decision with no code. A take cannot hold this work. It starts
+from one part and one declared state (decision 20): `TakeRecord` requires
+`part`, `state` and `device`, and `planDirections` requires `part` and `state`.
+
+The user chose, one question at a time:
+
+1. A **workspace** is a scratch area for one question. It can use the real
+   system, but nothing in it is part of the product until someone promotes it.
+   One workspace can end as an answer only. Another can end close to production.
+2. One workspace holds several competing **ideas**. Each idea is a take with its
+   own overlay, so two ideas that edit the same file do not see each other.
+3. The workspace owns the shared rows. An idea can add its own rows.
+4. The first slice is "answer only", as `docs/plans/workspaces.md` writes it.
+   You judge ideas by looking. Checks that press keys wait for slice 2.
+5. The mockup in `docs/design/mockups/workspaces/` and its six choices, below.
+   The user approved them on 2026-10-01 with "no notes".
+
+**Model.** `.caliper/workspaces/<id>/workspace.json` holds the question, the
+status (Open, or Closed with the ideas it promoted), the shared rows in board
+order, the ideas and the questions. A row is a declared state (`State`) or, from
+slice 2, a file in the workspace folder (`Scratch`). A question is Open, or
+Answered with its answer and a reason. A take record gets a subject: `State`
+(the part, state, device and context of today) or `Idea` (its workspace). Caliper
+reads every existing record as a `State` subject.
+
+**Board.** Rows run down the side, one for each pinned state. The columns are
+Today, the real files with no take, and one column for each idea. A cell loads
+its row with the idea's `?take=<n>`, so the overlay serves that idea's files to
+everything the row imports. `planBoard(width, height, { columns, rows })` is one
+pure function of the board's box. It shows fewer columns or one row at a time
+when the box is small, and a picker holds the rest. It never removes a cell.
+
+**The six mockup choices:**
+
+- Workspaces live in the parts panel, above Pages. There is no new rail tool.
+  The selected workspace replaces the canvas with its board.
+- You pin rows from the parts list. While a workspace is open, every state has
+  a pin, and a part counts its pinned states.
+- The board compares and does not accept. An idea has Discard and takes
+  follow-up prompts. It has no Accept. Promote is slice 4.
+- A cell that matches Today pixel for pixel dims and says "Same as Today".
+- The questions sit in the side panel, where a take's record sits, or in a
+  sheet on a phone. The board's header has a Questions button with the count.
+- Discard deletes the ideas and keeps the questions and answers. The workspace
+  moves to Closed and stays in the list.
+
+**Keep the workspace out of the product (decision 18).** Discovery never lists
+anything in `.caliper/`. A workspace adds no coverage, and its images never
+become baselines. Ideas cannot write shared rows, because a shared row is the
+test that every idea is judged by. Promote, in slice 4, goes only through
+Replace or the reviewed alternate gate. Slice 1 adds no new row format and no new
+write fence.
+
+**Slices.** 1: answer only. 2: scratch rows, the workspace agent and authored
+checks in cells. 3: idea rows and a narrow fence for them. 4: promote. The plan
+holds what each slice proves.
+
+Rejected: one idea per workspace, because a comparison would then need a
+second feature that compares across workspaces. Shared rows only, because an
+idea could not show what only it makes. Idea rows only, because with no shared
+rows there is no grid to compare. A free canvas, as Tana and Higgsfield use,
+because free placement loses the row alignment a comparison needs, and pan and
+zoom are hard on a phone. Scratch rows and checks in slice 1, because the first
+slice would need the workspace agent or rows written by hand.
+
+Costs:
+
+- Take records change shape. Every reader of `TakeRecord`, and the chrome's
+  `TakeRecordView`, must handle the `Idea` subject.
+- The board is heavy. Four rows and three ideas make 16 frames on one device.
+- "Same as Today" costs one image comparison for each cell.
+- Answers stay on one machine, because Git ignores `.caliper/`. Someone must
+  copy an answer into the repository for others to see it.
+- A promoted idea still changes every consumer of the files it edits.
+- A board shows renders. It does not prove behaviour. For Pico, slice 1 cannot
+  show that the d-pad reaches Settings, and no workspace can test the host's
+  input routing, because an idea agent cannot run commands.
+- Every size threshold of `planBoard` is a guess until someone measures it in
+  the real chrome.
