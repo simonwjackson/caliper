@@ -87,6 +87,27 @@ describe("React source controller", () => {
     expect(ready(controller).selectedFile).toBe("src/deep/Chip.tsx")
   })
 
+  test("unchanged editor inputs and take log updates publish nothing", async () => {
+    let publications = 0
+    const { controller, reads } = setup({ changed: () => publications++ })
+    const subject = { ...real, take: take() }
+    controller.sync(subject, false)
+    const closed = publications
+    controller.sync(structuredClone(subject), false)
+    expect(publications).toBe(closed)
+    controller.sync(subject, true)
+    await until(() => controller.getView()._tag === "Ready")
+    await pause()
+    const before = publications, readCount = reads.length
+    controller.sync(structuredClone(subject), true)
+    controller.sync({ ...subject, take: take({ log: [{ _tag: "Assistant", text: "Progress" }] }) }, true)
+    await pause()
+    expect(publications).toBe(before)
+    expect(reads).toHaveLength(readCount)
+    controller.sync({ ...subject, take: take({ run: { _tag: "Running" } }) }, true)
+    expect(ready(controller).mode._tag).toBe("Watching")
+  })
+
   test("debounces edits and saves real files without making a take", async () => {
     const { controller, writes } = setup()
     controller.sync(real, true)

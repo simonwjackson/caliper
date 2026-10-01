@@ -42,7 +42,6 @@ export function createChromeApp(input: RuntimeInput) {
   const operations = new Map<symbol, string>()
   let publishing = false, queued = false, disposed = false
   let generation = 0, nextImage = 1
-  let codeSync = "", knobSync: boolean | null = null, integrationSync = ""
   const changed = () => {
     if (disposed || queued) return
     queued = true
@@ -77,12 +76,9 @@ export function createChromeApp(input: RuntimeInput) {
       const part = currentPart(state)
       const selectedTake = currentTake(state)
       const codeSubject = part ? { part, take: selectedTake, state: subjectRef(state)?.state ?? null } : null
-      const codeKey = JSON.stringify([state.tools.codeOpen, part, selectedTake && [selectedTake.take, selectedTake.created, selectedTake.files, selectedTake.run], codeSubject?.state])
-      if (codeSync !== codeKey) { codeSync = codeKey; code.sync(codeSubject, state.tools.codeOpen) }
-      const knobsOpen = state.tools.side === "knobs"
-      if (knobSync !== knobsOpen) { knobSync = knobsOpen; knobs.sync(knobsOpen) }
-      const integrationKey = JSON.stringify(selectedTake && [selectedTake.take, selectedTake.created, selectedTake.integration, selectedTake.run, selectedTake.files])
-      if (integrationSync !== integrationKey) { integrationSync = integrationKey; integration.sync(selectedTake) }
+      code.sync(codeSubject, state.tools.codeOpen)
+      knobs.sync(state.tools.side === "knobs")
+      integration.sync(selectedTake)
       const badges = (state.takes?.takes ?? []).map(take => ({ part: take.part, state: take.state, take: take.take, badge: checks.badge(take.part, take.state, take.take) })).concat([])
       const originalBadges = (state.project?.parts ?? []).flatMap(part => part.states.map(item => ({ part: part.file, state: item.export, badge: checks.badge(part.file, item.export) })))
       let integrationView = integration.getView()
@@ -359,10 +355,7 @@ export function createChromeApp(input: RuntimeInput) {
   function receiveCode(value: unknown) {
     const change: CodeChange = parseWire(CodeChangeSchema, value)
     code.receive(change)
-    const take = currentTake(state)
-    if (take?.integration && (change.take === null || change.take === take.take)) {
-      integration.sync(null); integration.sync(take)
-    }
+    integration.receive(change)
     // Vite handles both source and stylesheet HMR. CSS must retain scenario input state.
     knobs.refresh()
   }

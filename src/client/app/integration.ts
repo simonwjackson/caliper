@@ -1,7 +1,7 @@
 import { Type } from "typebox"
 import { Check } from "typebox/value"
 import { integrationProposalSchema } from "../../takes/integration-contract.js"
-import type { TakeView } from "../../types"
+import type { CodeChange, TakeView } from "../../types"
 import type { Review } from "../../takes/integration.js"
 import type { Availability, IntegrationView, Notice } from "../ui/contract"
 
@@ -121,6 +121,11 @@ export function createIntegrationController({ request, changed }: { request: Req
   }
   return {
     sync, getView,
+    receive(change: CodeChange) {
+      if (destroyed || !selected?.integration || change.take !== null && change.take !== selected.take) return
+      // Real-file edits can change the proposal's baseline even outside its file list.
+      invalidate(); error = ""; publish()
+    },
     review(take: string) { void perform(take, "review") },
     check(take: string, revision: string) { void perform(take, "check", revision) },
     behaviorReviewed(take: string, revision: string, value: boolean) { if (!destroyed && !busy && exact(take, revision) && shown?.checks._tag === "Passed") { attested = value; publish() } },

@@ -5,6 +5,7 @@ import type { Request, RuntimeInput } from "../src/client/app/runtime"
 import type { Direction, Project, TakesSnapshot, TakeView } from "../src/types"
 import type { FrameView } from "../src/client/ui/contract"
 import type { FrameReport } from "../src/client/app/wire"
+import type { Review } from "../src/takes/integration.js"
 import { STANDARD_DEVICES } from "../src/client/device-frame.js"
 
 const part = "src/Chip.atom.part.tsx"
@@ -331,6 +332,34 @@ describe("selected take creation identity", () => {
     expect(h.posts().filter(call => call.path === "takes/1/accept")).toHaveLength(0)
     expect(h.app.getSnapshot().focusedTake).toBeNull()
   })
+})
+
+test("the app forwards code events while controllers own review invalidation and unchanged-input detection", async () => {
+  const proposal: Review["proposal"] = { strategy: "variant", summary: "Quiet chip", shared: "Busy behavior", preserved: "Existing callers", usage: '<Chip tone="quiet" />', preview: { part, state: "Busy" } }
+  const review: Review = { revision: "review-1", proposal, files: [{ path: "src/Chip.tsx", before: "Original", after: "Quiet" }], checks: { _tag: "Passed", summary: "Existing states preserved" } }
+  const h = harness({ "takes/1/review": () => review }, [take({ integration: { _tag: "Review", sourceTake: "2", proposal } })])
+  h.app.actions.onTake("1"); h.app.actions.onReview("1"); await settle()
+  h.app.actions.onBehaviorReviewed("1", review.revision, true); await settle()
+  const integration = () => {
+    const record = h.app.getSnapshot().record
+    if (record._tag !== "Open") throw new Error("Expected the selected take's record")
+    return record.integration
+  }
+  expect(integration()).toMatchObject({ _tag: "Review", behaviorReviewed: true })
+  h.app.receiveCode({ take: "2", file: "src/Chip.tsx" }); await settle()
+  expect(integration()._tag).toBe("Review")
+  h.app.receiveCode({ take: "1", file: "src/Chip.tsx" }); await settle()
+  expect(integration()._tag).toBe("Unloaded")
+  expect(h.app.getSnapshot().focusedTake?.id).toBe("1")
+  h.app.actions.onReview("1"); await settle()
+  expect(integration()._tag).toBe("Review")
+  h.app.receiveCode({ take: null, file: "src/global.css" }); await settle()
+  expect(integration()._tag).toBe("Unloaded")
+  let publications = 0
+  const unsubscribe = h.app.subscribe(() => publications++)
+  h.app.actions.onFilter("Chip"); await settle()
+  expect(publications).toBe(1)
+  unsubscribe()
 })
 
 describe("frame report document lifecycle", () => {

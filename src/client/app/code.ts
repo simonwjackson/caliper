@@ -79,6 +79,7 @@ export function createCodeController(deps: CodeDependencies) {
   let stale = true
   let following = true
   let requested: string | null = null
+  let syncKey = ""
   let generation = 0
   let statsGeneration = 0
   let reconcileGeneration = 0
@@ -233,6 +234,11 @@ export function createCodeController(deps: CodeDependencies) {
 
   function sync(subject: CodeSubject | null, open: boolean) {
     if (destroyed) return
+    // Stream logs and unrelated app publications do not change editor inputs.
+    const take = subject?.take
+    const key = JSON.stringify([open, subject?.part, take && [take.take, take.created, take.files, take.run], subject?.state])
+    if (syncKey === key) return
+    syncKey = key
     const before = model.subject
     const wasOpen = model.open
     const switched = before === null || subject === null || listKey(before) !== listKey(subject)

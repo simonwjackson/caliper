@@ -81,6 +81,63 @@ test("refresh revokes attestation; later proposal or project edits cannot author
   expect(readFileSync(join(f.root, "src/Button.tsx"), "utf8")).toBe("Newer project")
 }))
 
+test("a code change to the selected take revokes its loaded review without resetting selection", () => fixture(async f => {
+  const view = await f.review()
+  f.controller.check(f.take, view.review.revision); await tick()
+  f.controller.behaviorReviewed(f.take, view.review.revision, true)
+  expect(f.controller.getView()).toMatchObject({ _tag: "Review", behaviorReviewed: true, apply: { _tag: "Enabled" } })
+  // The file list and proposal metadata do not change when this file is edited again.
+  f.store.write(f.take, "src/Button.tsx", "Changed after review")
+  f.controller.receive({ take: f.take, file: "src/Button.tsx" })
+  expect(f.controller.getView()).toMatchObject({ _tag: "Unloaded", load: { _tag: "Enabled" } })
+  f.controller.sync(f.snapshot())
+  expect(f.controller.getView()._tag).toBe("Unloaded")
+  expect(await f.controller.apply(f.take, view.review.revision)).toBe(false)
+  expect(f.calls.some(call => call.path.endsWith("/apply"))).toBe(false)
+}))
+
+test("code events ignore other takes but revoke a review for any real-file edit", () => fixture(async f => {
+  const view = await f.review()
+  f.controller.receive({ take: f.source, file: "src/Button.tsx" })
+  expect(f.controller.getView()).toMatchObject({ _tag: "Review", review: { revision: view.review.revision } })
+  f.controller.receive({ take: null, file: "src/unrelated.ts" })
+  expect(f.controller.getView()).toMatchObject({ _tag: "Unloaded", sourceTake: f.source })
+  f.controller.sync(f.snapshot())
+  await f.review()
+  expect(f.controller.getView()._tag).toBe("Review")
+}))
+
+test("code changes reject late review and check responses without resetting selection", () => fixture(async f => {
+  let release: (value: Review) => void = () => {}
+  let hold = true
+  let publications = 0
+  const controller = createIntegrationController({ changed: () => publications++, request: async <T>() => {
+    if (!hold) return f.integration.review(f.take) as T
+    return await new Promise<Review>(resolve => { release = resolve }) as T
+  } })
+  try {
+    controller.sync(f.snapshot())
+    controller.review(f.take)
+    const old = f.integration.review(f.take)
+    controller.receive({ take: f.take, file: "src/Button.tsx" })
+    release(old); await tick()
+    expect(controller.getView()).toMatchObject({ _tag: "Unloaded", load: { _tag: "Enabled" } })
+    hold = false
+    controller.review(f.take); await tick()
+    expect(controller.getView()._tag).toBe("Review")
+    hold = true
+    controller.check(f.take, old.revision)
+    controller.receive({ take: null, file: "src/Button.tsx" })
+    release({ ...old, checks: { _tag: "Passed", summary: "Late checks" } }); await tick()
+    expect(controller.getView()._tag).toBe("Unloaded")
+    expect(await controller.apply(f.take, old.revision)).toBe(false)
+    controller.destroy()
+    const before = publications
+    controller.receive({ take: null, file: "src/Button.tsx" })
+    expect(publications).toBe(before)
+  } finally { controller.destroy() }
+}))
+
 test("running preparation and same-id recreation invalidate pending results, not just take numbers", () => fixture(async f => {
   let release: (value: Review) => void = () => {}
   const delayed = new Promise<Review>(resolve => { release = resolve })
