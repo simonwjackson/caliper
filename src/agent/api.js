@@ -22,7 +22,8 @@ import { MAX_IMAGES } from "../client/images.js"
 import { createMarkupApi } from "./markup.js"
 import { createMarkStore } from "../takes/marks.js"
 import { createWorkspaceStore } from "../takes/workspaces.js"
-import { ROW_PATH, rowRef } from "../takes/workspace-contract.js"
+import { ROW_PATH, rowPath, rowRef } from "../takes/workspace-contract.js"
+import { createRowAgents } from "./row-agents.js"
 import { createWorkspacesApi } from "./workspaces.js"
 import { Type } from "typebox"
 
@@ -182,9 +183,31 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
     devices: async signal => (await project(signal)).devices,
   })
 
+  // Workspaces slice 2: each scratch row's agent renders its row in Today, with the row's checks.
+  const rowAgents = createRowAgents({
+    workspaces: workspaceStore,
+    engine,
+    project,
+    onChange,
+    skills,
+    renderRow: async (workspace, file, device, signal) => {
+      const combined = AbortSignal.any([shutdown.signal, signal])
+      const original = await project(combined)
+      const viewed = { ...original, parts: [...original.parts, ...await workspaceStore.rowParts()] }
+      const plan = planRenders(viewed, { part: rowPath(workspace, file), state: "default", devices: [device || original.devices[0]?.id || "*"] })
+      if (plan._tag === "Invalid") throw new Error(plan.reason)
+      if (!chromium) throw new Error(`Caliper cannot render. ${NO_CHROMIUM}`)
+      const url = await serverUrl(combined)
+      if (url === null) throw new Error("The dev server is not listening yet.")
+      const checked = await trackRender(() => checkJobs({ url, jobs: plan.jobs, out: join(renderDir, `row-${workspace}-${file.replace(/\W+/g, "-")}`), executablePath: chromium, signal: combined, project: original.name, baselines }))
+      return checked.results
+    },
+  })
+
   const workspaces = createWorkspacesApi({
     workspaces: workspaceStore,
     agents,
+    rows: rowAgents,
     project,
     onChange,
     plan: async ({ workspace, count, device, images }) => {
@@ -439,7 +462,7 @@ export function createTakesApi({ store, status: initialStatus, connection: initi
   // Vite must await this before declaring shutdown complete.
   const close = async () => {
     shutdown.abort(new Error("The Vite server is closing."))
-    await Promise.all([agents.close(), Promise.allSettled([...rendering])])
+    await Promise.all([agents.close(), rowAgents.close(), Promise.allSettled([...rendering])])
   }
 
   /**

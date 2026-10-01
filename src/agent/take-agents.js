@@ -619,6 +619,9 @@ function subjectOf(name, args) {
   const from = typeof args?.take === "string" && (name === "read_file" || name === "list_files") ? ` in take ${args.take}` : ""
   if (name === "list_files") return `${String(args?.folder || ".")}${from}`
   if (name === "activate_skill") return String(args?.name ?? "")
+  // A row agent's tools act on its one row file.
+  if (name === "write_row" || name === "edit_row" || name === "read_row") return "the row"
+  if (name === "render_row") return "the row in Today, with its checks"
   if (name === "read_skill_file") return `${args?.name ?? ""}: ${args?.path ?? ""}`
   return `${String(args?.path ?? "")}${from}`
 }
@@ -640,7 +643,10 @@ function detailOf(result, isError, name) {
         verdict.console?.length ? `${verdict.console.length} console errors` : "",
         verdict.spill ? "spill" : "",
       ].filter(Boolean).join(", ")
-      return `${verdict.part} · ${verdict.state}@${verdict.device}: ${verdict.frame}${notes ? ` (${notes})` : ""}`
+      // Named checks, when the render ran them: the count the board shows under a cell.
+      const checks = Array.isArray(verdict.authored?.checks) && verdict.authored.checks.length
+        ? ` · ${verdict.authored.checks.filter((/** @type {{ status: string }} */ check) => check.status === "Passed").length} of ${verdict.authored.checks.length} checks pass` : ""
+      return `${verdict.part} · ${verdict.state}@${verdict.device}: ${verdict.frame}${notes ? ` (${notes})` : ""}${checks}`
     }).join("; ")
   }
   return text.split("\n")[0]?.slice(0, 200) ?? ""

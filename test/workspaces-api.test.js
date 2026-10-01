@@ -55,6 +55,26 @@ describe("the workspaces API", () => {
     })
   })
 
+  test("a new scratch row needs a brief, a known device and a running agent; a row Caliper did not make is not found (slice 2)", async () => {
+    await withProject({ files }, async ({ url, get }) => {
+      const { workspace } = await (await post(url, "/__caliper/workspaces", { question: "Can the chip be reached by keyboard?" })).json()
+      const base = `/__caliper/workspaces/${workspace}`
+      const device = "iphone-16"
+      expect((await (await post(url, `${base}/rows/new`, { brief: " ", device })).json()).error).toContain("brief")
+      expect((await (await post(url, `${base}/rows/new`, { brief: "The chip by keyboard.", device: "toaster" })).json()).error).toContain("toaster")
+      const off = await post(url, `${base}/rows/new`, { brief: "The chip by keyboard.", device })
+      expect(off.status).toBe(400)
+      expect((await off.json()).error).toContain("The agent is off")
+      // No agent, no row: a row is added only when its agent can start.
+      const [view] = (await snapshot(get)).workspaces
+      expect(view).toMatchObject({ rows: [], scratch: [], checks: [] })
+      for (const step of ["prompt", "stop", "delete"]) {
+        const missing = await post(url, `${base}/rows/7/${step}`, { prompt: "More", device })
+        expect(missing.status).toBe(404)
+      }
+    })
+  })
+
   test("a plan and a new idea need the question and a row, and a running agent", async () => {
     await withProject({ files }, async ({ url, root }) => {
       const { workspace } = await (await post(url, "/__caliper/workspaces", { question: "" })).json()

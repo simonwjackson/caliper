@@ -15,6 +15,10 @@ import { MAX_IMAGES_BODY, readImages } from "./images.js"
  *   POST workspaces                            { question }        a new workspace
  *   POST workspaces/<id>/question              { question }        before it has ideas
  *   POST workspaces/<id>/rows                  { part, state, pinned }
+ *   POST workspaces/<id>/rows/new              { brief, device }    a scratch row, and its agent (slice 2)
+ *   POST workspaces/<id>/rows/<n>/prompt       { prompt, device }   a follow-up to the row's agent
+ *   POST workspaces/<id>/rows/<n>/stop         {}
+ *   POST workspaces/<id>/rows/<n>/delete       {}                  the row, its file and its agent go
  *   POST workspaces/<id>/questions             { text }            an open question
  *   POST workspaces/<id>/questions/<q>/answer  { answer, reason }
  *   POST workspaces/<id>/plan                  { count, device, images? }  directions, and a name
@@ -45,6 +49,8 @@ const DirectionSchema = Type.Object({ title: Type.String({ minLength: 1, maxLeng
 const PlanSchema = Type.Object({ count: Type.Integer(), device: Type.String({ minLength: 1 }) })
 const IdeaSchema = Type.Object({ device: Type.String({ minLength: 1 }), direction: Type.Optional(DirectionSchema), others: Type.Optional(Type.Array(Type.String({ maxLength: 80 }), { maxItems: MAX_IDEAS })), prompt: Type.Optional(words) })
 const PromptSchema = Type.Object({ prompt: words })
+const NewRowSchema = Type.Object({ brief: words, device: Type.String({ minLength: 1 }) })
+const RowPromptSchema = Type.Object({ prompt: words, device: Type.Optional(Type.String({ minLength: 1 })) })
 
 /**
  * @param {{
@@ -52,11 +58,13 @@ const PromptSchema = Type.Object({ prompt: words })
  *   agents: Pick<ReturnType<typeof import("./take-agents.js").createTakeAgents>, "ideas" | "discard" | "start" | "follow" | "stop">,
  *   project: () => Promise<import("../types").Project>,
  *   plan: (input: { workspace: Workspace, count: number, device: string, images: import("./images.js").AttachedImage[] }) => Promise<import("../types").TakePlan & { name?: string }>,
+ *   rows: Pick<ReturnType<typeof import("./row-agents.js").createRowAgents>, "start" | "follow" | "stop" | "remove" | "views">,
  *   onChange: () => void,
  * }} input
  *   `plan` asks the planner for one direction per idea, from the question and its rows.
+ *   `rows` are the row agents, which write scratch rows (slice 2).
  */
-export function createWorkspacesApi({ workspaces, agents, project, plan, onChange }) {
+export function createWorkspacesApi({ workspaces, agents, project, plan, rows, onChange }) {
   /** @param {string} id */
   const ideasOf = async id => (await agents.ideas()).filter(idea => idea.workspace === id)
 
@@ -72,11 +80,14 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, onChang
 
   /** @returns {Promise<WorkspaceView[]>} every workspace with its ideas */
   const views = async () => {
-    const [listed, ideas] = await Promise.all([workspaces.overview(), agents.ideas()])
+    const [listed, ideas, writers] = await Promise.all([workspaces.overview(), agents.ideas(), rows.views()])
     return listed.map(/** @returns {WorkspaceView} */ entry => entry._tag === "Damaged" ? entry : {
       _tag: "Ready", ...entry.workspace,
       ideas: ideas.filter(idea => idea.workspace === entry.workspace.id).map(({ workspace: _workspace, ...idea }) => idea),
-      scratch: entry.scratch.map(facts => ({ ...facts, run: { _tag: /** @type {const} */ ("Idle") }, log: [] })),
+      scratch: entry.scratch.map(facts => {
+        const writer = writers.find(view => view.workspace === entry.workspace.id && view.file === facts.file)
+        return { ...facts, run: writer?.run ?? { _tag: /** @type {const} */ ("Idle") }, log: writer?.log ?? [] }
+      }),
       checks: [],
     })
   }
@@ -156,6 +167,30 @@ export function createWorkspacesApi({ workspaces, agents, project, plan, onChang
           await workspaces.unpin(id, row)
         }
         json(response, 200, { workspace: id })
+      } else if (action === "rows" && item === "new" && step === "") {
+        if (!Check(NewRowSchema, body) || body.brief.trim() === "") throw new Error("A new row needs a brief: what the row shows and what its checks press and expect.")
+        const viewed = await project()
+        if (!viewed.devices.some(candidate => candidate.id === body.device)) throw new Error(unknownDevice(viewed, body.device))
+        const file = await rows.start({ workspace: id, brief: body.brief.trim(), device: body.device })
+        onChange()
+        json(response, 201, { row: file })
+        return true
+      } else if (action === "rows" && /^[1-9]\d*$/.test(item) && ["prompt", "stop", "delete"].includes(step)) {
+        const file = `rows/${item}.part.tsx`
+        const workspace = await workspaces.read(id)
+        if (!workspace?.rows.some(row => row._tag === "Scratch" && row.file === file)) {
+          json(response, 404, { error: `Workspace ${id} has no row ${item}.` })
+          return true
+        }
+        if (step === "prompt") {
+          if (!Check(RowPromptSchema, body) || body.prompt.trim() === "") throw new Error("The prompt is empty.")
+          await rows.follow(id, file, body.prompt.trim(), body.device)
+        } else if (step === "stop") {
+          await rows.stop(id, file)
+        } else {
+          await rows.remove(id, file)
+        }
+        json(response, 200, { row: file })
       } else if (action === "questions" && item === "") {
         if (!Check(AskSchema, body)) throw new Error("Send the question as text.")
         const asked = await workspaces.ask(id, body.text, { _tag: "User" })
