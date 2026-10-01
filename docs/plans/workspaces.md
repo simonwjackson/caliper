@@ -133,6 +133,8 @@ I looked at six Mobbin screens. Three of them changed this plan:
 - [Magnific](https://mobbin.com/screens/1ad1c0df-c3d6-4e6f-93a2-226ad9411ca3) keeps a "Final result" area apart from the options. The answers list does the same. Answers sit apart from the ideas that informed them.
 - [Tana](https://mobbin.com/screens/5a890b9d-2b9d-4714-9c03-e7495eac50f5) and [Higgsfield](https://mobbin.com/screens/db7d1413-a8ec-4a80-9176-d9b695e03396) use a free canvas. The board rejects it. Free placement loses the row alignment that a comparison needs, and pan and zoom are hard on a phone.
 
+A high-fidelity mockup of slice 1 is in [`docs/design/mockups/workspaces/`](../design/mockups/workspaces/README.md). Its `planBoard` replaces the table below with tested thresholds.
+
 The layout is one pure function, `planBoard(width, height, rows, columns)`. It follows the same pattern as `planChecks`. It uses the existing Caliper tokens. Every threshold is a guess until someone measures it in the real container.
 
 | Container | Structure | What moves |

@@ -1,0 +1,50 @@
+--- a/src/pages/PicoHome.css
++++ b/src/pages/PicoHome.css
+@@ -10,3 +10,29 @@
+ 	overflow-y: auto;
+ 	scrollbar-width: none;
+ }
++
++/* Idea 1: the shelf, then one row of places under its floor. */
++.pico-home-with-system {
++	display: grid;
++	grid-template-rows: minmax(0, 1fr) auto;
++	height: 100%;
++	min-height: 0;
++}
++
++.pico-home-system {
++	display: flex;
++	gap: calc(var(--pico-px) * 4);
++	padding: calc(var(--pico-px) * 3) calc(var(--pico-u) * 2) 0;
++}
++
++.pico-home-system-entry {
++	padding: 0 calc(var(--pico-px) * 4);
++	margin: 0 var(--pico-drop-sm) var(--pico-drop-sm) 0;
++	font: inherit;
++	font-size: var(--pico-text-sm);
++	line-height: calc(var(--pico-px) * 10);
++	color: var(--pico-plate-ink);
++	background: var(--pico-plate);
++	border: 0;
++	box-shadow: var(--pico-drop-sm) var(--pico-drop-sm) 0 var(--pico-plate-shadow);
++}
+--- a/src/pages/PicoHome.tsx
++++ b/src/pages/PicoHome.tsx
+@@ -93,7 +93,14 @@
+       ) : null}
+ 
+       {view._tag === "Shelf" && !asking && mode === "shelf" ? (
+-        <PicoCartShelf games={view.games} onOpen={onOpenGame} />
++        <div className="pico-home-with-system">
++          <PicoCartShelf games={view.games} onOpen={onOpenGame} />
++          {/* Idea 1: the places every home offers, one d-pad press below the carts. */}
++          <nav aria-label="Korri" className="pico-home-system">
++            <button className="pico-home-system-entry" type="button">FIND</button>
++            <button className="pico-home-system-entry" type="button">SETTINGS</button>
++          </nav>
++        </div>
+       ) : null}
+ 
+       {view._tag === "Shelf" && !asking && mode === "hero" ? (

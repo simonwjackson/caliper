@@ -1,0 +1,54 @@
+--- a/src/ui/molecules/PicoStatusBar.css
++++ b/src/ui/molecules/PicoStatusBar.css
+@@ -30,6 +30,29 @@
+ 	color: var(--pico-ink);
+ }
+ 
++/* Idea 2: the places sit between where you are and the clock. */
++.pico-status-bar-places {
++	display: flex;
++	gap: calc(var(--pico-px) * 3);
++	margin-left: auto;
++	align-self: center;
++}
++
++.pico-status-bar-place-entry {
++	padding: 0 calc(var(--pico-px) * 3);
++	font: inherit;
++	font-size: var(--pico-text-sm);
++	line-height: calc(var(--pico-px) * 9);
++	color: var(--pico-plate-ink);
++	background: var(--pico-plate);
++	border: 0;
++}
++
++.pico-status-bar-place-entry[aria-current="page"] {
++	color: var(--pico-go-ink);
++	background: var(--pico-go);
++}
++
+ .pico-status-bar-label {
+ 	color: var(--pico-accent);
+ }
+--- a/src/ui/molecules/PicoStatusBar.tsx
++++ b/src/ui/molecules/PicoStatusBar.tsx
+@@ -27,6 +27,19 @@
+           <span className="pico-status-bar-place">{place}</span>{" "}
+           <span className="pico-status-bar-label">{label}</span>
+         </span>
++        {/* Idea 2: every screen names the places, one d-pad press above the body. */}
++        <nav aria-label="Korri" className="pico-status-bar-places">
++          {["FIND", "SETTINGS"].map((place) => (
++            <button
++              aria-current={label.startsWith(place) ? "page" : undefined}
++              className="pico-status-bar-place-entry"
++              key={place}
++              type="button"
++            >
++              {place}
++            </button>
++          ))}
++        </nav>
+         {clockLabel === undefined ? null : <PicoClock label={clockLabel} />}
+       </span>
+       <PicoPaletteBar />

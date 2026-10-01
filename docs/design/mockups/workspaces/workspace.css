@@ -1,0 +1,148 @@
+/*
+ * Workspaces, slice 1: the new pieces only. Every colour, size and radius is a
+ * Darkroom token (src/client/ui/tokens.css). The shell, panels, buttons, bar
+ * and caption come from the chrome's own stylesheets.
+ */
+html, body, #root { height: 100%; margin: 0; }
+
+/* --- the parts panel: the workspace list and the pins ------------------------------------ */
+.ws-spaces { padding-bottom: .35rem; border-bottom: 1px solid var(--dr-edge); margin-bottom: .2rem; }
+.ws-spaces__head { display: flex; align-items: center; justify-content: space-between; }
+.ws-spaces__new { display: inline-flex; gap: .2rem; align-items: center; border: 0; background: none; padding: .1rem .2rem; font-size: 11px; font-weight: 500; color: var(--dr-ink-2); border-radius: 4px; }
+.ws-spaces__new:hover { color: var(--dr-ink); background: var(--dr-card-2); }
+.ws-spaces__new .dr-icon { width: 13px; height: 13px; }
+.ws-spaces__list { list-style: none; padding: 0; margin: 0 .5rem; display: grid; gap: 1px; }
+.ws-space { display: grid; width: 100%; padding: .4rem .6rem .4rem 1.2rem; border: 0; background: none; border-radius: 6px; text-align: left; position: relative; min-width: 0; }
+.ws-space:hover { background: color-mix(in srgb, var(--dr-card-2) 60%, transparent); }
+.ws-space[aria-current="true"] { background: var(--dr-card-2); }
+.ws-space[aria-current="true"]::before { content: ""; position: absolute; left: .55rem; top: .85rem; width: 5px; height: 5px; border-radius: 50%; background: var(--dr-accent); }
+.ws-space__name { color: var(--dr-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-space[aria-current="true"] .ws-space__name { font-weight: 600; }
+.ws-space__meta { font-size: 11px; color: var(--dr-ink-3); }
+.ws-spaces__hint { margin: .35rem .85rem .1rem; font-size: 11px; line-height: 1.45; color: var(--dr-ink-2); }
+
+/* A pinned state is a row on the board. The pin shows on every state while a workspace is open. */
+.ws-pin-row { display: flex; align-items: center; }
+.ws-pin-row > .dr-states__item { flex: 1; min-width: 0; width: auto; margin-right: 0; }
+.ws-pin { flex: none; width: 1.75rem; height: 1.6rem; margin-right: .25rem; border: 0; background: none; border-radius: 5px; display: grid; place-items: center; color: var(--dr-ink-3); opacity: .55; }
+.ws-pin:hover { opacity: 1; color: var(--dr-ink); background: var(--dr-card-2); }
+.ws-pin[aria-pressed="true"] { opacity: 1; color: var(--dr-ink); }
+.ws-pin .dr-icon { width: 15px; height: 15px; }
+.ws-pin[aria-pressed="true"] .dr-icon { fill: currentColor; }
+.ws-pinned { display: inline-flex; align-items: center; gap: .1rem; font-size: 11px; color: var(--dr-ink-2); }
+.ws-pinned .dr-icon { width: 12px; height: 12px; }
+
+/* --- the board ------------------------------------------------------------------------- */
+.ws-board { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: .6rem; padding: var(--dr-gutter) var(--dr-pad) .4rem; min-height: 0; container: ws-board / inline-size; }
+.ws-board__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3rem .9rem; min-width: 0; }
+.ws-board__title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: .1rem .6rem; min-width: 0; font-size: var(--dr-fs-2); color: var(--dr-ink-3); text-align: center; }
+.ws-board__title h1 { margin: 0; font-size: var(--dr-fs-3); font-weight: 600; color: var(--dr-ink); }
+.ws-board__status { color: var(--dr-ink-2); }
+.ws-board__question { font-style: italic; color: var(--dr-ink-3); min-width: 0; }
+/* The quote is a readout: the Questions panel holds the whole question. On a narrow board it yields first. */
+@container ws-board (width < 34rem) { .ws-board__question { display: none; } }
+.ws-count { margin-left: .4rem; color: var(--dr-ink); }
+
+/* The body is the board's own scroller and the box planBoard measures. Every height inside it is one of
+   planBoard's constants (set as --ws-* on the board), so the rule and the drawing count the same pixels. */
+.ws-board__body { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; display: grid; justify-items: center; align-content: start; }
+.ws-grid { display: grid; grid-template-columns: auto; grid-template-areas: "top" "rowpick" "rows"; width: max-content; max-width: 100%; }
+.ws-board[data-rows="PickSide"] .ws-grid { grid-template-columns: var(--ws-row-pick-w) auto; grid-template-areas: ". top" "rowpick rows"; }
+.ws-top { grid-area: top; position: sticky; top: 0; z-index: 1; background: var(--dr-room); }
+.ws-colpick { height: var(--ws-picker-h); display: grid; grid-template-columns: repeat(var(--ws-cols), var(--ws-cell-w)); column-gap: var(--ws-gap); align-items: start; }
+.ws-colpick__today { align-self: center; margin-top: -6px; font-size: 11px; color: var(--dr-ink-3); }
+.ws-board[data-columns="Pair"] .ws-colpick > .ws-picker { grid-column: 2; }
+.ws-rowpick { grid-area: rowpick; }
+.ws-board[data-rows="PickTop"] .ws-rowpick { height: var(--ws-picker-h); display: grid; align-items: center; }
+.ws-board[data-rows="PickTop"] .ws-rowpick > .ws-picker { justify-self: center; }
+.ws-board[data-rows="PickSide"] .ws-rowpick { padding-right: var(--ws-gap); }
+.ws-rows { grid-area: rows; }
+.ws-heads, .ws-row__cells { display: grid; grid-template-columns: repeat(var(--ws-cols), var(--ws-cell-w)); column-gap: var(--ws-gap); }
+.ws-heads { height: var(--ws-head); align-items: end; }
+.ws-head { display: grid; gap: .1rem; min-width: 0; align-content: end; padding-bottom: 4px; }
+.ws-board[data-rows^="Pick"] .ws-head__meta { display: none; }
+.ws-head__run { align-self: center; }
+/* Stacked, the meta line says Working; the dot in the name is for picked rows, where the meta line is gone. */
+.ws-board[data-rows="Stack"] .ws-head__run { display: none; }
+.ws-head__name { display: grid; gap: .1rem; min-width: 0; font-size: var(--dr-fs-1); color: var(--dr-ink-2); }
+.ws-head__name > b { color: var(--dr-ink); font-weight: 600; }
+.ws-head__idea { display: flex; gap: .45rem; align-items: baseline; min-width: 0; border: 0; background: none; padding: 0; color: var(--dr-ink-2); text-align: left;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.ws-head__idea > b { color: var(--dr-ink); font-weight: 600; flex: none; }
+.ws-head__idea > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-head__idea:hover { text-decoration-color: var(--dr-ink-3); }
+.ws-head__idea[aria-current="true"] { color: var(--dr-ink); text-decoration-color: currentColor; }
+.ws-head__meta { display: inline-flex; gap: .4rem; align-items: center; font-size: 11px; color: var(--dr-ink-3); }
+.ws-head__name:has(> .ws-head__pending) { display: flex; gap: .5rem; align-items: center; }
+.ws-head__pending { width: 60%; }
+/* The strange direction keeps the dashed edge it had as a planned slot (decision 33). */
+.ws-strange { border: 1px dashed var(--dr-edge-2); border-radius: 3px; padding: 0 .3rem; line-height: 1.45; }
+
+.ws-row { display: grid; }
+.ws-row__head { margin: 0; height: var(--ws-row-head); box-sizing: border-box; padding-bottom: 6px; display: flex; gap: .5rem; align-items: flex-end; font-size: var(--dr-fs-1); font-weight: 400; color: var(--dr-ink-3); }
+.ws-row__head > b { color: var(--dr-ink); font-weight: 600; }
+.ws-cell { margin: 0; position: relative; width: var(--ws-cell-w); }
+.ws-cell__screen { position: relative; width: var(--ws-cell-w); height: var(--ws-cell-h); overflow: hidden; border-radius: 2px; background: #000; box-shadow: 0 0 0 1px rgb(0 0 0 / .8); }
+.ws-cell__screen > img { display: block; width: 100%; height: 100%; }
+/* Today glows like the real files on the canvas; a focused idea gets the selection ring. */
+.ws-row__cells > .ws-cell:first-child .ws-cell__screen { box-shadow: var(--dr-glow); }
+.ws-board[data-columns="One"] .ws-row__cells > .ws-cell:first-child:not([data-focus]) .ws-cell__screen { box-shadow: 0 0 0 1px rgb(0 0 0 / .8); }
+.ws-cell[data-focus] .ws-cell__screen { box-shadow: 0 0 0 1px rgb(0 0 0 / .8), 0 0 0 3px var(--dr-accent); }
+/* A cell whose pixels match Today steps back, so the cells that changed are the ones you read. */
+.ws-cell[data-same] .ws-cell__screen { opacity: .32; }
+.ws-cell[data-same]:hover .ws-cell__screen { opacity: 1; }
+/* The note sits on the dimmed screen, so it costs no height and says why the screen stepped back. */
+.ws-cell__note { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: var(--dr-ink-2); pointer-events: none; }
+.ws-cell[data-same]:hover .ws-cell__note { display: none; }
+.ws-cell[data-run="Planning"] .ws-cell__screen, .ws-cell[data-run="Running"] .ws-cell__screen {
+  background: repeating-linear-gradient(135deg, rgb(255 255 255 / .035) 0 1px, transparent 1px 9px), #0B0C0E;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .09), 0 0 0 1px rgb(0 0 0 / .8); display: grid; align-content: end; justify-items: center; }
+.ws-cell .dr-working { width: calc(100% - 2rem); margin-bottom: .8rem; background: rgb(255 255 255 / .08); }
+.ws-cell[data-run="Planning"] .dr-working::after { animation-duration: 2.2s; }
+
+/* A picker holds the columns or rows that do not fit. Real labels, one tap away. */
+.ws-picker { display: inline-flex; max-width: 100%; border: 1px solid var(--dr-edge); border-radius: 6px; padding: 2px; gap: 2px; background: var(--dr-card); justify-self: start; }
+.ws-picker[data-vertical] { display: grid; width: 100%; box-sizing: border-box; }
+.ws-picker[data-vertical] .ws-picker__item { text-align: left; height: var(--ws-pick-item-h); padding-block: 0; }
+.dr-root[data-tools="dock"] .ws-picker[data-vertical] .ws-picker__item { padding-block: 0; }
+.ws-picker__item { border: 0; background: none; border-radius: 4px; padding: .2rem .55rem; min-width: 1.9rem; font-size: var(--dr-fs-1); color: var(--dr-ink-2); white-space: nowrap; }
+.ws-picker__item:hover { color: var(--dr-ink); }
+.ws-picker__item[aria-pressed="true"] { background: var(--dr-card-2); color: var(--dr-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--dr-edge-2); }
+.dr-root[data-tools="dock"] .ws-picker__item { padding-block: .35rem; }
+
+.ws-empty { max-width: 26rem; margin: auto; padding: 2rem 1rem; display: grid; gap: .5rem; text-align: center; color: var(--dr-ink-2); font-size: var(--dr-fs-2); line-height: 1.5; }
+.ws-empty__lead { color: var(--dr-ink); font-size: var(--dr-fs-3); font-weight: 600; }
+.ws-empty p { margin: 0; }
+
+/* --- the questions panel ------------------------------------------------------------- */
+.ws-q { overflow-y: auto; overscroll-behavior: contain; }
+.ws-q p { margin: 0; }
+.ws-q__ask { display: grid; gap: .4rem; }
+.ws-q__text { font-size: var(--dr-fs-2); line-height: 1.55; color: var(--dr-ink); padding-left: .7rem; border-left: 2px solid var(--dr-edge-2); }
+.ws-q__meta { color: var(--dr-ink-3); padding-left: .85rem; }
+.ws-q__head { margin: 0 0 .4rem; font-size: 11px; font-weight: 600; color: var(--dr-ink-3); letter-spacing: .02em; }
+.ws-q__list { list-style: none; padding: 0; margin: 0; display: grid; gap: .45rem; }
+.ws-q__item { display: grid; gap: .3rem; padding: .6rem .7rem; border-radius: 6px; background: var(--dr-room); line-height: 1.5; }
+.ws-q__asked { color: var(--dr-ink); }
+.ws-q__answer { color: var(--dr-ink); font-weight: 600; }
+.ws-q__reason { color: var(--dr-ink-2); }
+.ws-q__reason > span { color: var(--dr-ink-3); }
+.ws-q__by { font-size: 11px; color: var(--dr-ink-3); }
+.ws-q__item[data-answered] .ws-q__asked { color: var(--dr-ink-2); }
+.ws-q__actions { display: flex; gap: .3rem; }
+.ws-q__item[data-answering] { box-shadow: 0 0 0 1px var(--dr-ink-3); }
+.ws-answer { display: grid; gap: .5rem; margin-top: .2rem; }
+.ws-answer__field { display: grid; gap: .2rem; font-size: 11px; color: var(--dr-ink-3); }
+.ws-answer__field textarea { font: inherit; font-size: var(--dr-fs-1); line-height: 1.5; color: var(--dr-ink); background: var(--dr-card-2); border: 1px solid var(--dr-edge); border-radius: 6px; padding: .4rem .5rem; resize: none; field-sizing: content; }
+.ws-answer__actions { display: flex; gap: .3rem; }
+.ws-q__add input { width: 100%; box-sizing: border-box; border: 1px solid var(--dr-edge); background: var(--dr-room); border-radius: 6px; padding: .45rem .6rem; color: var(--dr-ink); font-size: var(--dr-fs-1); }
+.ws-q__add input::placeholder { color: var(--dr-ink-3); }
+.ws-q__foot { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding-top: .7rem; border-top: 1px solid var(--dr-edge); color: var(--dr-ink-3); font-size: 11px; }
+
+/* --- the discard dialog ---------------------------------------------------------------- */
+.ws-dialog__scrim { z-index: 19; }
+.ws-dialog { position: absolute; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(27rem, calc(100% - 2rem)); box-sizing: border-box;
+  background: var(--dr-card); border-radius: var(--dr-radius); box-shadow: var(--dr-lift); padding: 1.1rem 1.2rem 1rem; display: grid; gap: .6rem; font-size: var(--dr-fs-2); line-height: 1.5; color: var(--dr-ink-2); }
+.ws-dialog h2 { margin: 0; font-size: var(--dr-fs-3); font-weight: 600; color: var(--dr-ink); }
+.ws-dialog p { margin: 0; }
+.ws-dialog__actions { display: flex; justify-content: flex-end; gap: .4rem; padding-top: .3rem; }
