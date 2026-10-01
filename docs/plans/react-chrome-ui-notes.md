@@ -47,6 +47,12 @@ The mockup marked Preview and Takes both pressed. The build uses one rule:
 - Parts is a drawer toggle (`aria-expanded`). While the drawer is open it is
   in front, so it takes the mark and the active tool loses it until it closes.
 
+Checks and Calibrate are windows over the tool in front. Closing one brings
+back the tool that was in front before it opened (decided 2026-10-01).
+Close, Escape, a click on the scrim, Done and a second press of Calibrate
+all close a window. Before this, the app kept the window's tool pressed with
+nothing in front, and the gallery moved to Takes.
+
 `frontSheet(plan, active, side)` in `layout.ts` is this rule; its tests are in
 `test/ui-layout.test.ts`. A sheet that is not in front stays mounted behind,
 so the editor and knob state survive. On the desk the rail has no Preview,
