@@ -6,6 +6,7 @@ import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { startCentral } from "../src/central/server.js"
+import { readSettings, settingsFile } from "../src/central/config.js"
 import { projectId } from "../src/central/registry.js"
 
 /** One registry for every server this process starts. The plugin reads it from the environment. */
@@ -25,6 +26,20 @@ export async function startApp(options = {}) {
   const registry = useScriptRegistry()
   const state = mkdtempSync(join(tmpdir(), "caliper-app-state-"))
   return startCentral({ port: options.port ?? 0, ...(options.host ? { host: options.host } : {}), registry, stateDir: state, settings: join(state, "no-settings.json"), ...("agent" in options ? { agent: options.agent } : {}) })
+}
+
+/**
+ * The agent settings of this machine's Caliper app, for a script that spends
+ * real model tokens. The key still comes from the script's environment.
+ *
+ * @param {string | undefined} [model] A model id that replaces the settings' own.
+ * @returns {import("../src/types").AgentOptions}
+ */
+export function liveAgent(model) {
+  const file = settingsFile()
+  const agent = readSettings(file).agent
+  if (agent === undefined) throw new Error(`${file} has no "agent". A real-model script uses the Caliper app's agent settings.`)
+  return model === undefined ? agent : { ...agent, model }
 }
 
 /** @type {WeakSet<object>} */

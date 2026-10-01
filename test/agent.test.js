@@ -26,17 +26,14 @@ async function inFolder(files, run) {
 }
 
 describe("resolveAgent", () => {
-  const home = "/nonexistent-home"
-
-  test("is off when vite.config has no agent", () => {
-    expect(resolveAgent({ option: undefined, env: {}, home }).status._tag).toBe("Off")
+  test("is off when the settings have no agent", () => {
+    expect(resolveAgent({ option: undefined, env: {} }).status._tag).toBe("Off")
   })
 
   test("takes the key from the environment and never shows it", () => {
     const { status, connection } = resolveAgent({
       option: { model: "m", baseUrl: "http://localhost:11434/v1/", reasoning: "high" },
       env: { CALIPER_AGENT_API_KEY: "secret-key" },
-      home,
     })
     expect(status).toEqual({
       _tag: "Ready", model: "m", baseUrl: "http://localhost:11434/v1", reasoning: "high", api: "chat-completions",
@@ -47,34 +44,64 @@ describe("resolveAgent", () => {
   })
 
   test("reads the key from the variable apiKeyEnv names", () => {
-    const { connection } = resolveAgent({ option: { model: "m", baseUrl: "https://x/v1", apiKeyEnv: "MY_KEY" }, env: { MY_KEY: "k" }, home })
+    const { connection } = resolveAgent({ option: { model: "m", baseUrl: "https://x/v1", apiKeyEnv: "MY_KEY" }, env: { MY_KEY: "k" } })
     expect(connection?.apiKey).toBe("k")
   })
 
   test("fails with a hint when there is no key", () => {
-    const { status } = resolveAgent({ option: { model: "m", baseUrl: "https://x/v1" }, env: {}, home })
+    const { status } = resolveAgent({ option: { model: "m", baseUrl: "https://x/v1" }, env: {} })
     expect(status).toMatchObject({ _tag: "Failed", reason: "No API key for https://x/v1." })
     expect(status._tag === "Failed" && status.hint).toContain("CALIPER_AGENT_API_KEY")
   })
 
   test("fails on a missing model or an unknown reasoning level", () => {
-    expect(resolveAgent({ option: /** @type {any} */ ({ baseUrl: "https://x/v1" }), env: {}, home }).status._tag).toBe("Failed")
-    expect(resolveAgent({ option: /** @type {any} */ ({ model: "m", reasoning: "huge" }), env: {}, home }).status._tag).toBe("Failed")
+    expect(resolveAgent({ option: /** @type {any} */ ({ baseUrl: "https://x/v1" }), env: {} }).status._tag).toBe("Failed")
+    expect(resolveAgent({ option: /** @type {any} */ ({ model: "m", reasoning: "huge" }), env: {} }).status._tag).toBe("Failed")
   })
 
-  test("falls back to the pi proxy file for the base URL and key", async () => {
-    await inFolder({ ".pi/agent/cliproxyapi.json": JSON.stringify({ baseUrl: "https://proxy.example/", apiKey: "pi-key" }) }, root => {
-      const { status, connection } = resolveAgent({ option: { model: "m" }, env: {}, home: root })
-      expect(status).toMatchObject({ _tag: "Ready", baseUrl: "https://proxy.example/v1", keyFrom: "~/.pi/agent/cliproxyapi.json" })
-      expect(connection?.apiKey).toBe("pi-key")
-    })
+  test("needs a base URL for an OpenAI-compatible endpoint", () => {
+    const { status } = resolveAgent({ option: { model: "m" }, env: { CALIPER_AGENT_API_KEY: "k" } })
+    expect(status).toMatchObject({ _tag: "Failed", reason: "The agent in ~/.config/caliper/config.json has no baseUrl." })
   })
 
-  test("never sends the pi proxy key to another endpoint", async () => {
+  test("never reads another tool's settings for the endpoint or the key", async () => {
     await inFolder({ ".pi/agent/cliproxyapi.json": JSON.stringify({ baseUrl: "https://proxy.example", apiKey: "pi-key" }) }, root => {
-      expect(resolveAgent({ option: { model: "m", baseUrl: "https://other.example/v1" }, env: {}, home: root }).status._tag).toBe("Failed")
-      expect(resolveAgent({ option: { model: "m", baseUrl: "https://proxy.example/v1" }, env: {}, home: root }).connection?.apiKey).toBe("pi-key")
+      const previous = process.env.HOME
+      process.env.HOME = root
+      try {
+        expect(resolveAgent({ option: { model: "m" }, env: {} }).status._tag).toBe("Failed")
+        expect(resolveAgent({ option: { model: "m", baseUrl: "https://proxy.example/v1" }, env: {} }).status._tag).toBe("Failed")
+      } finally {
+        process.env.HOME = previous
+      }
     })
+  })
+
+  test("uses the provider's own endpoint for the anthropic and google APIs", () => {
+    const env = { CALIPER_AGENT_API_KEY: "k" }
+    expect(resolveAgent({ option: { model: "m", api: "anthropic" }, env }).status).toMatchObject({
+      _tag: "Ready", api: "anthropic", baseUrl: "https://api.anthropic.com", baseUrlFrom: 'the default for api "anthropic"',
+    })
+    expect(resolveAgent({ option: { model: "m", api: "google" }, env }).status).toMatchObject({
+      _tag: "Ready", api: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    })
+    expect(resolveAgent({ option: { model: "m", api: "anthropic", baseUrl: "https://proxy.example/" }, env }).status).toMatchObject({
+      baseUrl: "https://proxy.example", baseUrlFrom: "~/.config/caliper/config.json",
+    })
+  })
+
+  test("names every API it can call when api is unknown", () => {
+    const { status } = resolveAgent({ option: /** @type {any} */ ({ model: "m", api: "bedrock" }), env: {} })
+    expect(status).toMatchObject({ _tag: "Failed", hint: 'Use "chat-completions", "responses", "anthropic" or "google".' })
+  })
+
+  test("passes token limits on, and refuses a limit that is not a positive whole number", () => {
+    const option = { model: "m", baseUrl: "https://x/v1", contextWindow: 128_000, maxTokens: 8_000 }
+    expect(resolveAgent({ option, env: { CALIPER_AGENT_API_KEY: "k" } }).connection).toMatchObject({ contextWindow: 128_000, maxTokens: 8_000 })
+    expect(resolveAgent({ option: { ...option, maxTokens: 0 }, env: { CALIPER_AGENT_API_KEY: "k" } }).status).toMatchObject({
+      _tag: "Failed", reason: "agent.maxTokens 0 is not a positive whole number.",
+    })
+    expect(resolveAgent({ option: /** @type {any} */ ({ ...option, contextWindow: "big" }), env: { CALIPER_AGENT_API_KEY: "k" } }).status._tag).toBe("Failed")
   })
 })
 

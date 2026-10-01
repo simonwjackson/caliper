@@ -281,24 +281,37 @@ settings, `~/.config/caliper/config.json` (`$XDG_CONFIG_HOME`, or the file
 ```json
 {
   "agent": {
-    "model": "claude-opus-5-5",
-    "baseUrl": "https://my-proxy.example/v1",
-    "reasoning": "medium",
-    "api": "chat-completions"
+    "model": "gpt-5",
+    "baseUrl": "https://api.openai.com/v1",
+    "reasoning": "medium"
   }
 }
 ```
 
-`baseUrl` is any endpoint that speaks the OpenAI API; `reasoning` is one of
-off, minimal, low, medium, high, xhigh, max; `api` is `chat-completions` or
-`responses`. The app reads the file when it starts a project's agent, so
-restart the app after you change it.
+`api` chooses the API the agent speaks:
+
+| `api` | Endpoint | `baseUrl` |
+|---|---|---|
+| `chat-completions` (default) | Any server that speaks OpenAI's `/chat/completions`: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, LiteLLM and most proxies | Required, with its `/v1`, for example `http://localhost:11434/v1` |
+| `responses` | OpenAI's `/responses` | Required, with its `/v1` |
+| `anthropic` | The Anthropic Messages API | Optional. Default: `https://api.anthropic.com` |
+| `google` | The Gemini API | Optional. Default: `https://generativelanguage.googleapis.com/v1beta` |
+
+For example, `{ "agent": { "model": "claude-opus-4-8", "api": "anthropic" } }`
+calls Anthropic directly. `reasoning` is one of off, minimal, low, medium,
+high, xhigh, max. `contextWindow` and `maxTokens` set the model's limits in
+tokens. For a model that pi-ai's catalog knows on `anthropic` or `google`,
+Caliper takes the limits and thinking rules from the catalog. Any other model
+gets a 200,000-token context window and 32,000 tokens per answer. The app
+reads the file when it starts a project's agent, so restart the app after you
+change it.
 
 The API key never goes in the file; the app refuses a file that holds one. Set
-`CALIPER_AGENT_API_KEY` in the environment of the app. `apiKeyEnv` names a
-different variable. Without a `baseUrl`, Caliper uses the base URL and key in
-`~/.pi/agent/cliproxyapi.json`, if that file exists; it sends that key to no
-other endpoint. Caliper needs no `pi` binary.
+`CALIPER_AGENT_API_KEY` in the environment of the app, whichever `api` you
+use. `apiKeyEnv` names a different variable, for example `"ANTHROPIC_API_KEY"`.
+Caliper reads the key from no other place. A server that needs no key, such as
+a local Ollama, still needs the variable set to any value. Caliper needs no
+`pi` binary.
 
 The agent reaches a project only through its plugin: each file read, write
 and edit is one call to `POST <base>__caliper/host` on the dev server, with
@@ -406,7 +419,8 @@ the skills by name:
 ```json
 {
   "agent": {
-    "model": "claude-opus-5-5",
+    "model": "gpt-5",
+    "baseUrl": "https://api.openai.com/v1",
     "skills": {
       "include": ["intrinsic-design", "frontend-design"],
       "exclude": [],
@@ -1138,7 +1152,10 @@ remain. Run that against a scratch checkout: the accepted edit is real.
 renders, real click behavior, revision-bound review/apply, and review controls at
 five container sizes. Against the unstyled reference renderer, add
 `--reference` to defer that containment gate. It uses a temporary React consumer. Add `--live` to also
-exercise naming and alternate preparation through the configured local proxy.
+exercise naming and alternate preparation with a real model. `--live`,
+`verify-markup-model.mjs` and `verify-references-model.mjs` use the agent in
+`~/.config/caliper/config.json` and the key in the script's own environment;
+the last two take `--model` to try another model on that endpoint.
 
 `nix develop` provides Bun, Node and `CHROMIUM`. The browser check renders
 every part of a running project and checks calibration actions, a visible error

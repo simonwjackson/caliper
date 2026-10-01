@@ -49,7 +49,7 @@ export const TakesSchema = Type.Object({
     Type.Object({ _tag: tag("Failed"), reason: text, hint: text }),
     Type.Object({ _tag: tag("Ready"), model: text, baseUrl: text,
       reasoning: Type.Union([tag("off"), tag("minimal"), tag("low"), tag("medium"), tag("high"), tag("xhigh"), tag("max")]),
-      api: Type.Union([tag("chat-completions"), tag("responses")]), baseUrlFrom: text, keyFrom: text }),
+      api: Type.Union([tag("chat-completions"), tag("responses"), tag("anthropic"), tag("google")]), baseUrlFrom: text, keyFrom: text }),
   ]),
   skills: Type.Object({ skills: Type.Array(Type.Object({ name: text, description: text, scope: Type.Union([tag("project"), tag("configured"), tag("user")]), location: text })), problems: strings }),
   takes: Type.Array(Type.Object({

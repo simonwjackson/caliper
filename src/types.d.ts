@@ -157,26 +157,40 @@ export type Resolve = (specifier: string, importer: string) => Promise<string | 
 export type ReasoningLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 
 /**
+ * The API the agent speaks. `chat-completions` and `responses` are the OpenAI
+ * APIs, which most local servers and proxies also speak. `anthropic` is the
+ * Anthropic Messages API and `google` is the Gemini API.
+ */
+export type AgentApi = "chat-completions" | "responses" | "anthropic" | "google"
+
+/**
  * The agent that makes takes. It runs in the Caliper app (decision 37), which
- * reads these settings from `~/.config/caliper/config.json` as `"agent"`. It
- * talks to an endpoint that speaks the OpenAI API. The API key never goes in
- * the settings: the app reads it from its own environment variable `apiKeyEnv`.
+ * reads these settings from `~/.config/caliper/config.json` as `"agent"`. The
+ * API key never goes in the settings: the app reads it from its own
+ * environment variable `apiKeyEnv`.
  */
 export type AgentOptions = {
-  /** The model id the endpoint knows, for example "claude-opus-5-5". */
+  /** The model id the endpoint knows, for example "gpt-5" or "claude-opus-4-8". */
   readonly model: string
   /**
-   * The endpoint's OpenAI base URL, with its `/v1`, for example
-   * "https://proxy.example/v1". When it is not set, Caliper uses the base URL
-   * in `~/.pi/agent/cliproxyapi.json`, if that file exists.
+   * The endpoint's base URL. For an OpenAI API, include its `/v1`, for example
+   * "http://localhost:11434/v1"; it has no default. For `anthropic` and
+   * `google`, the default is the provider's own endpoint.
    */
   readonly baseUrl?: string
   /** Default: "medium". Caliper passes it to the model on every request. */
   readonly reasoning?: ReasoningLevel
-  /** Which OpenAI API to call: `/chat/completions` or `/responses`. Default: "chat-completions". */
-  readonly api?: "chat-completions" | "responses"
+  /** Default: "chat-completions". */
+  readonly api?: AgentApi
   /** The environment variable that holds the API key. Default: "CALIPER_AGENT_API_KEY". */
   readonly apiKeyEnv?: string
+  /**
+   * The model's context window, in tokens. Default: pi-ai's value for a model
+   * it knows on `anthropic` or `google`, else 200,000.
+   */
+  readonly contextWindow?: number
+  /** The most tokens one answer may use. Default: pi-ai's value for a known model, else 32,000. */
+  readonly maxTokens?: number
   /**
    * Agent Skills (SKILL.md folders, https://agentskills.io) for the agent.
    * Caliper always looks in `.agents/skills/` of the project and its parent
@@ -222,8 +236,8 @@ export type AgentStatus =
       readonly model: string
       readonly baseUrl: string
       readonly reasoning: ReasoningLevel
-      readonly api: "chat-completions" | "responses"
-      /** Where the base URL came from, for example "vite.config". */
+      readonly api: AgentApi
+      /** Where the base URL came from, for example "~/.config/caliper/config.json". */
       readonly baseUrlFrom: string
       /** Where the key came from, for example "CALIPER_AGENT_API_KEY". */
       readonly keyFrom: string

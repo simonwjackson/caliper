@@ -38,7 +38,7 @@ const entry = () => {
 }
 
 const host = remoteHost({ call, root: data.root })
-const agent = resolveAgent({ option: data.agent, env: data.env, home: data.home })
+const agent = resolveAgent({ option: data.agent, env: data.env })
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let takesTimer

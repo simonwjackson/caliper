@@ -14,14 +14,14 @@ import { join } from "node:path"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 import { caliper } from "../src/plugin.js"
-import { projectBase, startApp } from "./caliper-app.mjs"
+import { liveAgent, projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 
 if (!process.env.CHROMIUM) throw new Error("Run with nix develop to supply CHROMIUM.")
 const option = (/** @type {string} */ name, /** @type {string} */ fallback) => { const at = process.argv.indexOf(name); return at > 0 ? process.argv[at + 1] ?? fallback : fallback }
 const subject = option("--subject", join(homedir(), "code/sandbox/korri/surfaces/pico"))
 const part = option("--part", "src/ui/molecules/PicoCard.molecule.part.tsx")
-const model = option("--model", "claude-opus-5-5")
+const model = option("--model", "") || undefined
 const css = option("--css", "src/ui/molecules/PicoCard.css")
 const title = option("--title", ".pico-card-title"), kicker = option("--kicker", ".pico-card-kicker")
 const keep = process.argv.includes("--keep")
@@ -38,7 +38,7 @@ store.write(two, css, `${readFileSync(join(root, css), "utf8")}\n.pico-card-kick
 
 const server = await createServer({ root, configFile: false, cacheDir: join(root, ".vite"), logLevel: "warn", server: { host: "127.0.0.1", port: 0 }, plugins: [caliper()] })
 await server.listen()
-const app = await startApp({ agent: { model, reasoning: "medium" } })
+const app = await startApp({ agent: liveAgent(model) })
 const url = await projectBase(app, root)
 if (!url) throw new Error("The subject did not start.")
 const api = async (/** @type {string} */ path) => (await fetch(new URL(`__caliper/${path}`, url))).json()

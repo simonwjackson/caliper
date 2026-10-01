@@ -10,7 +10,7 @@ import { parseArgs } from "node:util"
 import { createServer } from "vite"
 import { chromium } from "playwright-core"
 import { caliper } from "../src/plugin.js"
-import { installRouting, projectBase, startApp } from "./caliper-app.mjs"
+import { installRouting, liveAgent, projectBase, startApp } from "./caliper-app.mjs"
 import { createTakeStore } from "../src/takes/store.js"
 import { createIntegrationReview } from "../src/takes/integration.js"
 import { cal, deferLayout, reveal, waitTakes } from "./verify-helpers.mjs"
@@ -44,7 +44,7 @@ let app
 try {
   server = await createServer({ root, cacheDir: join(root, ".vite"), configFile: false, logLevel: "warn", plugins: [caliper({ wrap: false })], server: { host: "127.0.0.1", port: 0 } })
   await server.listen()
-  app = await startApp(values.live ? { agent: { model: "claude-opus-5-5", reasoning: "medium" } } : {})
+  app = await startApp(values.live ? { agent: liveAgent() } : {})
   const url = await projectBase(app, root)
   assert(url)
   const base = `${url}__caliper/`

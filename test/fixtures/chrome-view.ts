@@ -45,7 +45,7 @@ export function readyView(): ChromeView {
       prompt: "Make the button quiet", placeholder: "Describe a change", edit: enabled, attach: enabled,
       attachments: [{ id: "image-1", name: "reference.png", url: pixel, remove: enabled }], count: 3, start: enabled, startLabel: "Plan 3 takes",
       follow: { take: "6", label: "Send to take 6", availability: enabled }, marks: { _tag: "WithPrompt", names: ["0A"], label: "0A goes with this prompt." }, notices: [{ kind: "info", text: "Editing the subject, not the scenario" }],
-      agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "vite.config", keyFrom: "CALIPER_AGENT_API_KEY" },
+      agent: { _tag: "Ready", model: "configured-model", baseUrl: "https://example.invalid/v1", reasoning: "high", api: "responses", baseUrlFrom: "~/.config/caliper/config.json", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [{ name: "design", description: "Describe a change", scope: "project", location: ".agents/skills/design/SKILL.md" }], problems: [] },
     },
     markup: { _tag: "Unavailable", reason: "Take markup is not connected yet" },

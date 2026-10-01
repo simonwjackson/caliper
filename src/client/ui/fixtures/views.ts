@@ -197,7 +197,7 @@ function takesWith(family: ChainFamily, selected: string, choices: Partial<Omit<
       prompt: "", placeholder: "Describe a change to Game Detail", edit: enabled, attach: enabled, attachments: [], count: 1,
       start: blocked("Describe a change first"), startLabel: "New take",
       follow: { take: selected, label: `Send to take ${selected}`, availability: blocked("Describe a change first") }, marks: { _tag: "None" }, notices: [],
-      agent: { _tag: "Ready", model: "claude-opus-5-5", baseUrl: "http://127.0.0.1:8317/v1", reasoning: "medium", api: "chat-completions", baseUrlFrom: "~/.pi/agent/cliproxyapi.json", keyFrom: "CALIPER_AGENT_API_KEY" },
+      agent: { _tag: "Ready", model: "qwen3-coder", baseUrl: "http://127.0.0.1:11434/v1", reasoning: "medium", api: "chat-completions", baseUrlFrom: "~/.config/caliper/config.json", keyFrom: "CALIPER_AGENT_API_KEY" },
       skills: { skills: [
         { name: "pico-design", description: "Pico's palette, pixel grid and type", scope: "project", location: ".agents/skills/pico-design/SKILL.md" },
         { name: "frontend-design", description: "Visual direction and typography", scope: "user", location: "~/.agents/skills/frontend-design/SKILL.md" },
@@ -327,10 +327,10 @@ export function failedTakeView(): ChromeView {
 /** Not drawn in the mockup: the agent failed to load. The failure shows in the bar, where the prompt is. */
 export function agentFailedView(): ChromeView {
   const view = takesView()
-  const reason = "Caliper could not reach http://127.0.0.1:8317/v1: connection refused."
+  const reason = "Caliper could not reach http://127.0.0.1:11434/v1: connection refused."
   return {
     ...view, composer: {
-      ...view.composer, prompt: "Give the cover more room", agent: { _tag: "Failed", reason, hint: "Start CLIProxyAPI, or set agent.baseUrl in vite.config." },
+      ...view.composer, prompt: "Give the cover more room", agent: { _tag: "Failed", reason, hint: "Start the model server, or set agent.baseUrl in ~/.config/caliper/config.json." },
       start: blocked("The agent did not load"), follow: { take: "6", label: "Send to take 6", availability: blocked("The agent did not load") },
     },
   }
