@@ -1,19 +1,25 @@
-/* The draft, unfolded above the bar: the marked takes in a row, marks drawn on,
-   each note under its mark (decision 35). The bar's card grows upward over the
+/* The draft, unfolded above the bar: the marked takes, marks drawn on, each
+   note under its mark (decision 35). The bar's card grows upward over the
    canvas, as the mockup draws it; the canvas keeps its size, so no frame moves
-   or reloads when the draft opens. It scrolls inside itself; its height is
-   capped by --dr-draft-h, which Darkroom sets from the chrome's own height. */
+   or reloads when the draft opens. It is the draft's one scroller: it scrolls
+   inside itself, its height capped by --dr-draft-h, which Darkroom sets from
+   the chrome's own height, and the takes wrap onto more rows instead of
+   scrolling sideways inside it, which drew a scroll bar inside a scroll bar.
+   The count stays at its top while the takes pass under it. */
 .dr-draft { container: dr-draft / inline-size; position: absolute; left: 0; right: 0; bottom: 100%; z-index: 1;
-  padding: .2rem var(--dr-bar-pad, .6rem) .9rem; max-height: min(var(--dr-draft-h, 24rem), var(--dr-draft-room, 100vh)); overflow: auto; overscroll-behavior: contain;
+  padding: 0 var(--dr-bar-pad, .6rem) .9rem; max-height: min(var(--dr-draft-h, 24rem), var(--dr-draft-room, 100vh)); overflow: auto; overscroll-behavior: contain;
   background: var(--dr-card); border-radius: var(--dr-radius) var(--dr-radius) 0 0; box-shadow: 0 0 0 1px var(--dr-edge), 0 -12px 32px -14px rgb(0 0 0 / .6); }
 /* One card: the bar's top corners square off under the draft, and its edge is the seam. */
 .dr-bar:has(> .dr-draft) { border-top-left-radius: 0; border-top-right-radius: 0; }
-.dr-draft__head { display: flex; gap: .5rem; align-items: baseline; padding: .5rem 0 .8rem; font-size: var(--dr-fs-2); color: var(--dr-ink-3); }
+.dr-draft__head { position: sticky; top: 0; z-index: 1; background: var(--dr-card); display: flex; gap: .5rem; align-items: baseline; padding: .6rem 0 .8rem; font-size: var(--dr-fs-2); color: var(--dr-ink-3); }
 .dr-draft__head b { color: var(--dr-ink); font-weight: 600; }
-.dr-draft__takes { list-style: none; margin: 0; padding: 0 0 .3rem; display: flex; gap: 2rem; align-items: start; overflow-x: auto; }
+/* The takes wrap to the draft's own width: every take stays in reach, and the
+   draft is the only thing that scrolls. */
+.dr-draft__takes { list-style: none; margin: 0; padding: 0 0 .3rem; display: flex; flex-wrap: wrap; gap: 1.6rem 2rem; align-items: start; }
 .dr-dtake { flex: none; width: min(15rem, 100%); display: grid; gap: .55rem; min-width: 0; }
+/* A narrow draft holds one take per row. */
 @container dr-draft (width < 34rem) {
-  .dr-draft__takes { flex-direction: column; gap: 1.3rem; overflow: visible; }
+  .dr-draft__takes { gap: 1.3rem; }
   .dr-dtake { width: 100%; }
   .dr-dtake__thumb { max-width: 15rem; }
 }

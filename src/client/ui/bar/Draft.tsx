@@ -11,10 +11,12 @@ export type DraftProps = {
 }
 
 /**
- * The draft, unfolded above the bar (decision 35): the marked takes in a
- * row, the same shape as the canvas, each with its marks drawn on and each
- * note under its mark. On a narrow bar the takes stack. The draft scrolls
- * inside itself, so it never takes more than its share of the stage.
+ * The draft, unfolded above the bar (decision 35): the marked takes, the
+ * same shape as the canvas, each with its marks drawn on and each note under
+ * its mark. They fill the draft's width and wrap, and a narrow bar holds one
+ * per row. The draft is the only thing that scrolls, so no take needs a
+ * sideways scroll of its own, and it never takes more than its share of the
+ * stage.
  */
 export function Draft({ markup, view, actions }: DraftProps) {
   const frames = view.canvas._tag === "Frames" ? view.canvas.frames : []

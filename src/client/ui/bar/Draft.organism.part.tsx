@@ -5,7 +5,7 @@ import { draftReadyView, draftView, referencesView, sendingView, withPromptView 
 import type { ChromeView } from "../contract"
 
 export const name = "Draft"
-export const note = "The draft unfolded above the bar: the marked takes in a row, marks drawn on, each note under its mark."
+export const note = "The draft unfolded above the bar: the marked takes, wrapping to its width, marks drawn on, each note under its mark."
 
 function Unfolded({ make, width = "75rem" }: { readonly make: () => ChromeView; readonly width?: string }) {
   const { view, actions } = useFixture(make)
