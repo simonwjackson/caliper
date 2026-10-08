@@ -54,6 +54,43 @@ scripts/verify-clean-install.sh /tmp/caliper-pack/simonwjackson-caliper-*.tgz
 CI (`.github/workflows/ci.yml`) runs the tests, the typecheck and the clean
 install on every push and pull request.
 
+## Publish to npm
+
+`.github/workflows/publish.yml` publishes tags such as `v0.1.1` through npm
+Trusted Publishing with OIDC. It first runs the complete CI workflow, including
+clean installations on Vite 6, 7 and 8. The tag must match `package.json`'s
+version. Only the publish job receives `id-token: write`; it needs no npm secret.
+
+A new package needs one manual publish before npm can configure trust. Enable
+2FA on the npm account that owns `@simonwjackson`. Pack the release and run the
+clean-install check above, then log in and publish that tested tarball:
+
+```sh
+npm login
+npm publish /path/to/simonwjackson-caliper-0.1.0.tgz --access public
+```
+
+In the package's npm Settings, add a GitHub Actions trusted publisher with user
+`simonwjackson`, repository `caliper`, workflow filename `publish.yml`, no
+environment, and permission to run `npm publish`. Publish the next version
+within two days so the new trust configuration does not expire.
+
+For later releases, commit the changelog, then update the version and push its
+tag from `main`:
+
+```sh
+npm version patch
+git push origin main
+git push origin v0.1.1
+```
+
+Use the tag that `npm version` creates, not the example tag when the version
+changes. A version already published on npm cannot be published again. After
+the first OIDC publish succeeds, set npm Publishing access to "Require
+two-factor authentication and disallow tokens". That setting still permits OIDC.
+
+See [npm's trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/).
+
 ## Record changes
 
 Add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md) for each change
