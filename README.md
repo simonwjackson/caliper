@@ -3,7 +3,7 @@
 Caliper shows your project's own React components at their true physical size
 on a target device, next to the variations an AI agent proposes for them.
 
-> **Status: experimental (0.1.0).** Expect breaking changes between versions.
+> **Status: experimental (0.1.1).** Expect breaking changes between versions.
 > Only Chromium is tested. Read [Limits](#limits) before you rely on it.
 
 Caliper has two pieces:

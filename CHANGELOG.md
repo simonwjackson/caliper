@@ -7,6 +7,13 @@ break things.
 
 ## Unreleased
 
+## 0.1.1 - 2026-10-08
+
+- GitHub Actions runs CI before publishing releases through npm Trusted
+  Publishing with OIDC. This release has no runtime changes.
+
+## 0.1.0 - 2026-10-08
+
 - Workspace rows that check (decision 45, slice 2): press New row under a
   workspace's board and say what the row must show and check. A row agent
   writes one scratch row file in the workspace, renders it in Today and runs
